@@ -61,9 +61,9 @@ struct PhoneShell: View {
     var body: some View {
         @Bindable var router = app.router
 
-        // Keep independent stacks without UIKit's five-tab "More" overflow.
+        // Keep each tab's navigation history while search and calendar are pushed pages.
         ZStack {
-            ForEach(AppSection.allCases.filter { visitedSections.contains($0) || $0 == router.selectedSection }) { section in
+            ForEach(AppSection.phoneTabs.filter { visitedSections.contains($0) || $0 == router.selectedSection }) { section in
                 NavigationStack(path: Binding(
                     get: { router.path(for: section) },
                     set: { router.setPath($0, for: section) }
@@ -98,7 +98,7 @@ struct BgmoriTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(AppSection.allCases) { section in
+            ForEach(AppSection.phoneTabs) { section in
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
                         selection = section
@@ -203,17 +203,32 @@ struct MacShell: View {
 #endif
 
 struct SectionRootView: View {
+    @Environment(AppModel.self) private var app
     let section: AppSection
 
     var body: some View {
-        switch section {
-        case .home: HomeView()
-        case .categories: CategoryView()
-        case .calendar: CalendarView()
-        case .library: LibraryView()
-        case .search: SearchView()
-        case .profile: ProfileView()
+        Group {
+            switch section {
+            case .home: HomeView()
+            case .categories: CategoryView()
+            case .calendar: CalendarView()
+            case .library: LibraryView()
+            case .search: SearchView()
+            case .profile: ProfileView()
+            }
         }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("搜索", systemImage: "magnifyingglass") {
+                    app.router.openSearch()
+                }
+                .labelStyle(.iconOnly)
+                .buttonBorderShape(.circle)
+                .accessibilityIdentifier("global-search")
+            }
+        }
+        #endif
     }
 }
 
@@ -222,6 +237,8 @@ struct RouteView: View {
 
     var body: some View {
         switch route {
+        case .search: SearchView()
+        case .calendar: CalendarView()
         case .subject(let id): SubjectDetailView(subjectID: id)
         case .episode(let id): EpisodeDetailView(episodeID: id)
         case .character(let id): PersonDetailView(kind: .character, id: id)

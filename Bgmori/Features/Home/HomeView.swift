@@ -46,7 +46,7 @@ struct HomeView: View {
                 if !app.todayAiring.isEmpty {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "今日放送", subtitle: weekdayText, actionTitle: "全部") {
-                            app.router.selectedSection = .calendar
+                            app.router.openCalendar()
                         }
                         ScrollView(.horizontal, showsIndicators: false) {
                             LazyHStack(alignment: .top, spacing: 16) {
@@ -112,6 +112,7 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .refreshable { await app.refreshAll() }
         .bgmLargeNavigationTitle("发现")
+        #if os(macOS)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -127,6 +128,7 @@ struct HomeView: View {
                 .accessibilityLabel("账户")
             }
         }
+        #endif
     }
 
     private var featuredSubject: Subject? {

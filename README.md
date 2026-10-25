@@ -41,6 +41,7 @@
 - [x] iOS 原生大标题与系统搜索栏、分组列表、随系统字号缩放的内容层级
 - [x] 发现页：本季精选封面、作品横向书架、分组排行榜与社区入口
 - [x] Liquid Glass：自定义玻璃 Tab Bar、玻璃浮动操作条、系统导航栏/Sheet 材质
+- [x] iPhone 四栏导航：发现 / 分类 / 收藏 / 我的，右上角搜索，今日放送从发现页进入
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统
 - [x] Dynamic Type、VoiceOver 标签、Reduce Transparency 降级
@@ -77,6 +78,7 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 分类页的筛选、翻页、缓存和切换保护可用 `bash scripts/test-categories.sh` 验证；加上 `--live` 会使用真实 API 检查五种内容类型以及组合筛选与翻页。
 
+导航回归检查：`bash scripts/test-navigation.sh`，分别运行 Mac 与 iPhone 17 模拟器上的搜索、放送和返回路径检查。
 
 ## 登录配置
 

@@ -98,7 +98,7 @@ final class AppModel {
         case "topic": router.selectedSection = .profile; router.profilePath = [.topic(Int(value) ?? 5155)]
         case "timeline": router.selectedSection = .profile; router.profilePath = [.timeline(value.isEmpty ? "sai" : value)]
         case "index": router.selectedSection = .home; router.homePath = [.index(Int(value) ?? 1)]
-        case "calendar": router.selectedSection = .calendar
+        case "calendar": router.openCalendar()
         case "categories":
             router.selectedSection = .categories
             if let rawType = Int(value), let type = SubjectType(rawValue: rawType) {
@@ -106,8 +106,7 @@ final class AppModel {
             }
         case "library": router.selectedSection = .library
         case "search":
-            router.selectedSection = .search
-            router.searchQuery = value
+            router.openSearch(query: value)
         case "login": showLogin = true
         case "settings": showSettings = true
         case "profile": router.selectedSection = .profile

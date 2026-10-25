@@ -10,6 +10,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+    static let phoneTabs: [AppSection] = [.home, .categories, .library, .profile]
 
     var title: String {
         switch self {
@@ -46,6 +47,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum Route: Hashable {
+    case search
+    case calendar
     case subject(Int)
     case episode(Int)
     case character(Int)
@@ -72,6 +75,27 @@ final class AppRouter {
     var profilePath: [Route] = []
     var macPath: [Route] = []
     var searchQuery: String = ""
+
+    func openSearch(query: String? = nil) {
+        if let query { searchQuery = query }
+        #if os(iOS)
+        if !AppSection.phoneTabs.contains(selectedSection) { selectedSection = .home }
+        if path(for: selectedSection).last != .search { push(.search) }
+        #else
+        selectedSection = .search
+        macPath.removeAll()
+        #endif
+    }
+
+    func openCalendar() {
+        #if os(iOS)
+        selectedSection = .home
+        if homePath.last != .calendar { homePath.append(.calendar) }
+        #else
+        selectedSection = .calendar
+        macPath.removeAll()
+        #endif
+    }
 
     func path(for section: AppSection) -> [Route] {
         switch section {
@@ -169,8 +193,7 @@ final class AppRouter {
             case "index":
                 if let id = Int(path) { push(.index(id)) }
             case "search":
-                searchQuery = components.queryItems?.first(where: { $0.name == "q" })?.value ?? ""
-                selectedSection = .search
+                openSearch(query: components.queryItems?.first(where: { $0.name == "q" })?.value ?? "")
             default:
                 break
             }
