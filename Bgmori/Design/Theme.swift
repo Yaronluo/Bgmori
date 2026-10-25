@@ -7,8 +7,31 @@ import AppKit
 #endif
 
 extension Color {
-    static let brandPink = Color(red: 0.941, green: 0.569, blue: 0.600)
+    static var brandPink: Color {
+        #if os(iOS)
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 1, green: 0.53, blue: 0.64, alpha: 1)
+                : UIColor(red: 0.78, green: 0.20, blue: 0.37, alpha: 1)
+        })
+        #else
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(red: 1, green: 0.53, blue: 0.64, alpha: 1)
+                : NSColor(red: 0.78, green: 0.20, blue: 0.37, alpha: 1)
+        })
+        #endif
+    }
     static let brandPinkSoft = Color(red: 0.980, green: 0.741, blue: 0.757)
+    static var bgmCanvas: Color {
+        #if os(iOS)
+        Color(uiColor: .systemBackground)
+        #else
+        Color(nsColor: .windowBackgroundColor)
+        #endif
+    }
+    static let bgmArtworkScrim = Color.black
+    static let bgmOnArtwork = Color.white
     static var bgmBackground: Color {
         #if os(iOS)
         Color(uiColor: .systemGroupedBackground)
@@ -56,11 +79,11 @@ extension Color {
 }
 
 extension Font {
-    static let bgmTitle = Font.system(size: 28, weight: .bold, design: .default)
-    static let bgmSection = Font.system(size: 20, weight: .bold, design: .default)
-    static let bgmBody = Font.system(size: 16, weight: .regular, design: .default)
-    static let bgmCaption = Font.system(size: 12, weight: .medium, design: .default)
-    static let bgmNumber = Font.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit()
+    static let bgmTitle = Font.system(.largeTitle, weight: .bold)
+    static let bgmSection = Font.system(.title2, weight: .bold)
+    static let bgmBody = Font.body
+    static let bgmCaption = Font.subheadline
+    static let bgmNumber = Font.system(.headline, design: .rounded).monospacedDigit()
 }
 
 struct GlassSurface<Content: View>: View {
@@ -111,7 +134,7 @@ struct SectionHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.bgmSection)
                     .foregroundStyle(.primary)
@@ -123,8 +146,15 @@ struct SectionHeader: View {
             }
             Spacer()
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(.system(size: 14, weight: .medium))
+                Button(action: action) {
+                    HStack(spacing: 4) {
+                        Text(actionTitle)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .font(.subheadline)
+                    .frame(minHeight: 44)
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -139,26 +169,21 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 38, weight: .light))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
+        ContentUnavailableView {
+            Label(title, systemImage: icon)
+        } description: {
             Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        } actions: {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
+                    .foregroundStyle(Color.bgmCanvas)
                     .tint(.brandPink)
                     .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .padding(.horizontal, 24)
+        .padding(.vertical, 24)
     }
 }
 

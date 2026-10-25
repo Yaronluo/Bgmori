@@ -11,7 +11,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .home: "首页"
+        case .home: "发现"
         case .calendar: "放送"
         case .library: "收藏"
         case .search: "搜索"
@@ -21,7 +21,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var icon: String {
         switch self {
-        case .home: "house"
+        case .home: "square.grid.2x2"
         case .calendar: "calendar"
         case .library: "books.vertical"
         case .search: "magnifyingglass"
@@ -31,7 +31,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var filledIcon: String {
         switch self {
-        case .home: "house.fill"
+        case .home: "square.grid.2x2.fill"
         case .calendar: "calendar"
         case .library: "books.vertical.fill"
         case .search: "magnifyingglass"

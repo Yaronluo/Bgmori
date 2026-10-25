@@ -65,13 +65,15 @@ struct PhoneShell: View {
                 HomeView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
-            .tabItem { Label("首页", systemImage: "house") }
+            .toolbar(.hidden, for: .tabBar)
+            .tabItem { Label("发现", systemImage: "square.grid.2x2") }
             .tag(AppSection.home)
 
             NavigationStack(path: $router.calendarPath) {
                 CalendarView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("放送", systemImage: "calendar") }
             .tag(AppSection.calendar)
 
@@ -79,6 +81,7 @@ struct PhoneShell: View {
                 LibraryView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("收藏", systemImage: "books.vertical") }
             .tag(AppSection.library)
 
@@ -86,6 +89,7 @@ struct PhoneShell: View {
                 SearchView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("搜索", systemImage: "magnifyingglass") }
             .tag(AppSection.search)
 
@@ -93,15 +97,16 @@ struct PhoneShell: View {
                 ProfileView()
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("我的", systemImage: "person.crop.circle") }
             .tag(AppSection.profile)
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !router.isShowingSubject {
                 BgmoriTabBar(selection: $router.selectedSection)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
             }
         }
     }
@@ -110,35 +115,41 @@ struct PhoneShell: View {
 struct BgmoriTabBar: View {
     @Binding var selection: AppSection
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(AppSection.allCases) { section in
                 Button {
-                    withAnimation(.snappy(duration: 0.22)) {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
                         selection = section
                     }
                 } label: {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 5) {
                         Image(systemName: selection == section ? section.filledIcon : section.icon)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 21, weight: .medium))
                         Text(section.title)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.caption2.weight(.medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(selection == section ? Color.brandPink : Color.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .background(
-                        selection == section ? Color.brandPink.opacity(0.14) : Color.clear,
-                        in: Capsule()
-                    )
+                    .padding(.vertical, 8)
+                    .background {
+                        if selection == section {
+                            Capsule().fill(Color.brandPink.opacity(0.10))
+                                .matchedGeometryEffect(id: "selection", in: selectionAnimation)
+                        }
+                    }
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == section ? .isSelected : [])
             }
         }
-        .padding(6)
+        .padding(5)
         .background {
             if reduceTransparency {
                 Capsule().fill(Color.bgmSurface)

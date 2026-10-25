@@ -46,15 +46,15 @@ struct CoverCard: View {
     var width: CGFloat = 132
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
                 CachedAsyncImage(url: coverURL, maxPixel: Int(width * 2.6), placeholderTint: tint)
-                    .frame(width: width, height: width * 1.36)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .frame(width: width, height: width * 1.42)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(alignment: .topLeading) {
                         if let badge {
                             Text(badge)
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.caption.weight(.semibold).monospacedDigit())
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 4)
                                 .background(.black.opacity(0.45), in: Capsule())
@@ -76,15 +76,15 @@ struct CoverCard: View {
             }
 
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.leading)
                 .frame(width: width, alignment: .leading)
 
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .frame(width: width, alignment: .leading)
@@ -157,16 +157,16 @@ struct SubjectRow: View {
     var body: some View {
         HStack(spacing: 12) {
             CachedAsyncImage(url: coverURL, maxPixel: 220, placeholderTint: tint)
-                .frame(width: 52, height: 70)
+                .frame(width: 56, height: 78)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .lineLimit(2)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -203,25 +203,28 @@ struct TagChip: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        Button {
-            action?()
-        } label: {
-            HStack(spacing: 4) {
-                Text(name)
-                    .font(.system(size: 12, weight: .medium))
-                if let count {
-                    Text("\(count)")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background(isSelected ? Color.brandPink : Color.bgmSecondary.opacity(0.8), in: Capsule())
+        if let action {
+            Button(action: action) { chipContent }
+                .buttonStyle(.plain)
+        } else {
+            chipContent
         }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
+    }
+
+    private var chipContent: some View {
+        HStack(spacing: 4) {
+            Text(name)
+                .font(.caption)
+            if let count {
+                Text("\(count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
+        .background(isSelected ? Color.brandPink : Color.bgmSecondary, in: Capsule())
     }
 }
 
@@ -275,18 +278,14 @@ struct LoginPromptView: View {
     var action: () -> Void
 
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(Color.brandPink)
-            Text(title)
-                .font(.headline)
+        ContentUnavailableView {
+            Label(title, systemImage: "books.vertical")
+        } description: {
             Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        } actions: {
             Button(actionTitle, action: action)
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color.bgmCanvas)
                 .tint(.brandPink)
         }
         .frame(maxWidth: .infinity)
@@ -334,20 +333,41 @@ struct AvatarView: View {
     var size: CGFloat = 40
 
     var body: some View {
-        CachedAsyncImage(url: url, maxPixel: Int(size * 3), placeholderTint: .brandPink)
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1))
+        Group {
+            if let url {
+                CachedAsyncImage(url: url, maxPixel: Int(size * 3), placeholderTint: .brandPink)
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .foregroundStyle(Color.brandPink, Color.brandPink.opacity(0.10))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
     }
 }
 
 extension View {
+    @ViewBuilder
+    func bgmSearchable(text: Binding<String>, prompt: String) -> some View {
+        #if os(iOS)
+        searchable(text: text, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+        #else
+        searchable(text: text, prompt: prompt)
+        #endif
+    }
+
     func bgmCardBackground(cornerRadius: CGFloat = 18) -> some View {
-        background(Color.bgmSurface.opacity(0.75), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
+        background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    @ViewBuilder
+    func bgmLargeNavigationTitle(_ title: String) -> some View {
+        #if os(iOS)
+        navigationTitle(title).navigationBarTitleDisplayMode(.large)
+        #else
+        navigationTitle(title)
+        #endif
     }
 
     @ViewBuilder

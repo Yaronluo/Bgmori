@@ -71,12 +71,8 @@ struct LibraryView: View {
                 content
             }
         }
-        #if os(macOS)
-        .navigationTitle("收藏")
-        #else
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .background(Color.bgmBackground)
+        .bgmLargeNavigationTitle("收藏")
         .task {
             await app.library.loadIfNeeded()
         }
@@ -137,7 +133,7 @@ struct LibraryView: View {
             .padding(.top, 8)
         }
         .scrollIndicators(.hidden)
-        .searchable(text: $searchText, prompt: "在收藏中搜索")
+        .bgmSearchable(text: $searchText, prompt: "在收藏中搜索")
         .refreshable {
             if let username = app.auth.username {
                 await app.library.loadAll(username: username, force: true)
@@ -175,10 +171,8 @@ struct LibraryView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("我的收藏")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
             Text("\(app.library.collections.count) 部作品 · \(app.library.watching.count) 部在看")
-                .font(.system(size: 12, weight: .medium))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 20)
@@ -192,13 +186,14 @@ struct LibraryView: View {
                         withAnimation(.snappy(duration: 0.2)) { filter = item }
                     } label: {
                         Text(item.title)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.subheadline.weight(.medium))
                             .padding(.horizontal, 13)
-                            .padding(.vertical, 7)
-                            .foregroundStyle(filter == item ? Color.white : Color.primary)
-                            .background(filter == item ? Color.brandPink : Color.bgmSecondary.opacity(0.65), in: Capsule())
+                            .padding(.vertical, 11)
+                            .foregroundStyle(filter == item ? Color.brandPink : Color.secondary)
+                            .background(filter == item ? Color.brandPink.opacity(0.12) : Color.bgmSurface, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
             }
             .padding(.horizontal, 20)

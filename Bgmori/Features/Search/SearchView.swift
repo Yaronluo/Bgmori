@@ -45,8 +45,7 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                searchField
+            LazyVStack(alignment: .leading, spacing: 28) {
                 scopePicker
 
                 if query.trimmed.isEmpty {
@@ -57,7 +56,9 @@ struct SearchView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if let errorText {
-                    EmptyStateView(icon: "wifi.exclamationmark", title: "搜索失败", message: errorText)
+                    EmptyStateView(icon: "wifi.exclamationmark", title: "搜索失败", message: errorText, actionTitle: "重试") {
+                        Task { await search() }
+                    }
                 } else if results.isEmpty {
                     EmptyStateView(icon: "magnifyingglass", title: "没有找到", message: "换个关键词，或去 Bangumi 网页搜索。")
                 } else {
@@ -80,70 +81,25 @@ struct SearchView: View {
             guard !Task.isCancelled else { return }
             await search()
         }
-        #if os(macOS)
-        .navigationTitle("搜索")
-        #else
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .background(Color.bgmCanvas)
+        .bgmLargeNavigationTitle("搜索")
+        .bgmSearchable(text: $query, prompt: "作品、角色、创作者")
+        .onSubmit(of: .search) {
+            remember()
+            Task { await search() }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("筛选", systemImage: "slider.horizontal.3") { showFilters = true }
+                    .disabled(scope != .subject)
+            }
+        }
         .sheet(isPresented: $showFilters) {
             SearchFilterView(type: $typeFilter, year: $yearFilter, sort: $sort)
                 #if os(iOS)
                 .presentationDetents([.medium])
                 #endif
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                TextField("搜索条目、角色、人物", text: $query)
-                    .font(.system(size: 15))
-                    .textFieldStyle(.plain)
-                    .submitLabel(.search)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .onSubmit {
-                        remember()
-                        Task { await search() }
-                    }
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(Color.bgmSecondary.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
-
-            Button {
-                showFilters = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 42, height: 42)
-            }
-            .buttonStyle(.glass)
-            .disabled(scope != .subject)
-            .opacity(scope == .subject ? 1 : 0.4)
-            .accessibilityLabel("筛选")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 6)
     }
 
     private var scopePicker: some View {
@@ -157,24 +113,24 @@ struct SearchView: View {
     }
 
     private var recentSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("最近搜索")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.title3.weight(.bold))
                 Spacer()
                 if !recent.isEmpty {
                     Button("清空") {
                         recent.removeAll()
                         UserDefaults.standard.set(recent, forKey: "recentSearches")
                     }
-                    .font(.system(size: 12))
+                    .font(.subheadline)
                 }
             }
             .padding(.horizontal, 20)
 
             if recent.isEmpty {
                 Text("还没有搜索记录")
-                    .font(.system(size: 12))
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 20)
             } else {
@@ -192,19 +148,49 @@ struct SearchView: View {
     }
 
     private var discoverHint: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("试试这些")
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 20)
-            FlowLayout(spacing: 8, lineSpacing: 8) {
-                ForEach(["CLANNAD", "攻壳机动队", "俄罗斯方块", "坂本龙一", "2026"], id: \.self) { term in
-                    TagChip(name: term) {
+        let suggestions = [
+            ("CLANNAD", "动画 · 写给青春的故事", "tv"),
+            ("攻壳机动队", "动画 · 走进赛博世界", "sparkles.tv"),
+            ("俄罗斯方块", "游戏 · 简单而隽永", "gamecontroller"),
+            ("坂本龙一", "音乐 · 听见更多可能", "music.note")
+        ]
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("找点灵感")
+                .font(.title3.weight(.bold))
+            VStack(spacing: 0) {
+                ForEach(suggestions, id: \.0) { term, detail, icon in
+                    Button {
+                        scope = .subject
                         query = term
+                        remember()
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: icon)
+                                .font(.title3)
+                                .foregroundStyle(Color.brandPink)
+                                .frame(width: 40, height: 40)
+                                .background(Color.brandPink.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(term).font(.body.weight(.medium)).foregroundStyle(.primary)
+                                Text(detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.left")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if term != suggestions.last?.0 {
+                        Divider().padding(.leading, 68)
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .background(Color.bgmBackground, in: RoundedRectangle(cornerRadius: 20))
         }
+        .padding(.horizontal, 20)
     }
 
     private var resultGrid: some View {
@@ -255,7 +241,7 @@ struct SearchView: View {
                     .font(.system(size: 15, weight: .semibold))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }

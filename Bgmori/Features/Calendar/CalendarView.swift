@@ -8,8 +8,8 @@ struct CalendarView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                header
                 weekdaySelector
+                scheduleHeader
 
                 if app.calendar.isEmpty {
                     ProgressView("加载放送表…")
@@ -18,7 +18,7 @@ struct CalendarView: View {
                 } else if filteredItems.isEmpty {
                     EmptyStateView(
                         icon: "calendar.badge.exclamationmark",
-                        title: onlyWatching ? "今天没有在看的番" : "今天没有放送",
+                        title: onlyWatching ? "这天没有在看的番" : "这天没有放送",
                         message: onlyWatching ? "换成“全部”看看，或去收藏里加一部在看。" : "换一天看看，或稍后刷新。"
                     )
                 } else {
@@ -37,34 +37,37 @@ struct CalendarView: View {
                                             .foregroundStyle(Color.brandPink)
                                     }
                                     Text(item.rating?.scoreText ?? "—")
-                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                        .font(.system(.headline, design: .rounded))
                                         .monospacedDigit()
+                                        .lineLimit(1)
                                         .foregroundStyle(.secondary)
-                                        .frame(width: 32, alignment: .trailing)
+                                        .frame(minWidth: 32, alignment: .trailing)
+                                        .fixedSize(horizontal: true, vertical: false)
                                 }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
                             }
                             .buttonStyle(.plain)
-                            Divider().padding(.leading, 84)
+                            if item.id != filteredItems.last?.id {
+                                Divider().padding(.leading, 84)
+                            }
                         }
                     }
+                    .bgmCardBackground(cornerRadius: 22)
+                    .padding(.horizontal, 20)
                 }
 
                 Text("放送时间以 Bangumi 为准，按周显示。")
-                    .font(.system(size: 10))
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 24)
             }
         }
+        .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
-        #if os(macOS)
-        .navigationTitle("放送")
-        #else
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .bgmLargeNavigationTitle("每日放送")
+        .refreshable { await app.loadCalendar(force: true) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -90,48 +93,49 @@ struct CalendarView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("每日放送")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-            Text("今天 · \(weekdayName)")
-                .font(.system(size: 12, weight: .medium))
+    private var scheduleHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("\(weekdayName)\(selectedWeekday == app.todayWeekday ? " · 今天" : "")")
+                .font(.headline)
+            Spacer()
+            Text("\(filteredItems.count) 部作品")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 24)
         .padding(.top, 8)
     }
 
     private var weekdaySelector: some View {
-        GlassSurface(shape: AnyShape(Capsule())) {
-            HStack(spacing: 2) {
-                ForEach(days) { day in
-                    Button {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            selectedWeekday = day.weekday.id
-                        }
-                    } label: {
-                        VStack(spacing: 2) {
-                            Text(day.weekday.shortName)
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("\(day.items.count)")
-                                .font(.system(size: 9, weight: .medium, design: .rounded))
-                                .opacity(0.65)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .foregroundStyle(selectedWeekday == day.weekday.id ? Color.white : Color.primary)
-                        .background(
-                            selectedWeekday == day.weekday.id ? Color.brandPink : Color.clear,
-                            in: Capsule()
-                        )
+        HStack(spacing: 4) {
+            ForEach(days) { day in
+                let isSelected = selectedWeekday == day.weekday.id
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        selectedWeekday = day.weekday.id
                     }
-                    .buttonStyle(.plain)
+                } label: {
+                    VStack(spacing: 8) {
+                        Text(day.weekday.shortName)
+                            .font(.subheadline.weight(isSelected ? .bold : .medium))
+                        Text("\(day.items.count)")
+                            .font(.caption.monospacedDigit())
+                            .opacity(isSelected ? 0.9 : 0.5)
+                    }
+                    .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
+                    .frame(maxWidth: .infinity, minHeight: 62)
+                    .background(isSelected ? Color.brandPink : Color.clear, in: RoundedRectangle(cornerRadius: 16))
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(day.weekday.cn)，\(day.items.count) 部作品")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-            .padding(4)
         }
+        .padding(6)
+        .bgmCardBackground(cornerRadius: 22)
         .padding(.horizontal, 20)
+        .padding(.top, 8)
     }
 
     private var days: [CalendarDay] {
@@ -149,7 +153,7 @@ struct CalendarView: View {
 
     private func subtitle(for item: LegacySubject) -> String {
         if let collection = app.library.collection(for: item.id) {
-            return "\(collection.collectionType.title) · \(collection.epStatus)/\(item.airDate ?? "")"
+            return "\(collection.collectionType.title) · 看到 \(collection.epStatus) 话"
         }
         return item.airDate ?? "每周更新"
     }

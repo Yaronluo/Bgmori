@@ -5,7 +5,7 @@
 
 当前版本：`1.0.0 (1)` · 目标系统：**iOS 27 / macOS 27**（使用 Xcode 27.1 构建）
 
-![首页](docs/screenshots/home.png)
+![首页](docs/screenshots/redesign/home-light.png)
 
 ## 已实现
 
@@ -36,6 +36,8 @@
 
 ### 设计
 
+- [x] iOS 原生大标题与系统搜索栏、分组列表、随系统字号缩放的内容层级
+- [x] 发现页：本季精选封面、作品横向书架、分组排行榜与社区入口
 - [x] Liquid Glass：自定义玻璃 Tab Bar、玻璃浮动操作条、系统导航栏/Sheet 材质
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统
@@ -120,15 +122,15 @@ Bgmori/
 
 | 首页（深色） | 放送 | 搜索 |
 | --- | --- | --- |
-| ![首页深色](docs/screenshots/home-dark.png) | ![放送](docs/screenshots/calendar.png) | ![搜索](docs/screenshots/search.png) |
+| ![首页深色](docs/screenshots/redesign/home-dark.png) | ![放送](docs/screenshots/redesign/calendar-light.png) | ![搜索](docs/screenshots/redesign/search-light.png) |
 
 | 条目 | 吐槽 | 登录 |
 | --- | --- | --- |
-| ![条目](docs/screenshots/subject.png) | ![吐槽](docs/screenshots/comments.png) | ![登录](docs/screenshots/login.png) |
+| ![条目](docs/screenshots/redesign/subject-light.png) | ![吐槽](docs/screenshots/comments.png) | ![登录](docs/screenshots/login.png) |
 
 | 收藏（游客） | 我的 | 设置 |
 | --- | --- | --- |
-| ![收藏](docs/screenshots/library.png) | ![我的](docs/screenshots/profile.png) | ![设置](docs/screenshots/settings.png) |
+| ![收藏](docs/screenshots/redesign/library-light.png) | ![我的](docs/screenshots/redesign/profile-light.png) | ![设置](docs/screenshots/settings.png) |
 
 ## 致谢
 

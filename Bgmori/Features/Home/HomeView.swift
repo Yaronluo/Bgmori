@@ -5,18 +5,16 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 26) {
-                header
-
-                if app.isGuest {
-                    guestCard
+            LazyVStack(alignment: .leading, spacing: 32) {
+                if let featured = featuredSubject {
+                    featuredSection(featured)
                 }
 
                 if !app.continueWatching.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "继续观看", subtitle: "从上次停下的地方接上")
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "继续观看", subtitle: "接着上次的故事")
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 14) {
+                            LazyHStack(alignment: .top, spacing: 16) {
                                 ForEach(app.continueWatching) { item in
                                     NavigationLink(value: Route.subject(item.subjectId)) {
                                         CoverCard(
@@ -38,15 +36,15 @@ struct HomeView: View {
                 }
 
                 if !app.todayAiring.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "今日放送", subtitle: weekdayText, actionTitle: "全部") {
                             app.router.selectedSection = .calendar
                         }
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 14) {
+                            LazyHStack(alignment: .top, spacing: 16) {
                                 ForEach(app.todayAiring.prefix(12)) { item in
                                     NavigationLink(value: Route.subject(item.id)) {
-                                        AiringCard(subject: item, isWatching: app.library.isWatching(item.id), width: 126)
+                                        AiringCard(subject: item, isWatching: app.library.isWatching(item.id), width: 140)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -57,13 +55,13 @@ struct HomeView: View {
                 }
 
                 if !app.seasonal.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "本季新番", subtitle: app.seasonLabel)
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 14) {
+                            LazyHStack(alignment: .top, spacing: 16) {
                                 ForEach(app.seasonal) { subject in
                                     NavigationLink(value: Route.subject(subject.id)) {
-                                        SubjectCard(subject: subject, width: 136)
+                                        SubjectCard(subject: subject, width: 140)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -74,59 +72,37 @@ struct HomeView: View {
                 }
 
                 if !app.ranking.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "排行榜", subtitle: "Bangumi 动画排名")
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 14) {
-                                ForEach(Array(app.ranking.enumerated()), id: \.element.id) { index, subject in
-                                    NavigationLink(value: Route.subject(subject.id)) {
-                                        CoverCard(
-                                            title: subject.displayTitle,
-                                            subtitle: "\(subject.ratingText) 分",
-                                            coverURL: subject.coverURL,
-                                            badge: "#\(index + 1)",
-                                            tint: .subjectTint(subject.type),
-                                            width: 132
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                    }
+                    rankingSection
                 }
 
                 communitySection
 
-                if app.isLoadingHome && app.ranking.isEmpty {
-                    HStack {
-                        Spacer()
-                        ProgressView("加载首页…")
-                        Spacer()
-                    }
-                    .padding(.vertical, 30)
+                if app.isGuest {
+                    guestCard
                 }
 
-                Text("数据来自 Bangumi · Bgmori 是非官方客户端")
-                    .font(.system(size: 10))
+                if app.isLoadingHome && app.ranking.isEmpty {
+                    ProgressView("正在发现好故事…")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                } else if app.ranking.isEmpty && app.seasonal.isEmpty && app.todayAiring.isEmpty {
+                    EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: "下拉刷新，或稍后再来看看。", actionTitle: "重试") {
+                        Task { await app.refreshAll() }
+                    }
+                }
+
+                Text("BGMORI · 数据来自 Bangumi")
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 4)
-                    .padding(.bottom, 26)
+                    .padding(.bottom, 24)
             }
             .padding(.top, 8)
         }
+        .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
-        .refreshable {
-            await app.refreshAll()
-        }
-        #if os(macOS)
-        .navigationTitle("首页")
-        #else
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .refreshable { await app.refreshAll() }
+        .bgmLargeNavigationTitle("发现")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -136,7 +112,7 @@ struct HomeView: View {
                         app.router.selectedSection = .profile
                     }
                 } label: {
-                    AvatarView(url: app.auth.user?.avatarURL, size: 28)
+                    AvatarView(url: app.auth.user?.avatarURL, size: 30)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("账户")
@@ -144,97 +120,161 @@ struct HomeView: View {
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(greeting)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text("Bgmori")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(colors: [Color.brandPink, Color.brandPink.opacity(0.65)], startPoint: .leading, endPoint: .trailing)
-                    )
-                Text(Date.now.formatted(.dateTime.month().day().weekday(.wide)))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
-            Spacer()
+    private var featuredSubject: Subject? {
+        app.seasonal.max { ($0.collection?.doing ?? 0) < ($1.collection?.doing ?? 0) }
+    }
+
+    private func featuredSection(_ subject: Subject) -> some View {
+        NavigationLink(value: Route.subject(subject.id)) {
+            FeaturedSubjectCard(subject: subject, season: app.seasonLabel)
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 20)
-        .padding(.top, 4)
+    }
+
+    private var rankingSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(title: "口碑佳作", subtitle: "Bangumi 动画排行榜")
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 16) {
+                    ForEach(0..<((app.ranking.count + 2) / 3), id: \.self) { page in
+                        VStack(spacing: 0) {
+                            ForEach(Array(app.ranking.enumerated()).filter { $0.offset / 3 == page }, id: \.element.id) { index, subject in
+                                if index % 3 != 0 {
+                                    Divider().padding(.leading, 100)
+                                }
+                                NavigationLink(value: Route.subject(subject.id)) {
+                                    HStack(spacing: 12) {
+                                        Text("\(index + 1)")
+                                            .font(.title3.weight(.bold).monospacedDigit())
+                                            .foregroundStyle(index < 3 ? Color.brandPink : Color.secondary)
+                                            .frame(width: 22)
+                                        SubjectRow(title: subject.displayTitle, subtitle: subject.typeName, coverURL: subject.coverURL, trailing: subject.ratingText)
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .containerRelativeFrame(.horizontal) { length, _ in
+                            min(length, 440)
+                        }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+        }
     }
 
     private var guestCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .background(
-                    LinearGradient(colors: [Color.brandPink, Color.brandPink.opacity(0.65)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-            VStack(alignment: .leading, spacing: 4) {
-                Text("登录后同步你的收藏")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("评分、进度、吐槽和在看列表都会跟着你。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+        Button { app.showLogin = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.brandPink)
+                    .frame(width: 44, height: 44)
+                    .background(Color.brandPink.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("让好故事，留在你的收藏里")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("登录 Bangumi，同步收藏与观看进度")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            Spacer()
-            Button("登录") { app.showLogin = true }
-                .buttonStyle(.glassProminent)
-                .tint(.brandPink)
+            .padding(16)
+            .background(Color.bgmBackground, in: RoundedRectangle(cornerRadius: 20))
         }
-        .padding(16)
-        .bgmCardBackground(cornerRadius: 20)
+        .buttonStyle(.plain)
         .padding(.horizontal, 20)
     }
 
     private var communitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "社区", subtitle: "只读浏览 Bangumi 的公开内容")
-            HStack(spacing: 12) {
-                NavigationLink {
-                    GroupListView()
-                } label: {
-                    CommunityCard(icon: "person.3", title: "小组", subtitle: "话题与讨论")
+        VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(title: "逛逛社区", subtitle: "在作品之外，遇见同好")
+            VStack(spacing: 0) {
+                NavigationLink { GroupListView() } label: {
+                    CommunityCard(icon: "person.2.fill", title: "小组", subtitle: "发现有趣的话题与讨论")
                 }
                 .buttonStyle(.plain)
-
-                NavigationLink {
-                    BlogListView()
-                } label: {
-                    CommunityCard(icon: "text.book.closed", title: "日志", subtitle: "大家的 ACGN 随笔")
+                Divider().padding(.leading, 72)
+                NavigationLink { BlogListView() } label: {
+                    CommunityCard(icon: "text.book.closed.fill", title: "日志", subtitle: "读一篇关于热爱的随笔")
                 }
                 .buttonStyle(.plain)
-
                 if let username = app.auth.username {
-                    NavigationLink {
-                        TimelineView(username: username)
-                    } label: {
-                        CommunityCard(icon: "clock.arrow.circlepath", title: "时光机", subtitle: "你的收藏轨迹")
+                    Divider().padding(.leading, 72)
+                    NavigationLink { TimelineView(username: username) } label: {
+                        CommunityCard(icon: "clock.arrow.circlepath", title: "时光机", subtitle: "重温你的收藏轨迹")
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .background(Color.bgmBackground, in: RoundedRectangle(cornerRadius: 20))
             .padding(.horizontal, 20)
         }
     }
 
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<11: return "早上好"
-        case 11..<14: return "中午好"
-        case 14..<18: return "下午好"
-        default: return "晚上好"
-        }
-    }
-
     private var weekdayText: String {
-        app.calendar.first(where: { $0.weekday.id == app.todayWeekday })?.weekday.cn ?? "今天"
+        Date.now.formatted(.dateTime.month().day()) + " · " + (app.calendar.first(where: { $0.weekday.id == app.todayWeekday })?.weekday.cn ?? "今天")
+    }
+}
+
+struct FeaturedSubjectCard: View {
+    let subject: Subject
+    let season: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            GeometryReader { geometry in
+                CachedAsyncImage(url: subject.heroURL, maxPixel: 1200, placeholderTint: .subjectTint(subject.type))
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            LinearGradient(
+                stops: [.init(color: .bgmArtworkScrim.opacity(0.08), location: 0), .init(color: .bgmArtworkScrim.opacity(0.25), location: 0.35), .init(color: .bgmArtworkScrim.opacity(0.92), location: 1)],
+                startPoint: .top, endPoint: .bottom
+            )
+            VStack(alignment: .leading, spacing: 10) {
+                Text("本季精选")
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.bgmArtworkScrim.opacity(0.45), in: Capsule())
+                Spacer(minLength: 36)
+                Text(season)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.bgmOnArtwork.opacity(0.8))
+                Text(subject.displayTitle)
+                    .font(.system(.title, weight: .bold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack {
+                    Text(subject.episodeCountText)
+                    if let rating = subject.rating, rating.total > 0 {
+                        Text("·")
+                        Label(rating.scoreText, systemImage: "star.fill")
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.bgmOnArtwork.opacity(0.85))
+            }
+            .padding(22)
+        }
+        .foregroundStyle(Color.bgmOnArtwork)
+        .frame(height: dynamicTypeSize.isAccessibilitySize ? 420 : 260)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -244,19 +284,22 @@ struct CommunityCard: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.title3)
                 .foregroundStyle(Color.brandPink)
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-            Text(subtitle)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .frame(width: 42, height: 42)
+                .background(Color.brandPink.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .bgmCardBackground(cornerRadius: 16)
+        .padding(16)
+        .contentShape(Rectangle())
     }
 }

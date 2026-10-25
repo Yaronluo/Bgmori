@@ -25,7 +25,7 @@ struct ProfileView: View {
                 }
             }
 
-            Section("我的") {
+            Section("资料库") {
                 Button {
                     app.router.selectedSection = .library
                 } label: {
@@ -89,12 +89,7 @@ struct ProfileView: View {
         #else
         .listStyle(.inset)
         #endif
-        #if os(macOS)
-        .navigationTitle("我的")
-        #else
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .bgmLargeNavigationTitle("我的")
         .task {
             await app.library.loadIfNeeded()
         }
@@ -108,16 +103,16 @@ struct ProfileView: View {
     private var header: some View {
         if let user = app.auth.user {
             HStack(spacing: 14) {
-                AvatarView(url: user.avatarURL, size: 68)
+                AvatarView(url: user.avatarURL, size: 64)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(user.displayName)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.title2.weight(.bold))
                     Text("@\(user.username)")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if !user.sign.isEmpty {
                         Text(user.sign)
-                            .font(.system(size: 12))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
@@ -127,14 +122,12 @@ struct ProfileView: View {
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 58, weight: .light))
-                        .foregroundStyle(Color.brandPink)
+                    AvatarView(url: nil, size: 64)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("未登录")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                        Text("你的 Bangumi")
+                            .font(.title2.weight(.bold))
                         Text("登录后同步收藏、评分与进度")
-                            .font(.system(size: 12))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -144,7 +137,8 @@ struct ProfileView: View {
                     Label("登录 Bangumi", systemImage: "person.badge.key")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color.bgmCanvas)
                 .tint(.brandPink)
             }
         }
@@ -162,7 +156,7 @@ struct StatTile: View {
                 .monospacedDigit()
                 .foregroundStyle(Color.brandPink)
             Text(title)
-                .font(.system(size: 10, weight: .medium))
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -223,13 +217,13 @@ struct UserProfileView: View {
                         AvatarView(url: user.avatarURL, size: 70)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(user.displayName)
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .font(.title2.weight(.bold))
                             Text("@\(user.username)")
-                                .font(.system(size: 12))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             if !user.sign.isEmpty {
                                 Text(user.sign)
-                                    .font(.system(size: 12))
+                                    .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
                             }

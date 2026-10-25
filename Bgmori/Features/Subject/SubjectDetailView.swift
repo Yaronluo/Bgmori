@@ -125,6 +125,10 @@ struct SubjectDetailView: View {
             .padding(.bottom, 18)
         }
         .scrollIndicators(.hidden)
+        .background(Color.bgmCanvas)
+        #if os(iOS)
+        .ignoresSafeArea(.container, edges: .top)
+        #endif
         .safeAreaInset(edge: .bottom) {
             bottomBar(subject)
         }
@@ -132,10 +136,18 @@ struct SubjectDetailView: View {
 
     // MARK: - Hero
 
+    private var heroHeight: CGFloat {
+        #if os(iOS)
+        360
+        #else
+        300
+        #endif
+    }
+
     private func hero(_ subject: Subject) -> some View {
         ZStack(alignment: .bottomLeading) {
             CachedAsyncImage(url: subject.heroURL, maxPixel: 900, placeholderTint: .subjectTint(subject.type))
-                .frame(height: 300)
+                .frame(height: heroHeight)
                 .frame(maxWidth: .infinity)
                 .blur(radius: 28, opaque: true)
                 .overlay {
@@ -156,7 +168,7 @@ struct SubjectDetailView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(subject.displayTitle)
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
                         .lineLimit(3)
                     if !subject.originalTitle.isEmpty {
@@ -196,8 +208,9 @@ struct SubjectDetailView: View {
                 .padding(.bottom, 12)
             }
             .padding(.horizontal, 20)
+            .padding(.bottom, 24)
         }
-        .frame(height: 300)
+        .frame(height: heroHeight)
     }
 
     // MARK: - Action row
@@ -255,7 +268,7 @@ struct SubjectDetailView: View {
             Text("简介")
                 .font(.bgmSection)
             Text(subject.summary.trimmed.isEmpty ? "暂无简介" : subject.summary)
-                .font(.system(size: 14))
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
                 .lineLimit(synopsisExpanded ? nil : 5)
@@ -295,7 +308,7 @@ struct SubjectDetailView: View {
                     }
                 }
                 .padding(.horizontal, 14)
-                .bgmCardBackground(cornerRadius: 14)
+                .background(Color.bgmBackground, in: RoundedRectangle(cornerRadius: 18))
             }
             .padding(.horizontal, 20)
         }
