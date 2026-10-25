@@ -85,7 +85,7 @@ Bgmori 不内置任何第三方应用的 Client Secret，需要你自己注册�
 
 ## 给 AI 代理的说明
 
-仓库根目录有 `AGENTS.md`，里面是构建命令、目录约定、Liquid Glass 规则、密钥策略和已知坑。用 Claude Code / Codex / Cursor / Copilot 继续开发时，它们会自动读取。
+仓库根目录有 `AGENTS.md`，里面是构建命令、目录约定、Liquid Glass 规则、密钥策略和已知坑。用 Codex 继续开发时，直接在仓库根目录启动即可，它会自动读取；Claude Code / Cursor / Copilot 也能识别这个文件。
 
 ## 目录结构
 

@@ -97,3 +97,15 @@ docs/                方案与截图
 - 一个提交只做一件事；消息用 Conventional Commits，例如 `feat: add seasonal shelf`、`fix: handle nil episode airdate`。
 - 提交前确认 `git status` 没有 `.DS_Store`、`xcuserdata`、密钥文件。
 - 不要 force push `main`。
+
+## 与 Codex 协作的额外约定
+
+- Codex 会从仓库根目录读取本文件；启动时请把工作目录设为仓库根目录（有 `AGENTS.md` 的那一层）。
+- **默认用中文回复用户**，代码、命令、变量名保持英文。
+- 开始改代码前，先快速读 `README.md` 和本文件；必要时先跑一次基线构建，确认当前是绿的。
+- **除非用户明确说“提交/推送”，否则不要 `git commit`、`git push`、开 PR。**
+- 改完必须实际跑构建（iOS 模拟器 + macOS），并在回复里写清楚构建结果；UI 改动要附模拟器截图。
+- OAuth 没有配置时，不要伪造 token、不要把测试 token 写进代码；使用游客模式，或让用户自己在 App 设置里填。
+- 不要擅自升级 deployment target、引入第三方依赖、改 Bundle ID / Team / URL Scheme。
+- 不要为了“让编译过”而删掉功能、吞掉错误或把测试改成永远通过；要修根因。
+- 若 HTML 解析失效，保留 Safari 回退，不要静默返回空列表。
