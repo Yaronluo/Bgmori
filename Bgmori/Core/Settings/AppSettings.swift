@@ -40,6 +40,9 @@ final class AppSettings {
     var oauthRedirectURI: String = "bgmori://oauth/callback" { didSet { save() } }
 
     private let defaults = UserDefaults.standard
+    /// @Observable 会把存储属性改写成计算属性，init 里的赋值同样会触发 didSet。
+    /// 加载完成前禁止回写，否则第一行赋值就会用默认值覆盖磁盘上已有的设置。
+    @ObservationIgnored private var isLoaded = false
 
     init() {
         appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
@@ -58,6 +61,8 @@ final class AppSettings {
         oauthRedirectURI = defaults.string(forKey: "oauthRedirectURI")
             ?? (Bundle.main.object(forInfoDictionaryKey: "BGMOAuthRedirect") as? String)
             ?? "bgmori://oauth/callback"
+
+        isLoaded = true
     }
 
     var hasOAuthConfig: Bool {
@@ -71,6 +76,7 @@ final class AppSettings {
     }
 
     func save() {
+        guard isLoaded else { return }
         defaults.set(appearance.rawValue, forKey: "appearance")
         defaults.set(preferChineseName, forKey: "preferChineseName")
         defaults.set(hideSpoilers, forKey: "hideSpoilers")
