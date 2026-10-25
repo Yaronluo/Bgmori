@@ -110,7 +110,10 @@ struct Images: Decodable, Hashable, Sendable {
         return URL(string: value)
     }
 
-    var gridURL: URL? { Self.normalized(common ?? medium ?? small ?? large ?? grid) }
+    // Poster cards need the large source on Retina displays; common/medium are thumbnails.
+    var gridURL: URL? {
+        [large, common, medium, small, grid].compactMap(Self.normalized).first
+    }
     var thumbURL: URL? { Self.normalized(small ?? grid ?? common ?? medium ?? large) }
     var heroURL: URL? { Self.normalized(large ?? medium ?? common ?? small ?? grid) }
     var fullURL: URL? { Self.normalized(medium ?? large ?? common ?? small ?? grid) }

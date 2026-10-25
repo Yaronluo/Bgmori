@@ -37,6 +37,8 @@ struct CachedAsyncImage: View {
 }
 
 struct CoverCard: View {
+    @Environment(\.displayScale) private var displayScale
+
     let title: String
     var subtitle: String? = nil
     let coverURL: URL?
@@ -48,7 +50,7 @@ struct CoverCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
-                CachedAsyncImage(url: coverURL, maxPixel: Int(width * 2.6), placeholderTint: tint)
+                CachedAsyncImage(url: coverURL, maxPixel: Int(ceil(width * 1.42 * displayScale)), placeholderTint: tint)
                     .frame(width: width, height: width * 1.42)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(alignment: .topLeading) {
