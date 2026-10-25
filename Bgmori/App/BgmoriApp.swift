@@ -1,0 +1,61 @@
+import SwiftUI
+
+@main
+struct BgmoriApp: App {
+    @State private var app = AppModel()
+
+    var body: some Scene {
+        #if os(macOS)
+        WindowGroup {
+            rootView
+        }
+        .defaultSize(width: 1280, height: 820)
+        .commands {
+            BgmoriCommands(app: app)
+        }
+
+        Settings {
+            SettingsView()
+                .environment(app)
+                .frame(minWidth: 620, minHeight: 520)
+        }
+        #else
+        WindowGroup {
+            rootView
+        }
+        .defaultSize(width: 430, height: 932)
+        #endif
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        RootView()
+            .environment(app)
+            .onOpenURL { app.handleOpenURL($0) }
+    }
+}
+
+#if os(macOS)
+struct BgmoriCommands: Commands {
+    let app: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("刷新") {
+                Task { await app.refreshAll() }
+            }
+            .keyboardShortcut("r", modifiers: .command)
+        }
+
+        CommandMenu("前往") {
+            ForEach(Array(AppSection.allCases.enumerated()), id: \.element) { index, section in
+                Button(section.title) {
+                    app.router.selectedSection = section
+                    app.router.macPath.removeAll()
+                }
+                .keyboardShortcut(KeyEquivalent(Swift.Character(String(index + 1))), modifiers: .command)
+            }
+        }
+    }
+}
+#endif
