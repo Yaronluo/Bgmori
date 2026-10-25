@@ -83,6 +83,10 @@ Bgmori 不内置任何第三方应用的 Client Secret，需要你自己注册�
 
 > 私人使用可以直接把配置写进 Info.plist；如果要分发，建议把换 token 的逻辑放到自己的 Cloudflare Worker，避免 Client Secret 被提取。
 
+## 给 AI 代理的说明
+
+仓库根目录有 `AGENTS.md`，里面是构建命令、目录约定、Liquid Glass 规则、密钥策略和已知坑。用 Claude Code / Codex / Cursor / Copilot 继续开发时，它们会自动读取。
+
 ## 目录结构
 
 ```
