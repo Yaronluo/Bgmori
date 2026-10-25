@@ -19,149 +19,150 @@ struct LoginView: View {
         #endif
     }
 
+    #if os(iOS)
     private var phoneLogin: some View {
         @Bindable var settings = app.settings
-        return ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.91, green: 0.39, blue: 0.55), Color(red: 0.40, green: 0.29, blue: 0.75)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        return NavigationStack {
+            Form {
+                Section {
+                    VStack(spacing: 8) {
+                        Image("BrandIcon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08))
+                            }
+                            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                            .accessibilityHidden(true)
 
-            ScrollView {
-                VStack(spacing: 22) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 76, height: 76)
-                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                        Text("Bgmori")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        Text("一个更轻、更快的 Bangumi 客户端")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                        Text("登录 Bgmori")
+                            .font(.title2.bold())
+                        Text("同步你的收藏、评分与观看进度")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 30)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .listRowBackground(Color.clear)
+                }
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("登录后可以同步收藏、评分、进度与吐槽；未登录也可以浏览放送表和条目。")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.86))
+                Section {
+                    credentialField("Client ID", text: $settings.oauthClientID)
+                    credentialField("Client Secret", text: $settings.oauthClientSecret, secure: true)
+                    credentialField("回调地址", text: $settings.oauthRedirectURI)
+                    Link("创建 OAuth 应用 ↗", destination: URL(string: "https://bgm.tv/dev/app")!)
+                        .font(.subheadline)
+                } header: {
+                    Text("OAuth 应用")
+                } footer: {
+                    Text("填入你在 Bangumi 创建的应用信息，即可继续登录。回调地址需与开发者后台一致。")
+                }
+
+                Section {
+                    Button {
+                        Task {
+                            isWorking = true
+                            errorText = nil
+                            await app.signIn()
+                            isWorking = false
+                            if app.auth.isLoggedIn { dismiss() }
+                            else { errorText = app.auth.errorMessage }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isWorking { ProgressView().controlSize(.small) }
+                            Text(isWorking ? "正在登录…" : "使用 Bangumi 登录")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .tint(.brandPink)
+                    .disabled(isWorking || !settings.hasOAuthConfig)
+
+                    if let errorText {
+                        Label(errorText, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
-                        Button {
+                Section {
+                    DisclosureGroup(isExpanded: $showManualToken) {
+                        SecureField("粘贴 Access Token", text: $manualToken)
+                            .font(.system(.body, design: .monospaced))
+                        Button("使用这个 Token") {
                             Task {
                                 isWorking = true
-                                errorText = nil
-                                await app.signIn()
+                                await app.signInWithToken(manualToken)
                                 isWorking = false
                                 if app.auth.isLoggedIn { dismiss() }
                                 else { errorText = app.auth.errorMessage }
                             }
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.badge.key")
-                                Text("使用 Bangumi 登录")
-                                    .font(.system(size: 15, weight: .semibold))
-                                Spacer()
-                                if isWorking { ProgressView().tint(.brandPink) }
-                            }
-                            .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
-                        .tint(.white)
-                        .foregroundStyle(Color.brandPink)
-                        .disabled(isWorking)
-
-                        if !settings.hasOAuthConfig {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label("还没有配置 OAuth 应用", systemImage: "info.circle")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                Text("在 bgm.tv/dev/app 创建一个应用，回调地址填 bgmori://oauth/callback，然后把 Client ID / Secret 填到下面。")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.white.opacity(0.8))
-                                    .fixedSize(horizontal: false, vertical: true)
-
-                                TextField("Client ID", text: $settings.oauthClientID)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 12, design: .monospaced))
-                                SecureField("Client Secret", text: $settings.oauthClientSecret)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 12, design: .monospaced))
-                                TextField("回调地址", text: $settings.oauthRedirectURI)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 12, design: .monospaced))
-                            }
-                            .padding(12)
-                            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-
-                        if let errorText {
-                            Text(errorText)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.white)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.red.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-
-                        DisclosureGroup(isExpanded: $showManualToken) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                SecureField("粘贴 Access Token", text: $manualToken)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 12, design: .monospaced))
-                                Button("使用这个 Token") {
-                                    Task {
-                                        isWorking = true
-                                        await app.signInWithToken(manualToken)
-                                        isWorking = false
-                                        if app.auth.isLoggedIn { dismiss() }
-                                        else { errorText = app.auth.errorMessage }
-                                    }
-                                }
-                                .buttonStyle(.glass)
-                                .disabled(manualToken.trimmed.isEmpty || isWorking)
-                            }
-                            .padding(.top, 8)
-                        } label: {
-                            Text("已有 Access Token")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.9))
-                        }
-                        .tint(.white)
+                        .disabled(manualToken.trimmed.isEmpty || isWorking)
+                    } label: {
+                        Label("已有 Access Token", systemImage: "key")
                     }
-                    .padding(20)
-                    .background(Color.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                    )
-
-                    Button("先逛逛") { dismiss() }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.bottom, 20)
-
-                    Text("非官方客户端 · 数据来自 Bangumi")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.65))
-                        .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 22)
-                .frame(maxWidth: 520)
-                .frame(maxWidth: .infinity)
+
+                Section {
+                    Button("先逛逛") { dismiss() }
+                        .frame(maxWidth: .infinity)
+                } footer: {
+                    VStack(spacing: 6) {
+                        Text("无需登录，也可以浏览作品与每日放送。")
+                        Text("非官方客户端 · 数据来自 Bangumi")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                }
             }
+            .listSectionSpacing(.compact)
+            .contentMargins(.top, 0, for: .scrollContent)
+            .navigationTitle("账户")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.bgmBackground)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
-        #if os(iOS)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        #endif
     }
+
+    @ViewBuilder
+    private func credentialField(_ title: String, text: Binding<String>, secure: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Group {
+                if secure {
+                    SecureField("必填", text: text)
+                        .accessibilityLabel(title)
+                } else {
+                    TextField("必填", text: text)
+                        .accessibilityLabel(title)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            .font(.system(.body, design: .monospaced))
+        }
+    }
+    #endif
+
     #if os(macOS)
     private var desktopLogin: some View {
         @Bindable var settings = app.settings
