@@ -41,5 +41,7 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.entertainment</string>
+	<key>UIPrerenderedIcon</key>
+	<true/>
 </dict>
 </plist>
