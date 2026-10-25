@@ -130,11 +130,12 @@ struct SettingsView: View {
             cacheSize = await app.cacheSizeText()
         }
         .toolbar {
-            #if os(iOS)
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") { dismiss() }
+                    #if os(macOS)
+                    .keyboardShortcut(.cancelAction)
+                    #endif
             }
-            #endif
         }
     }
 }

@@ -30,15 +30,12 @@ struct RootView: View {
                 .environment(app)
         }
         .sheet(isPresented: $model.showSettings) {
-            #if os(iOS)
             NavigationStack {
                 SettingsView()
             }
             .environment(app)
-            #else
-            SettingsView()
-                .environment(app)
-                .frame(minWidth: 620, minHeight: 520)
+            #if os(macOS)
+            .frame(width: 680, height: 620)
             #endif
         }
         .task {
