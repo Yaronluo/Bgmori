@@ -106,6 +106,15 @@ final class AppModel {
         case "profile": router.selectedSection = .profile
         default: break
         }
+        #if os(macOS)
+        switch router.selectedSection {
+        case .home: router.macPath = router.homePath
+        case .calendar: router.macPath = router.calendarPath
+        case .library: router.macPath = router.libraryPath
+        case .search: router.macPath = router.searchPath
+        case .profile: router.macPath = router.profilePath
+        }
+        #endif
     }
     #endif
 

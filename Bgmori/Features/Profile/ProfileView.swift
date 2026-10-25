@@ -5,6 +5,24 @@ struct ProfileView: View {
     @State private var showIndexLookup = false
 
     var body: some View {
+        Group {
+            #if os(macOS)
+            desktopProfile
+            #else
+            phoneProfile
+            #endif
+        }
+        .bgmLargeNavigationTitle("我的")
+        .task { await app.library.loadIfNeeded() }
+        .sheet(isPresented: $showIndexLookup) {
+            IndexLookupView().environment(app)
+                #if os(macOS)
+                .frame(width: 440, height: 280)
+                #endif
+        }
+    }
+
+    private var phoneProfile: some View {
         List {
             Section {
                 header
@@ -89,15 +107,110 @@ struct ProfileView: View {
         #else
         .listStyle(.inset)
         #endif
-        .bgmLargeNavigationTitle("我的")
-        .task {
-            await app.library.loadIfNeeded()
-        }
-        .sheet(isPresented: $showIndexLookup) {
-            IndexLookupView()
-                .environment(app)
-        }
     }
+
+    #if os(macOS)
+    private var desktopProfile: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("我的").font(.largeTitle.bold())
+                HStack(spacing: 20) {
+                    AvatarView(url: app.auth.user?.avatarURL, size: 64)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(app.auth.user?.displayName ?? "你的 Bangumi")
+                            .font(.title2.bold())
+                        Text(app.auth.username.map { "@" + $0 } ?? "收藏喜爱的作品，记录每一段故事。")
+                            .foregroundStyle(.secondary)
+                        if let sign = app.auth.user?.sign, !sign.isEmpty {
+                            Text(sign).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                    Spacer()
+                    if app.isGuest {
+                        Button("登录 Bangumi") { app.showLogin = true }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    }
+                }
+                .padding(24)
+                .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 12))
+
+                if app.auth.isLoggedIn {
+                    HStack(spacing: 12) {
+                        StatTile(value: app.library.collections.count, title: "收藏")
+                        StatTile(value: app.library.counts[.doing] ?? 0, title: "在看")
+                        StatTile(value: app.library.counts[.done] ?? 0, title: "看过")
+                        StatTile(value: app.library.counts[.wish] ?? 0, title: "想看")
+                    }
+                }
+                HStack(alignment: .top, spacing: 20) {
+                    DesktopPanel(title: "资料库") {
+                        VStack(spacing: 0) {
+                            Button { app.router.selectedSection = .library } label: {
+                                desktopRow("我的收藏", subtitle: "管理作品与观看进度", icon: "books.vertical")
+                            }
+                            Divider()
+                            Button { showIndexLookup = true } label: {
+                                desktopRow("查看目录", subtitle: "通过 ID 打开 Bangumi 目录", icon: "list.bullet.rectangle")
+                            }
+                            Divider()
+                            Button { app.showSettings = true } label: {
+                                desktopRow("设置", subtitle: "账户、外观与通知", icon: "gearshape")
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    DesktopPanel(title: "社区") {
+                        VStack(spacing: 0) {
+                            NavigationLink { GroupListView() } label: {
+                                desktopRow("小组与讨论", subtitle: "发现同好的话题", icon: "person.2")
+                            }
+                            Divider()
+                            NavigationLink { BlogListView() } label: {
+                                desktopRow("日志", subtitle: "阅读关于作品的想法", icon: "text.book.closed")
+                            }
+                            if let username = app.auth.username {
+                                Divider()
+                                NavigationLink(value: Route.timeline(username)) {
+                                    desktopRow("时光机", subtitle: "回顾你的收藏轨迹", icon: "clock.arrow.circlepath")
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        Text("社区内容以只读方式浏览")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                HStack {
+                    Text("Bgmori \(app.settings.appVersion)")
+                    Text("·")
+                    Text("非官方客户端")
+                    Spacer()
+                    Link("Bangumi 官网 ↗", destination: URL(string: "https://bgm.tv")!)
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+            .bgmDesktopContent(maxWidth: 940)
+        }
+        .background(Color.bgmCanvas)
+    }
+
+    private func desktopRow(_ title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18)).foregroundStyle(.secondary)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.medium)).foregroundStyle(.primary)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 13)
+        .contentShape(Rectangle())
+    }
+    #endif
 
     @ViewBuilder
     private var header: some View {

@@ -222,7 +222,11 @@ struct TagChip: View {
             }
         }
         .padding(.horizontal, 12)
+        #if os(macOS)
+        .padding(.vertical, 5)
+        #else
         .padding(.vertical, 9)
+        #endif
         .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
         .background(isSelected ? Color.brandPink : Color.bgmSecondary, in: Capsule())
     }

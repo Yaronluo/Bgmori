@@ -171,40 +171,48 @@ struct MacShell: View {
         @Bindable var router = app.router
 
         NavigationSplitView {
-            List {
-                ForEach(AppSection.allCases) { section in
-                    Button {
-                        router.selectedSection = section
-                        router.macPath.removeAll()
-                    } label: {
-                        Label(section.title, systemImage: router.selectedSection == section ? section.filledIcon : section.icon)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(router.selectedSection == section ? Color.brandPink.opacity(0.14) : Color.clear)
-                    )
+            List(selection: Binding<AppSection?>(
+                get: { router.selectedSection },
+                set: { value in
+                    guard let value, value != router.selectedSection else { return }
+                    router.selectedSection = value
+                    router.macPath.removeAll()
                 }
-
-                Section("账户") {
-                    if app.auth.isLoggedIn {
-                        Label(app.displayName, systemImage: "person.crop.circle")
-                            .lineLimit(1)
-                    } else {
-                        Button("登录 Bangumi") { app.showLogin = true }
-                    }
-                }
-
-                Section {
-                    SettingsLink {
-                        Label("设置", systemImage: "gearshape")
+            )) {
+                Section("浏览") {
+                    ForEach(AppSection.allCases) { section in
+                        Label(section.title, systemImage: section.icon)
+                            .tag(section)
                     }
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 14) {
+                    Divider()
+                    HStack(spacing: 10) {
+                        AvatarView(url: app.auth.user?.avatarURL, size: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(app.isGuest ? "游客模式" : app.displayName)
+                                .font(.subheadline.weight(.medium))
+                            if app.isGuest {
+                                Button("登录 Bangumi") { app.showLogin = true }
+                                    .buttonStyle(.link)
+                                    .font(.caption)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        SettingsLink {
+                            Image(systemName: "gearshape")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("设置")
+                    }
+                }
+                .padding(16)
+            }
         } detail: {
             NavigationStack(path: $router.macPath) {
                 SectionRootView(section: router.selectedSection)

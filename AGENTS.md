@@ -12,6 +12,15 @@
 - 工程文件由 **XcodeGen** 生成：改工程设置请改 `project.yml`，然后运行 `xcodegen generate`，不要手改 `project.pbxproj`
 - 设计基调：Apple 风格 + Liquid Glass，优先使用系统导航栏/Sheet/工具栏材质
 
+## 当前适配与验收范围
+
+用户指定的当前范围（2026-10-25）：
+
+- **iPhone：只需满足标准版 iPhone 17，使用 iOS 27.0 模拟器。** 默认只保留、启动和验证这一台 iPhone 模拟器。
+- **Mac：只需满足用户当前这台 Mac。** 当前设备为 Mac14,2、Apple M2、24 GB 内存，运行 macOS 27.0.1；构建与运行选择 `My Mac`（arm64）。
+- 后续开发、布局验收、性能检查和截图均以上述范围为准；未经用户另行要求，不扩展机型矩阵，不创建其他 iPhone 模拟器或下载新运行时。
+- 本约束是当前验收范围，不改变 iOS 27 / macOS 27 deployment target、Bundle ID 或已有功能。历史设计文档中的其他测试机型不代表当前要求。
+
 ## 常用命令
 
 ```bash
@@ -21,22 +30,22 @@ xcodegen generate --spec project.yml --project .
 # iOS 模拟器构建
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
   CODE_SIGNING_ALLOWED=NO build
 
 # macOS 构建
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -configuration Debug \
-  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 ```
 
 模拟器调试（可选）：
 
 ```bash
-xcrun simctl boot "iPhone 18 Pro"
-xcrun simctl install "iPhone 18 Pro" "$(find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -name Bgmori.app | head -1)"
-SIMCTL_CHILD_BGMORI_ROUTE="subject:8" xcrun simctl launch "iPhone 18 Pro" com.yaron.bgmori
-xcrun simctl io "iPhone 18 Pro" screenshot /tmp/bgmori.png
+xcrun simctl boot "iPhone 17"
+xcrun simctl install "iPhone 17" "$(find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -name Bgmori.app | head -1)"
+SIMCTL_CHILD_BGMORI_ROUTE="subject:8" xcrun simctl launch "iPhone 17" com.yaron.bgmori
+xcrun simctl io "iPhone 17" screenshot /tmp/bgmori.png
 ```
 
 `BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`calendar`、`library`、`search:关键词`、`subject:ID`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`。发布构建中不存在。
@@ -77,9 +86,9 @@ docs/                方案与截图
 
 改完代码至少做：
 
-1. iOS 模拟器构建通过；
-2. macOS 构建通过；
-3. 如果改了 UI，启动模拟器截图检查浅色/深色；
+1. iPhone 17 / iOS 27.0 模拟器构建通过；
+2. 当前这台 Mac（My Mac / arm64）构建通过；
+3. 如果改了 UI，在 iPhone 17 模拟器上截图检查浅色/深色；Mac UI 在当前这台 Mac 上检查；
 4. 如果改了 API/HTML 解析，用真实数据跑一次对应页面，并在解析失败时保留 Safari 回退。
 
 ## 已知坑
@@ -104,7 +113,7 @@ docs/                方案与截图
 - **默认用中文回复用户**，代码、命令、变量名保持英文。
 - 开始改代码前，先快速读 `README.md` 和本文件；必要时先跑一次基线构建，确认当前是绿的。
 - **除非用户明确说“提交/推送”，否则不要 `git commit`、`git push`、开 PR。**
-- 改完必须实际跑构建（iOS 模拟器 + macOS），并在回复里写清楚构建结果；UI 改动要附模拟器截图。
+- 改完必须实际跑构建（iPhone 17 / iOS 27.0 模拟器 + 当前这台 Mac），并在回复里写清楚构建结果；UI 改动要附模拟器截图。
 - OAuth 没有配置时，不要伪造 token、不要把测试 token 写进代码；使用游客模式，或让用户自己在 App 设置里填。
 - 不要擅自升级 deployment target、引入第三方依赖、改 Bundle ID / Team / URL Scheme。
 - 不要为了“让编译过”而删掉功能、吞掉错误或把测试改成永远通过；要修根因。

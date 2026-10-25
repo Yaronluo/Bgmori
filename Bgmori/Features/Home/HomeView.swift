@@ -6,6 +6,14 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 32) {
+                #if os(macOS)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("发现").font(.largeTitle.bold())
+                    Text("好故事，从这里开始。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20)
+                #endif
                 if let featured = featuredSubject {
                     featuredSection(featured)
                 }
@@ -98,6 +106,7 @@ struct HomeView: View {
                     .padding(.bottom, 24)
             }
             .padding(.top, 8)
+            .bgmDesktopContent()
         }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
@@ -126,7 +135,44 @@ struct HomeView: View {
 
     private func featuredSection(_ subject: Subject) -> some View {
         NavigationLink(value: Route.subject(subject.id)) {
+            #if os(macOS)
+            HStack(spacing: 28) {
+                CachedAsyncImage(url: subject.coverURL, maxPixel: 600)
+                    .frame(width: 160, height: 226)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("本季精选 · \(app.seasonLabel)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text(subject.displayTitle)
+                        .font(.system(size: 28, weight: .bold))
+                        .lineLimit(2)
+                    Text(subject.summary.trimmed.isEmpty ? subject.typeName : subject.summary)
+                        .font(.body).foregroundStyle(.secondary)
+                        .lineLimit(3).lineSpacing(3)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 14) {
+                        if let rating = subject.rating, rating.total > 0 {
+                            Label(rating.scoreText, systemImage: "star.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(subject.episodeCountText).foregroundStyle(.secondary)
+                        Spacer()
+                        Label("查看条目", systemImage: "arrow.right")
+                            .foregroundStyle(Color.brandPink)
+                    }
+                    .font(.subheadline.weight(.medium))
+                }
+                .padding(.vertical, 8)
+            }
+            .padding(24)
+            .frame(height: 274)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.06)))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+            #else
             FeaturedSubjectCard(subject: subject, season: app.seasonLabel)
+            #endif
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 20)

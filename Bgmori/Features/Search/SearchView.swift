@@ -46,6 +46,30 @@ struct SearchView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
+                #if os(macOS)
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("搜索").font(.largeTitle.bold())
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        TextField("搜索作品、角色、创作者", text: $query)
+                            .textFieldStyle(.plain)
+                            .onSubmit {
+                                remember()
+                                Task { await search() }
+                            }
+                        if !query.isEmpty {
+                            Button("清除", systemImage: "xmark.circle.fill") { query = "" }
+                                .labelStyle(.iconOnly).buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.title3)
+                    .padding(14)
+                    .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.10)))
+                }
+                .padding(.horizontal, 20)
+                #endif
                 scopePicker
 
                 if query.trimmed.isEmpty {
@@ -66,6 +90,8 @@ struct SearchView: View {
                 }
             }
             .padding(.top, 8)
+            .padding(.bottom, 28)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .onAppear {
@@ -83,7 +109,9 @@ struct SearchView: View {
         }
         .background(Color.bgmCanvas)
         .bgmLargeNavigationTitle("搜索")
+        #if os(iOS)
         .bgmSearchable(text: $query, prompt: "作品、角色、创作者")
+        #endif
         .onSubmit(of: .search) {
             remember()
             Task { await search() }
@@ -109,6 +137,10 @@ struct SearchView: View {
             }
         }
         .pickerStyle(.segmented)
+        #if os(macOS)
+        .labelsHidden()
+        .frame(width: 240)
+        #endif
         .padding(.horizontal, 20)
     }
 
@@ -124,6 +156,9 @@ struct SearchView: View {
                         UserDefaults.standard.set(recent, forKey: "recentSearches")
                     }
                     .font(.subheadline)
+                    #if os(macOS)
+                    .buttonStyle(.link)
+                    #endif
                 }
             }
             .padding(.horizontal, 20)
@@ -188,7 +223,7 @@ struct SearchView: View {
                     }
                 }
             }
-            .background(Color.bgmBackground, in: RoundedRectangle(cornerRadius: 20))
+            .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 12))
         }
         .padding(.horizontal, 20)
     }

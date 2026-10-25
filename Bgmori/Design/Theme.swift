@@ -153,8 +153,14 @@ struct SectionHeader: View {
                             .font(.caption2.weight(.bold))
                     }
                     .font(.subheadline)
+                    #if os(iOS)
                     .frame(minHeight: 44)
+                    #endif
                 }
+                #if os(macOS)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                #endif
             }
         }
         .padding(.horizontal, 20)
@@ -227,3 +233,40 @@ struct ScoreBadge: View {
         .background(Color.bgmSecondary.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
+
+// Desktop pages keep a readable measure as the window grows.
+extension View {
+    @ViewBuilder
+    func bgmDesktopContent(maxWidth: CGFloat = 1120) -> some View {
+        #if os(macOS)
+        self.frame(maxWidth: maxWidth)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .top)
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(macOS)
+struct DesktopPanel<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.headline)
+            content
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.primary.opacity(0.06))
+        }
+    }
+}
+#endif

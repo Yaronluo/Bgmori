@@ -22,6 +22,9 @@ struct SubjectDetailView: View {
     @State private var showCollectionEditor = false
     @State private var synopsisExpanded = false
     @State private var commentsFailed = false
+    #if os(macOS)
+    @State private var desktopContentWidth: CGFloat = 0
+    #endif
 
     var body: some View {
         Group {
@@ -98,7 +101,11 @@ struct SubjectDetailView: View {
     private func content(_ subject: Subject) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
+                #if os(macOS)
+                desktopHero(subject)
+                #else
                 hero(subject)
+                #endif
 
                 if subject.nsfw && !app.settings.showNSFW {
                     HStack(spacing: 8) {
@@ -113,26 +120,122 @@ struct SubjectDetailView: View {
                 }
 
                 actionRow(subject)
+                #if os(macOS)
+                if desktopContentWidth >= 860 {
+                    HStack(alignment: .top, spacing: 24) {
+                        LazyVStack(alignment: .leading, spacing: 24) {
+                            synopsis(subject)
+                            supplementalSections(subject)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        infobox(subject).frame(width: 340)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 24) {
+                        synopsis(subject)
+                        infobox(subject)
+                        supplementalSections(subject)
+                    }
+                }
+                #else
                 synopsis(subject)
                 infobox(subject)
-                episodeSection(subject)
-                characterSection
-                personSection
-                relationSection
-                commentSection
+                supplementalSections(subject)
+                #endif
                 footer(subject)
             }
             .padding(.bottom, 18)
+            #if os(macOS)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { desktopContentWidth = $0 }
+            #endif
+            .bgmDesktopContent()
         }
         .scrollIndicators(.hidden)
         .background(Color.bgmCanvas)
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .top)
-        #endif
         .safeAreaInset(edge: .bottom) {
             bottomBar(subject)
         }
+        #endif
     }
+
+    private func supplementalSections(_ subject: Subject) -> some View {
+        Group {
+            episodeSection(subject)
+            characterSection
+            personSection
+            relationSection
+            commentSection
+        }
+    }
+
+    #if os(macOS)
+    private func desktopHero(_ subject: Subject) -> some View {
+        HStack(alignment: .top, spacing: 28) {
+            CachedAsyncImage(url: subject.coverURL, maxPixel: 600, placeholderTint: .subjectTint(subject.type))
+                .frame(width: 160, height: 226)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .shadow(color: Color.bgmArtworkScrim.opacity(0.12), radius: 10, y: 5)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(subject.typeName)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Text(subject.displayTitle)
+                    .font(.system(size: 30, weight: .bold)).lineLimit(3)
+                    .textSelection(.enabled)
+                if !subject.originalTitle.isEmpty {
+                    Text(subject.originalTitle)
+                        .font(.title3).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                HStack(spacing: 8) {
+                    Text(subject.episodeCountText)
+                    if let date = subject.date, !date.isEmpty {
+                        Text("·")
+                        Text(date)
+                    }
+                }
+                .font(.subheadline).foregroundStyle(.secondary)
+                if let rating = subject.rating, rating.total > 0 {
+                    HStack(spacing: 10) {
+                        Text(rating.scoreText)
+                            .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        RatingStars(score: rating.score)
+                        Text("\(rating.total) 人评分")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if let rank = rating.rank {
+                            Text("排名 #\(rank)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        if app.isGuest { app.showLogin = true }
+                        else { showCollectionEditor = true }
+                    } label: {
+                        Label(app.library.collection(for: subject.id)?.collectionType.title ?? "收藏作品", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if subject.type != SubjectType.book.rawValue {
+                        Button {
+                            guard app.auth.isLoggedIn else { app.showLogin = true; return }
+                            markNextEpisode(subject)
+                        } label: {
+                            Label(app.isGuest ? "记录进度" : nextEpisodeLabel(subject), systemImage: "checkmark.circle")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .controlSize(.large)
+                .padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 20)
+    }
+    #endif
 
     // MARK: - Hero
 
@@ -217,6 +320,7 @@ struct SubjectDetailView: View {
 
     private func actionRow(_ subject: Subject) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            #if os(iOS)
             HStack(spacing: 10) {
                 if let collection = app.library.collection(for: subject.id) {
                     CollectionBadge(type: collection.collectionType)
@@ -250,6 +354,7 @@ struct SubjectDetailView: View {
                 .tint(.brandPink)
             }
 
+            #endif
             if !subject.tags.isEmpty {
                 FlowLayout(spacing: 6, lineSpacing: 6) {
                     ForEach(subject.tags.prefix(10)) { tag in

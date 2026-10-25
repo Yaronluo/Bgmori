@@ -45,6 +45,10 @@
 - [x] Dynamic Type、VoiceOver 标签、Reduce Transparency 降级
 - [x] Mac 原生三栏 `NavigationSplitView`、菜单命令、⌘1–5 / ⌘R / ⌘,、Settings 场景
 
+## 当前验证设备
+
+当前仅要求适配和验收：**标准版 iPhone 17（iOS 27.0 模拟器）** 与 **用户当前这台 Mac（Apple M2、24 GB 内存，当前运行 macOS 27.0.1）**。默认不扩展其他机型和系统版本的测试矩阵；后续开发遵循 [AGENTS.md](AGENTS.md) 中的约束。部署目标仍为 iOS 27 / macOS 27。
+
 ## 运行
 
 ```bash
@@ -53,7 +57,7 @@ open Bgmori.xcodeproj
 ```
 
 1. 选择 `Bgmori` scheme。
-2. iOS 选 iPhone 模拟器或真机；Mac 选 `My Mac`。
+2. iOS 选择 `iPhone 17 (iOS 27.0)` 模拟器；Mac 选择当前这台 `My Mac`。
 3. 真机运行需要在 Signing & Capabilities 里选择自己的 Team。
 4. 最低系统：iOS 27 / macOS 27。若 Xcode 没有 iOS 27 运行时，请在 Xcode → Settings → Components 中安装。
 
@@ -62,12 +66,12 @@ open Bgmori.xcodeproj
 ```bash
 # iOS 模拟器
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
   CODE_SIGNING_ALLOWED=NO build
 
 # macOS
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
-  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## 登录配置
