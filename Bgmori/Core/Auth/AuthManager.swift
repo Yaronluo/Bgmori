@@ -198,20 +198,64 @@ final class AuthManager {
             .first
             .map(String.init) ?? "bgmori"
 
+        defer { webSession = nil }
+
         return try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { callback, error in
+            let result = AuthContinuation(continuation)
+
+            // ASWebAuthenticationSession 不保证在主线程回调：macOS 上它从
+            // SafariLaunchAgent 的 XPC 队列返回。闭包必须显式标成 @Sendable，
+            // 否则会继承 MainActor 隔离，被系统线程调用时触发
+            // “Block was expected to execute on queue [com.apple.main-thread]” 崩溃。
+            let completion: @Sendable (URL?, (any Error)?) -> Void = { callback, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    result.resume(throwing: error)
                 } else if let callback {
-                    continuation.resume(returning: callback)
+                    result.resume(returning: callback)
                 } else {
-                    continuation.resume(throwing: APIError.message("授权已取消"))
+                    result.resume(throwing: APIError.message("授权已取消"))
                 }
             }
+
+            let session = ASWebAuthenticationSession(
+                url: url,
+                callbackURLScheme: scheme,
+                completionHandler: completion
+            )
             session.presentationContextProvider = presenter
             session.prefersEphemeralWebBrowserSession = false
             webSession = session
-            session.start()
+
+            guard session.start() else {
+                result.resume(throwing: APIError.message("无法打开登录页面，请稍后重试"))
+                return
+            }
         }
+    }
+}
+
+/// 保证登录回调只恢复一次 continuation，避免 start 失败与系统回调同时发生时的重复恢复崩溃。
+private final class AuthContinuation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<URL, any Error>?
+
+    init(_ continuation: CheckedContinuation<URL, any Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning url: URL) {
+        take()?.resume(returning: url)
+    }
+
+    func resume(throwing error: any Error) {
+        take()?.resume(throwing: error)
+    }
+
+    private func take() -> CheckedContinuation<URL, any Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        let pending = continuation
+        continuation = nil
+        return pending
     }
 }
