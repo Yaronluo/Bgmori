@@ -81,6 +81,28 @@ extension APIClient {
         )
     }
 
+    func categorySubjects(query: CategoryQuery, limit: Int = 24, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
+        var filter = SubjectSearchFilter()
+        filter.type = [query.type.rawValue]
+        filter.tag = query.tag.map { [$0] }
+        filter.nsfw = query.includeNSFW ? nil : false
+        if let year = query.year {
+            filter.airDate = [">=\(year)-01-01", "<\(year + 1)-01-01"]
+        }
+        if query.sort == .rank { filter.rank = [">0"] }
+        let body = SubjectSearchRequest(keyword: "", sort: query.sort.rawValue, filter: filter)
+        let cacheKey = "categories-\(query.type.rawValue)-\(query.sort.rawValue)-\(query.year ?? 0)-\(query.tag ?? "")-\(query.includeNSFW)-\(limit)-\(offset)"
+        return try await post(
+            "/v0/search/subjects",
+            body: body,
+            query: [.init(name: "limit", value: String(limit)), .init(name: "offset", value: String(offset))],
+            as: Paged<Subject>.self,
+            auth: false,
+            cacheKey: cacheKey,
+            ttl: force ? 0 : 1_800
+        )
+    }
+
     func searchCharacters(keyword: String, limit: Int = 24, offset: Int = 0) async throws -> Paged<Character> {
         try await post(
             "/v0/search/characters",

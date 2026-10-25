@@ -48,7 +48,7 @@ SIMCTL_CHILD_BGMORI_ROUTE="subject:8" xcrun simctl launch "iPhone 17" com.yaron.
 xcrun simctl io "iPhone 17" screenshot /tmp/bgmori.png
 ```
 
-`BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`calendar`、`library`、`search:关键词`、`subject:ID`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`。发布构建中不存在。
+`BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`categories`、`categories:类型ID`（1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元）、`calendar`、`library`、`search:关键词`、`subject:ID`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`。发布构建中不存在。
 
 ## 目录
 

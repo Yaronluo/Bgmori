@@ -2,6 +2,7 @@ import Foundation
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case home
+    case categories
     case calendar
     case library
     case search
@@ -9,9 +10,11 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+
     var title: String {
         switch self {
         case .home: "发现"
+        case .categories: "分类"
         case .calendar: "放送"
         case .library: "收藏"
         case .search: "搜索"
@@ -22,6 +25,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .home: "square.grid.2x2"
+        case .categories: "square.stack.3d.up"
         case .calendar: "calendar"
         case .library: "books.vertical"
         case .search: "magnifyingglass"
@@ -32,6 +36,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var filledIcon: String {
         switch self {
         case .home: "square.grid.2x2.fill"
+        case .categories: "square.stack.3d.up.fill"
         case .calendar: "calendar"
         case .library: "books.vertical.fill"
         case .search: "magnifyingglass"
@@ -60,12 +65,35 @@ enum Route: Hashable {
 final class AppRouter {
     var selectedSection: AppSection = .home
     var homePath: [Route] = []
+    var categoriesPath: [Route] = []
     var calendarPath: [Route] = []
     var libraryPath: [Route] = []
     var searchPath: [Route] = []
     var profilePath: [Route] = []
     var macPath: [Route] = []
     var searchQuery: String = ""
+
+    func path(for section: AppSection) -> [Route] {
+        switch section {
+        case .home: homePath
+        case .categories: categoriesPath
+        case .calendar: calendarPath
+        case .library: libraryPath
+        case .search: searchPath
+        case .profile: profilePath
+        }
+    }
+
+    func setPath(_ path: [Route], for section: AppSection) {
+        switch section {
+        case .home: homePath = path
+        case .categories: categoriesPath = path
+        case .calendar: calendarPath = path
+        case .library: libraryPath = path
+        case .search: searchPath = path
+        case .profile: profilePath = path
+        }
+    }
 
     var isShowingSubject: Bool {
         #if os(macOS)
@@ -75,6 +103,7 @@ final class AppRouter {
         let paths: [[Route]]
         switch selectedSection {
         case .home: paths = [homePath]
+        case .categories: paths = [categoriesPath]
         case .calendar: paths = [calendarPath]
         case .library: paths = [libraryPath]
         case .search: paths = [searchPath]
@@ -95,6 +124,7 @@ final class AppRouter {
         #else
         switch target {
         case .home: homePath.append(route)
+        case .categories: categoriesPath.append(route)
         case .calendar: calendarPath.append(route)
         case .library: libraryPath.append(route)
         case .search: searchPath.append(route)
@@ -109,6 +139,7 @@ final class AppRouter {
         #else
         switch selectedSection {
         case .home: homePath.removeAll()
+        case .categories: categoriesPath.removeAll()
         case .calendar: calendarPath.removeAll()
         case .library: libraryPath.removeAll()
         case .search: searchPath.removeAll()

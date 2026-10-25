@@ -9,19 +9,20 @@ actor APIClient {
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
-    let cache = DiskCache()
+    let cache: DiskCache
     private let limiter = RateLimiter(interval: 0.22)
     private let htmlLimiter = RateLimiter(interval: 2.0)
     private var token: String?
 
-    init() {
+    init(session: URLSession? = nil, cache: DiskCache = DiskCache()) {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 60
         configuration.waitsForConnectivity = true
         configuration.httpShouldSetCookies = false
         configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 128 * 1024 * 1024)
-        session = URLSession(configuration: configuration)
+        self.session = session ?? URLSession(configuration: configuration)
+        self.cache = cache
     }
 
     func setToken(_ token: String?) {
@@ -63,11 +64,28 @@ actor APIClient {
         body: B,
         query: [URLQueryItem] = [],
         as type: T.Type,
-        auth: Bool = true
+        auth: Bool = true,
+        cacheKey: String? = nil,
+        ttl: TimeInterval = 0
     ) async throws -> T {
+        // Only read-only search POSTs opt into caching.
+        if let cacheKey, ttl > 0, let data = await cache.read(cacheKey, maxAge: ttl),
+           let value = try? decoder.decode(T.self, from: data) {
+            return value
+        }
         let data = try encoder.encode(body)
-        let response = try await requestData(path: path, method: "POST", query: query, body: data, auth: auth)
-        return try decode(T.self, from: response)
+        do {
+            let response = try await requestData(path: path, method: "POST", query: query, body: data, auth: auth)
+            let value = try decode(T.self, from: response)
+            if let cacheKey { await cache.write(cacheKey, data: response) }
+            return value
+        } catch {
+            if let cacheKey, let cached = await cache.readStale(cacheKey),
+               let value = try? decoder.decode(T.self, from: cached) {
+                return value
+            }
+            throw error
+        }
     }
 
     func postNoContent<B: Encodable & Sendable>(_ path: String, body: B, auth: Bool = true) async throws {

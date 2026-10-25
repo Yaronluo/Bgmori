@@ -56,50 +56,28 @@ struct RootView: View {
 #if os(iOS)
 struct PhoneShell: View {
     @Environment(AppModel.self) private var app
+    @State private var visitedSections: Set<AppSection> = []
 
     var body: some View {
         @Bindable var router = app.router
 
-        TabView(selection: $router.selectedSection) {
-            NavigationStack(path: $router.homePath) {
-                HomeView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
+        // Keep independent stacks without UIKit's five-tab "More" overflow.
+        ZStack {
+            ForEach(AppSection.allCases.filter { visitedSections.contains($0) || $0 == router.selectedSection }) { section in
+                NavigationStack(path: Binding(
+                    get: { router.path(for: section) },
+                    set: { router.setPath($0, for: section) }
+                )) {
+                    SectionRootView(section: section)
+                        .navigationDestination(for: Route.self) { RouteView(route: $0) }
+                }
+                .opacity(router.selectedSection == section ? 1 : 0)
+                .allowsHitTesting(router.selectedSection == section)
+                .accessibilityHidden(router.selectedSection != section)
             }
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem { Label("发现", systemImage: "square.grid.2x2") }
-            .tag(AppSection.home)
-
-            NavigationStack(path: $router.calendarPath) {
-                CalendarView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
-            }
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem { Label("放送", systemImage: "calendar") }
-            .tag(AppSection.calendar)
-
-            NavigationStack(path: $router.libraryPath) {
-                LibraryView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
-            }
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem { Label("收藏", systemImage: "books.vertical") }
-            .tag(AppSection.library)
-
-            NavigationStack(path: $router.searchPath) {
-                SearchView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
-            }
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem { Label("搜索", systemImage: "magnifyingglass") }
-            .tag(AppSection.search)
-
-            NavigationStack(path: $router.profilePath) {
-                ProfileView()
-                    .navigationDestination(for: Route.self) { RouteView(route: $0) }
-            }
-            .toolbar(.hidden, for: .tabBar)
-            .tabItem { Label("我的", systemImage: "person.crop.circle") }
-            .tag(AppSection.profile)
+        }
+        .onChange(of: router.selectedSection, initial: true) { old, new in
+            visitedSections.formUnion([old, new])
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !router.isShowingSubject {
@@ -230,6 +208,7 @@ struct SectionRootView: View {
     var body: some View {
         switch section {
         case .home: HomeView()
+        case .categories: CategoryView()
         case .calendar: CalendarView()
         case .library: LibraryView()
         case .search: SearchView()

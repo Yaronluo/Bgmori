@@ -10,6 +10,7 @@ final class AppModel {
     let library: LibraryStore
     let router: AppRouter
     let social: SocialService
+    let categories: CategoryStore
 
     var calendar: [CalendarDay] = []
     var ranking: [Subject] = []
@@ -33,6 +34,7 @@ final class AppModel {
         self.library = LibraryStore(api: api, auth: auth)
         self.router = AppRouter()
         self.social = SocialService(api: api)
+        self.categories = CategoryStore(api: api)
     }
 
     var isGuest: Bool { !auth.isLoggedIn }
@@ -97,6 +99,11 @@ final class AppModel {
         case "timeline": router.selectedSection = .profile; router.profilePath = [.timeline(value.isEmpty ? "sai" : value)]
         case "index": router.selectedSection = .home; router.homePath = [.index(Int(value) ?? 1)]
         case "calendar": router.selectedSection = .calendar
+        case "categories":
+            router.selectedSection = .categories
+            if let rawType = Int(value), let type = SubjectType(rawValue: rawType) {
+                categories.selectType(type)
+            }
         case "library": router.selectedSection = .library
         case "search":
             router.selectedSection = .search
@@ -109,6 +116,7 @@ final class AppModel {
         #if os(macOS)
         switch router.selectedSection {
         case .home: router.macPath = router.homePath
+        case .categories: router.macPath = router.categoriesPath
         case .calendar: router.macPath = router.calendarPath
         case .library: router.macPath = router.libraryPath
         case .search: router.macPath = router.searchPath
@@ -158,6 +166,11 @@ final class AppModel {
     }
 
     func refreshAll() async {
+        if router.selectedSection == .categories {
+            await categories.load(categories.query(includeNSFW: settings.showNSFW), force: true)
+            showToast("已刷新")
+            return
+        }
         await auth.refreshIfNeeded()
         if auth.isLoggedIn, let username = auth.username {
             await library.loadAll(username: username, force: true)

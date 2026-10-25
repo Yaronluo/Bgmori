@@ -48,7 +48,8 @@ struct BgmoriCommands: Commands {
         }
 
         CommandMenu("前往") {
-            ForEach(Array(AppSection.allCases.enumerated()), id: \.element) { index, section in
+            // Preserve the existing shortcuts; the new category entry uses Command-6.
+            ForEach(Array([AppSection.home, .calendar, .library, .search, .profile, .categories].enumerated()), id: \.element) { index, section in
                 Button(section.title) {
                     app.router.selectedSection = section
                     app.router.macPath.removeAll()

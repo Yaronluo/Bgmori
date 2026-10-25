@@ -13,6 +13,7 @@
 
 - [x] 首页：继续观看、今日放送、本季新番、排行榜、社区入口
 - [x] 每日放送：周一–周日切换、只看在看、评分与进度
+- [x] 分类：动画 / 书籍 / 音乐 / 游戏 / 三次元，题材与年份筛选、热度 / 排名 / 评分排序、分页浏览
 - [x] 条目详情：封面 Hero、评分/排名、标签、信息栏、章节、角色、制作人员、关联条目、吐槽预览
 - [x] 章节详情：播出信息、时长、简介、吐槽
 - [x] 角色 / 人物详情：简介、声优/职业、参与作品、收藏
@@ -73,6 +74,9 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 ```
+
+分类页的筛选、翻页、缓存和切换保护可用 `bash scripts/test-categories.sh` 验证；加上 `--live` 会使用真实 API 检查五种内容类型以及组合筛选与翻页。
+
 
 ## 登录配置
 
