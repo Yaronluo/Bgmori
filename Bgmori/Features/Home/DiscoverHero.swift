@@ -5,6 +5,7 @@ struct DiscoverHero: View {
     let subjects: [Subject]
     let seasonLabel: String
     @Binding var selection: Int?
+    let isActive: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -60,14 +61,14 @@ struct DiscoverHero: View {
             }
         }
         .task(id: autoAdvanceKey) {
-            guard subjects.count > 1, scenePhase == .active,
+            guard isActive, subjects.count > 1, scenePhase == .active,
                   scrollPhase == .idle, !reduceMotion, !voiceOverEnabled else { return }
             do {
                 try await Task.sleep(for: .seconds(6))
             } catch {
                 return
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, isActive else { return }
             advance(by: 1)
         }
         .onChange(of: subjects.map(\.id), initial: true) { _, ids in
@@ -87,7 +88,7 @@ struct DiscoverHero: View {
     }
 
     private var autoAdvanceKey: String {
-        "\(visiblePage ?? 0)-\(subjects.map(\.id))-\(scenePhase)-\(scrollPhase)-\(reduceMotion)-\(voiceOverEnabled)"
+        "\(isActive)-\(visiblePage ?? 0)-\(subjects.map(\.id))-\(scenePhase)-\(scrollPhase)-\(reduceMotion)-\(voiceOverEnabled)"
     }
 
     private var pager: some View {

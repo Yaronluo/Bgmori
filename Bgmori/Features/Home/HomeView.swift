@@ -3,6 +3,17 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @State private var hotSelection: Int?
+    @State private var isVisible = false
+
+    private var isHeroActive: Bool {
+        #if os(macOS)
+        let isAtRoot = app.router.macPath.isEmpty
+        #else
+        let isAtRoot = app.router.homePath.isEmpty
+        #endif
+        return isVisible && app.router.selectedSection == .home && isAtRoot
+            && !app.showLogin && !app.showSettings
+    }
 
     private var cardWidth: CGFloat {
         #if os(macOS)
@@ -68,6 +79,8 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .refreshable { await app.refreshAll() }
         .bgmLargeNavigationTitle("发现")
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false }
         #if os(macOS)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -158,7 +171,7 @@ struct HomeView: View {
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "最近热播", subtitle: "近 90 天 · 人气动画")
-            DiscoverHero(subjects: app.trending, seasonLabel: app.seasonLabel, selection: $hotSelection)
+            DiscoverHero(subjects: app.trending, seasonLabel: app.seasonLabel, selection: $hotSelection, isActive: isHeroActive)
         }
     }
 
