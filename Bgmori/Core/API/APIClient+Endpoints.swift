@@ -67,7 +67,15 @@ extension APIClient {
         return try await get("/v0/subjects", query: query, as: Paged<Subject>.self, cacheKey: key, ttl: force ? 0 : 1_800)
     }
 
-    func searchSubjects(keyword: String, sort: String = "match", filter: SubjectSearchFilter? = nil, limit: Int = 24, offset: Int = 0) async throws -> Paged<Subject> {
+    func searchSubjects(
+        keyword: String,
+        sort: String = "match",
+        filter: SubjectSearchFilter? = nil,
+        limit: Int = 24,
+        offset: Int = 0,
+        cacheKey: String? = nil,
+        ttl: TimeInterval = 0
+    ) async throws -> Paged<Subject> {
         let body = SubjectSearchRequest(keyword: keyword, sort: sort, filter: filter)
         return try await post(
             "/v0/search/subjects",
@@ -77,7 +85,9 @@ extension APIClient {
                 .init(name: "offset", value: String(offset))
             ],
             as: Paged<Subject>.self,
-            auth: false
+            auth: false,
+            cacheKey: cacheKey,
+            ttl: ttl
         )
     }
 

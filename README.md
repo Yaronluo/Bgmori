@@ -5,13 +5,13 @@
 
 当前版本：`1.0.0 (1)` · 目标系统：**iOS 27 / macOS 27**（使用 Xcode 27.1 构建）
 
-![首页](docs/screenshots/redesign/home-light.png)
+![发现](docs/screenshots/discover-redesign/mac-home-light.png)
 
 ## 已实现
 
 ### 浏览
 
-- [x] 首页：继续观看、今日放送、本季新番、排行榜、社区入口
+- [x] 发现：最近热播分页主视觉、正在看、今日放送、本季新番、口碑佳作、剧场版精选（社区入口已移出发现页）
 - [x] 每日放送：周日期切换、今天高亮、只看在看、评分与观看进度
 - [x] 分类：动画 / 书籍 / 音乐 / 游戏 / 三次元，同步官网的分类、题材、来源、地区、受众及游戏平台等选项，支持搜索与组合筛选、年份筛选，按官网顺序提供排名 / 热度 / 收藏 / 日期 / 名称排序、滚动自动翻页
 - [x] 条目详情：封面 Hero、评分/排名、标签、信息栏、章节、角色、制作人员、关联条目、吐槽预览
@@ -40,7 +40,7 @@
 
 - [x] 纯白底黑白漫画少女图标，附[源图与生成说明](docs/branding/README.md)
 - [x] iOS 原生大标题与轻量搜索栏、分组列表、随系统字号缩放的内容层级
-- [x] 发现页：本季精选封面、作品横向书架、分组排行榜与社区入口
+- [x] 发现页：最近热播主视觉支持左右切换 / 页码 / 滑动，正在看进度书架、今日放送、本季新番、口碑佳作与剧场版精选统一标题层级、间距和封面角标；[两端浅深色截图](docs/screenshots/discover-redesign/README.md)
 - [x] 搜索落地页：分类入口、灵感词、最近浏览与热门书架；[两端浅深色截图](docs/screenshots/search-landing/README.md)
 - [x] 年份选择使用紧凑滚动列表，封面标题固定预留两行并在超长时省略；[两端浅深色截图](docs/screenshots/year-picker-cards/README.md)
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
@@ -147,11 +147,11 @@ Bgmori/
 
 ## 截图
 
-| 首页（深色） | 放送 | 搜索 |
+| 发现（深色） | 放送 | 搜索 |
 | --- | --- | --- |
-| ![首页深色](docs/screenshots/redesign/home-dark.png) | ![放送](docs/screenshots/calendar-refresh/iphone-calendar-light.png) | ![搜索](docs/screenshots/redesign/search-light.png) |
+| ![发现深色](docs/screenshots/discover-redesign/iphone-home-dark.png) | ![放送](docs/screenshots/calendar-refresh/iphone-calendar-light.png) | ![搜索](docs/screenshots/redesign/search-light.png) |
 
-每日放送的周历、卡片细节与 Mac 截图见 [calendar-refresh](docs/screenshots/calendar-refresh/README.md)。
+发现页改版的 Mac 浅深色首屏、板块长页与 iPhone 浅深色截图见 [discover-redesign](docs/screenshots/discover-redesign/README.md)。每日放送的周历、卡片细节与 Mac 截图见 [calendar-refresh](docs/screenshots/calendar-refresh/README.md)。
 
 | 条目 | 吐槽 | 登录 |
 | --- | --- | --- |
