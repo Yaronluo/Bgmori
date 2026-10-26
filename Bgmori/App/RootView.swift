@@ -66,7 +66,11 @@ struct PhoneShell: View {
                     set: { router.setPath($0, for: section) }
                 )) {
                     SectionRootView(section: section)
-                        .navigationDestination(for: Route.self) { RouteView(route: $0) }
+                        .modifier(PhoneTabBarInset(section: section))
+                        .navigationDestination(for: Route.self) { route in
+                            RouteView(route: route)
+                                .modifier(PhoneTabBarInset(section: section, route: route))
+                        }
                 }
                 .opacity(router.selectedSection == section ? 1 : 0)
                 .allowsHitTesting(router.selectedSection == section)
@@ -76,11 +80,23 @@ struct PhoneShell: View {
         .onChange(of: router.selectedSection, initial: true) { old, new in
             visitedSections.formUnion([old, new])
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !router.isShowingSubject {
+    }
+}
+
+/// Reserve space in each page's scroll container, inside its navigation stack.
+private struct PhoneTabBarInset: ViewModifier {
+    let section: AppSection
+    var route: Route? = nil
+    @Environment(AppModel.self) private var app
+
+    func body(content: Content) -> some View {
+        @Bindable var router = app.router
+        content.safeAreaInset(edge: .bottom, spacing: 12) {
+            if router.selectedSection == section,
+               router.path(for: section).last == route,
+               !router.isShowingSubject {
                 BgmoriTabBar(selection: $router.selectedSection)
                     .padding(.horizontal, 20)
-                    .padding(.top, 8)
                     .padding(.bottom, 4)
             }
         }
@@ -100,9 +116,9 @@ struct BgmoriTabBar: View {
                         selection = section
                     }
                 } label: {
-                    VStack(spacing: 5) {
+                    VStack(spacing: 3) {
                         Image(systemName: selection == section ? section.filledIcon : section.icon)
-                            .font(.system(size: 21, weight: .medium))
+                            .font(.system(size: 19, weight: .medium))
                         Text(section.title)
                             .font(.caption2.weight(.medium))
                             .lineLimit(1)
@@ -110,7 +126,7 @@ struct BgmoriTabBar: View {
                     }
                     .foregroundStyle(selection == section ? Color.brandPink : Color.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .frame(minHeight: 44)
                     .background {
                         if selection == section {
                             Capsule().fill(Color.brandPink.opacity(0.10))
@@ -120,11 +136,12 @@ struct BgmoriTabBar: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("tab-\(section.rawValue)")
                 .accessibilityAddTraits(selection == section ? .isSelected : [])
             }
         }
-        .padding(5)
-        .bgmFloatingGlass(cornerRadius: 40)
+        .padding(4)
+        .bgmFloatingGlass(cornerRadius: 30)
     }
 }
 #endif
