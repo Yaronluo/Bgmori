@@ -177,8 +177,7 @@ struct HomeView: View {
                             coverURL: item.coverURL,
                             progress: item.progressFraction,
                             tint: .subjectTint(item.subjectType),
-                            width: cardWidth,
-                            showsPlayBadge: true
+                            width: cardWidth
                         )
                     }
                     .buttonStyle(.plain)
@@ -378,7 +377,6 @@ struct HomeView: View {
             badge: subject.rating.map { String(format: "%.1f", $0.score) },
             tint: .subjectTint(subject.type),
             width: cardWidth,
-            badgeOverlay: true,
             rank: rank
         )
     }

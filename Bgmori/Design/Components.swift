@@ -101,11 +101,8 @@ struct CoverCard: View {
     var progress: Double? = nil
     var tint: Color = .brandPink
     var width: CGFloat? = 132
-    /// Puts the score on the artwork instead of the metadata row.
-    var badgeOverlay = false
     /// A small leaderboard number shown in the artwork's leading corner.
     var rank: Int? = nil
-    var showsPlayBadge = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -116,16 +113,6 @@ struct CoverCard: View {
                     .overlay(alignment: .topLeading) {
                         if let rank {
                             rankBadge(rank)
-                        }
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        if badgeOverlay, let badge, !badge.isEmpty {
-                            scoreBadge(badge)
-                        }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if showsPlayBadge {
-                            playBadge
                         }
                     }
             }
@@ -145,7 +132,7 @@ struct CoverCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1, reservesSpace: true)
                 Spacer(minLength: 0)
-                if !badgeOverlay, let badge, !badge.isEmpty {
+                if let badge, !badge.isEmpty {
                     Text(badge)
                         .fontWeight(.semibold)
                         .monospacedDigit()
@@ -179,43 +166,12 @@ struct CoverCard: View {
             .padding(7)
             .accessibilityLabel("第 \(rank) 名")
     }
-
-    private func scoreBadge(_ score: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 7, weight: .bold))
-                .foregroundStyle(Color(red: 1, green: 0.79, blue: 0.32))
-            Text(score)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .monospacedDigit()
-        }
-        .foregroundStyle(Color.bgmOnArtwork)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(Color.bgmArtworkScrim.opacity(0.62), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.bgmOnArtwork.opacity(0.16), lineWidth: 0.5))
-        .padding(7)
-        .accessibilityLabel("评分 \(score)")
-    }
-
-    private var playBadge: some View {
-        Image(systemName: "play.fill")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(Color.bgmOnArtwork)
-            .frame(width: 26, height: 26)
-            .background(Color.bgmArtworkScrim.opacity(0.58), in: Circle())
-            .overlay(Circle().strokeBorder(Color.bgmOnArtwork.opacity(0.18), lineWidth: 0.5))
-            .padding(8)
-            .accessibilityHidden(true)
-    }
 }
 
 struct SubjectCard: View {
     let subject: Subject
     var width: CGFloat? = 132
-    var overlayBadge = false
     var rank: Int? = nil
-    var showsPlayBadge = false
 
     var body: some View {
         let detail = subject.episodeCountText
@@ -226,9 +182,7 @@ struct SubjectCard: View {
             badge: subject.rating.map { String(format: "%.1f", $0.score) },
             tint: .subjectTint(subject.type),
             width: width,
-            badgeOverlay: overlayBadge,
-            rank: rank,
-            showsPlayBadge: showsPlayBadge
+            rank: rank
         )
     }
 }
@@ -264,8 +218,7 @@ struct AiringCard: View {
             coverURL: subject.coverURL,
             badge: subject.rating.map { String(format: "%.1f", $0.score) },
             tint: .subjectTint(subject.type),
-            width: width,
-            badgeOverlay: true
+            width: width
         )
     }
 }

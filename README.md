@@ -42,7 +42,7 @@
 
 - [x] 纯白底黑白漫画少女图标，附[源图与生成说明](docs/branding/README.md)
 - [x] iOS 原生大标题与轻量搜索栏、分组列表、随系统字号缩放的内容层级
-- [x] 发现页：最近热播主视觉支持左右切换 / 页码 / 滑动，正在看进度书架、今日放送、本季新番、口碑佳作与剧场版精选统一标题层级、间距和封面角标；[两端浅深色截图](docs/screenshots/discover-redesign/README.md)
+- [x] 发现页：最近热播每 6 秒自动轮播，支持双向循环滑动与圆点切换，封面边缘渐变融入页面；手机端完整展示封面，保留日期、简介与观看信息；书架评分统一放在封面下方，正在看保留进度；[两端浅深色截图](docs/screenshots/home-blend/README.md)
 - [x] 搜索落地页：分类入口、灵感词、最近浏览与热门书架；[两端浅深色截图](docs/screenshots/search-landing/README.md)
 - [x] 年份选择使用紧凑滚动列表，封面标题固定预留两行并在超长时省略；[两端浅深色截图](docs/screenshots/year-picker-cards/README.md)
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
