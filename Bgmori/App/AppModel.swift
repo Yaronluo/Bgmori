@@ -93,6 +93,7 @@ final class AppModel {
         case "episode": router.selectedSection = .home; router.homePath = [.episode(Int(value) ?? 1027)]
         case "comments": router.selectedSection = .home; router.homePath = [.subject(Int(value) ?? 8), .comments(Int(value) ?? 8)]
         case "revisions": router.selectedSection = .home; router.homePath = [.subject(Int(value) ?? 8), .revisions(Int(value) ?? 8)]
+        case "blogs": router.selectedSection = .home; router.homePath = [.blogs]
         case "blog": router.selectedSection = .home; router.homePath = [.blog(Int(value) ?? 382206)]
         case "group": router.selectedSection = .profile; router.profilePath = [.group(value.isEmpty ? "pixiv" : value)]
         case "topic": router.selectedSection = .profile; router.profilePath = [.topic(Int(value) ?? 5155)]

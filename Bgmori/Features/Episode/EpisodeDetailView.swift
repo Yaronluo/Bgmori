@@ -36,7 +36,7 @@ struct EpisodeDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                             if comments.isEmpty {
-                                Text("还没有吐槽，或正在加载。")
+                                Text("暂无吐槽")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             } else {
@@ -50,10 +50,6 @@ struct EpisodeDetailView: View {
                         }
                         .padding(.horizontal, 20)
 
-                        Link("在 Bangumi 查看这一话", destination: URL(string: "https://bgm.tv/ep/\(episode.id)")!)
-                            .font(.system(size: 11))
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 24)
                     }
                     .padding(.top, 8)
                 }
@@ -71,6 +67,7 @@ struct EpisodeDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/ep/\(episodeID)")!)
         .task(id: episodeID) { await load() }
     }
 

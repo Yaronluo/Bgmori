@@ -15,10 +15,10 @@ struct ProfileView: View {
 
                 HStack(alignment: .top, spacing: 14) {
                     Button { openLibrary() } label: {
-                        shortcut("我的收藏", subtitle: "作品与观看进度", icon: "books.vertical")
+                        shortcut("我的收藏", icon: "books.vertical")
                     }
                     Button { app.showSettings = true } label: {
-                        shortcut("偏好设置", subtitle: "账户、外观与通知", icon: "slider.horizontal.3")
+                        shortcut("偏好设置", icon: "slider.horizontal.3")
                     }
                 }
                 .buttonStyle(.plain)
@@ -30,20 +30,20 @@ struct ProfileView: View {
 
                     VStack(spacing: 0) {
                         NavigationLink { GroupListView() } label: {
-                            actionRow("小组与讨论", subtitle: "遇见有相同喜好的人", icon: "person.2")
+                            actionRow("小组与讨论", icon: "person.2")
                         }
                         rowDivider
-                        NavigationLink { BlogListView() } label: {
-                            actionRow("日志", subtitle: "读一读作品之外的故事", icon: "text.book.closed")
+                        NavigationLink(value: Route.blogs) {
+                            actionRow("日志", icon: "text.book.closed")
                         }
                         rowDivider
                         Button { showIndexLookup = true } label: {
-                            actionRow("查看目录", subtitle: "打开一份 Bangumi 作品清单", icon: "list.bullet.rectangle")
+                            actionRow("查看目录", icon: "list.bullet.rectangle")
                         }
                         if let username = app.auth.username {
                             rowDivider
                             NavigationLink(value: Route.timeline(username)) {
-                                actionRow("我的时光机", subtitle: "回顾收藏与观看的足迹", icon: "clock.arrow.circlepath")
+                                actionRow("我的时光机", icon: "clock.arrow.circlepath")
                             }
                         }
                     }
@@ -57,7 +57,6 @@ struct ProfileView: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Bgmori \(app.settings.appVersion)")
-                        Text("非官方客户端 · 社区内容只读")
                             .font(.caption2)
                     }
                     Spacer()
@@ -102,9 +101,9 @@ struct ProfileView: View {
                     Text(app.auth.user?.displayName ?? "我的 Bangumi")
                         .font(.title2.bold())
                         .foregroundStyle(.primary)
-                    Text(app.auth.username.map { "@" + $0 } ?? "记录每一段好故事")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if let username = app.auth.username {
+                        Text("@" + username).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -190,7 +189,7 @@ struct ProfileView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func shortcut(_ title: String, subtitle: String, icon: String) -> some View {
+    private func shortcut(_ title: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: icon)
@@ -203,7 +202,6 @@ struct ProfileView: View {
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.headline).foregroundStyle(.primary)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(18)
@@ -215,7 +213,7 @@ struct ProfileView: View {
         .contentShape(RoundedRectangle(cornerRadius: 20))
     }
 
-    private func actionRow(_ title: String, subtitle: String, icon: String) -> some View {
+    private func actionRow(_ title: String, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .medium))
@@ -224,7 +222,6 @@ struct ProfileView: View {
                 .background(Color.brandPink.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
@@ -285,11 +282,6 @@ struct IndexLookupView: View {
                         app.router.push(.index(id), in: .profile)
                     }
                     .disabled(Int(text.trimmed) == nil)
-                }
-                Section {
-                    Text("Bangumi 的目录（Index）没有公开的列表接口，只能通过 ID 或链接进入。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("查看目录")
@@ -361,7 +353,7 @@ struct UserProfileView: View {
                                     badge: item.collectionType.title,
                                     progress: item.progressFraction,
                                     tint: .subjectTint(item.subjectType),
-                                    width: 150
+                                    width: nil
                                 )
                             }
                             .buttonStyle(.plain)

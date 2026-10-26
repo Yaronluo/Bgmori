@@ -9,8 +9,6 @@ struct HomeView: View {
                 #if os(macOS)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("发现").font(.largeTitle.bold())
-                    Text("好故事，从这里开始。")
-                        .font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 20)
                 #endif
@@ -20,7 +18,7 @@ struct HomeView: View {
 
                 if !app.continueWatching.isEmpty {
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "继续观看", subtitle: "接着上次的故事")
+                        SectionHeader(title: "继续观看")
                         ScrollView(.horizontal, showsIndicators: false) {
                             LazyHStack(alignment: .top, spacing: 16) {
                                 ForEach(app.continueWatching) { item in
@@ -90,20 +88,14 @@ struct HomeView: View {
                 }
 
                 if app.isLoadingHome && app.ranking.isEmpty {
-                    ProgressView("正在发现好故事…")
+                    ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
                 } else if app.ranking.isEmpty && app.seasonal.isEmpty && app.todayAiring.isEmpty {
-                    EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: "下拉刷新，或稍后再来看看。", actionTitle: "重试") {
+                    EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: "", actionTitle: "重试") {
                         Task { await app.refreshAll() }
                     }
                 }
-
-                Text("BGMORI · 数据来自 Bangumi")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 24)
             }
             .padding(.top, 8)
             .bgmDesktopContent()
@@ -225,10 +217,10 @@ struct HomeView: View {
                     .frame(width: 44, height: 44)
                     .background(Color.brandPink.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("让好故事，留在你的收藏里")
+                    Text("登录 Bangumi")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("登录 Bangumi，同步收藏与观看进度")
+                    Text("同步收藏与观看进度")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -246,21 +238,21 @@ struct HomeView: View {
 
     private var communitySection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "逛逛社区", subtitle: "在作品之外，遇见同好")
+            SectionHeader(title: "社区")
             VStack(spacing: 0) {
                 NavigationLink { GroupListView() } label: {
-                    CommunityCard(icon: "person.2.fill", title: "小组", subtitle: "发现有趣的话题与讨论")
+                    CommunityCard(icon: "person.2.fill", title: "小组")
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 72)
-                NavigationLink { BlogListView() } label: {
-                    CommunityCard(icon: "text.book.closed.fill", title: "日志", subtitle: "读一篇关于热爱的随笔")
+                NavigationLink(value: Route.blogs) {
+                    CommunityCard(icon: "text.book.closed.fill", title: "日志")
                 }
                 .buttonStyle(.plain)
                 if let username = app.auth.username {
                     Divider().padding(.leading, 72)
                     NavigationLink { TimelineView(username: username) } label: {
-                        CommunityCard(icon: "clock.arrow.circlepath", title: "时光机", subtitle: "重温你的收藏轨迹")
+                        CommunityCard(icon: "clock.arrow.circlepath", title: "时光机")
                     }
                     .buttonStyle(.plain)
                 }
@@ -329,7 +321,6 @@ struct FeaturedSubjectCard: View {
 struct CommunityCard: View {
     let icon: String
     let title: String
-    let subtitle: String
 
     var body: some View {
         HStack(spacing: 14) {
@@ -340,7 +331,6 @@ struct CommunityCard: View {
                 .background(Color.brandPink.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")

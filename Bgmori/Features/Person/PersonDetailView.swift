@@ -48,6 +48,7 @@ struct PersonDetailView: View {
                 .disabled(isSaving)
             }
         }
+        .bgmWebFallback(URL(string: "https://bgm.tv/\(kind == .character ? "character" : "person")/\(id)")!)
         .task(id: "\(kind.rawValue)-\(id)") { await load() }
     }
 
@@ -74,10 +75,6 @@ struct PersonDetailView: View {
                 }
                 infobox(character.infobox)
                 relatedSection
-                Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/character/\(id)")!)
-                    .font(.system(size: 11))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
             }
             .padding(.top, 10)
         }
@@ -102,10 +99,6 @@ struct PersonDetailView: View {
                 }
                 infobox(person.infobox)
                 relatedSection
-                Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/person/\(id)")!)
-                    .font(.system(size: 11))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
             }
             .padding(.top, 10)
         }

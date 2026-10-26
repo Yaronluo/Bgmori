@@ -18,7 +18,7 @@ final class CategoryStore {
 
     private let api: APIClient
     private let pageSize = 24
-    private var nextOffset = 0
+    private(set) var nextOffset = 0
     private var currentQuery: CategoryQuery?
     private var requestID = UUID()
 

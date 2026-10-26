@@ -45,60 +45,55 @@ struct CoverCard: View {
     var badge: String? = nil
     var progress: Double? = nil
     var tint: Color = .brandPink
-    var width: CGFloat = 132
+    var width: CGFloat? = 132
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                CachedAsyncImage(url: coverURL, maxPixel: Int(ceil(width * 1.42 * displayScale)), placeholderTint: tint)
-                    .frame(width: width, height: width * 1.42)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(alignment: .topLeading) {
-                        if let badge {
-                            Text(badge)
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.45), in: Capsule())
-                                .foregroundStyle(.white)
-                                .padding(8)
-                        }
-                    }
-
-                if let progress, progress > 0 {
-                    Text("\(Int(progress * 100))%")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .foregroundStyle(.white)
-                        .padding(7)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { geometry in
+                CachedAsyncImage(url: coverURL, maxPixel: Int(ceil(max(geometry.size.width, geometry.size.height) * displayScale)), placeholderTint: tint)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+            .aspectRatio(1 / 1.42, contentMode: .fit)
 
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(2, reservesSpace: true)
+                .lineLimit(2)
                 .multilineTextAlignment(.leading)
-                .frame(width: width, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let subtitle {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(width: width, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if let badge, !badge.isEmpty {
+                    Text(badge)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(Color.brandPink)
+                        .fixedSize()
+                }
+            }
+            .font(.caption)
+
+            if let progress, progress > 0 {
+                ProgressView(value: min(progress, 1))
+                    .tint(.brandPink)
+                    .accessibilityLabel("观看进度")
             }
         }
+        .frame(width: width)
         .contentShape(Rectangle())
     }
 }
 
 struct SubjectCard: View {
     let subject: Subject
-    var width: CGFloat = 132
+    var width: CGFloat? = 132
 
     var body: some View {
         let detail = subject.episodeCountText
@@ -117,7 +112,7 @@ struct SubjectSummaryCard: View {
     let subject: SubjectSummary
     var progress: Double? = nil
     var badge: String? = nil
-    var width: CGFloat = 132
+    var width: CGFloat? = 132
 
     var body: some View {
         CoverCard(
@@ -287,7 +282,7 @@ struct LoginPromptView: View {
         ContentUnavailableView {
             Label(title, systemImage: "books.vertical")
         } description: {
-            Text(message)
+            if !message.isEmpty { Text(message) }
         } actions: {
             Button(actionTitle, action: action)
                 .buttonStyle(.borderedProminent)
@@ -383,5 +378,84 @@ extension View {
         #else
         navigationTitle(title)
         #endif
+    }
+}
+
+struct TextTabs<Value: Hashable>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            tabs
+            ScrollView(.horizontal, showsIndicators: false) { tabs.fixedSize(horizontal: true, vertical: false) }
+        }
+        #if os(macOS)
+        .frame(maxWidth: 520)
+        #endif
+    }
+
+    private var tabs: some View {
+        HStack(spacing: 8) {
+            ForEach(values, id: \.self) { value in
+                Button { selection = value } label: {
+                    Text(title(value))
+                        .font(.subheadline.weight(selection == value ? .semibold : .regular))
+                        .foregroundStyle(selection == value ? Color.primary : Color.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 4)
+                        .overlay(alignment: .bottom) {
+                            if selection == value {
+                                Capsule().fill(Color.brandPink).frame(width: 24, height: 3)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == value ? .isSelected : [])
+            }
+        }
+    }
+}
+
+struct PaginationFooter: View {
+    let offset: Int
+    let isLoading: Bool
+    let error: String?
+    let load: () async -> Void
+    @State private var isVisible = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.secondary)
+                Button("重试") { Task { await load() } }
+            } else if isLoading {
+                ProgressView()
+            } else {
+                Color.clear.frame(height: 1)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.vertical, 12)
+        .onScrollVisibilityChange(threshold: 0.1) { isVisible = $0 }
+        .task(id: "\(offset)-\(isVisible)") {
+            guard isVisible, error == nil else { return }
+            await load()
+        }
+    }
+}
+
+extension View {
+    func bgmWebFallback(_ url: URL) -> some View {
+        toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu("更多", systemImage: "ellipsis") {
+                    Link("在 Safari 中打开", destination: url)
+                }
+            }
+        }
     }
 }

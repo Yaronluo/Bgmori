@@ -55,6 +55,7 @@ enum Route: Hashable {
     case person(Int)
     case user(String)
     case comments(Int)
+    case blogs
     case blog(Int)
     case group(String)
     case topic(Int)

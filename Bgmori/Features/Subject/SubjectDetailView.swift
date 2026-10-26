@@ -81,6 +81,12 @@ struct SubjectDetailView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    Link(destination: URL(string: "https://bgm.tv/subject/\(subjectID)")!) {
+                        Label("在 Safari 中打开", systemImage: "safari")
+                    }
+                }
             }
         }
         .task(id: subjectID) {
@@ -142,7 +148,6 @@ struct SubjectDetailView: View {
                 infobox(subject)
                 supplementalSections(subject)
                 #endif
-                footer(subject)
             }
             .padding(.bottom, 18)
             #if os(macOS)
@@ -438,12 +443,7 @@ struct SubjectDetailView: View {
                 .padding(.horizontal, 20)
 
                 if episodeTypeOptions.count > 1 {
-                    Picker("章节类型", selection: $selectedEpisodeType) {
-                        ForEach(episodeTypeOptions, id: \.self) { type in
-                            Text(typeTitle(type)).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    TextTabs(values: episodeTypeOptions, selection: $selectedEpisodeType, title: typeTitle)
                     .padding(.horizontal, 20)
                 }
 
@@ -693,20 +693,7 @@ struct SubjectDetailView: View {
         }
     }
 
-    private func footer(_ subject: Subject) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            HStack {
-                Link("在 Bangumi 查看", destination: subject.url ?? URL(string: "https://bgm.tv/subject/\(subjectID)")!)
-                Spacer()
-                Text("ID \(subject.id)")
-                    .foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 11))
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
+
 
     // MARK: - Bottom bar
 

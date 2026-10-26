@@ -81,7 +81,7 @@ struct GroupListView: View {
                     }
 
                     if home.groups.isEmpty && home.topics.isEmpty {
-                        EmptyStateView(icon: "person.3", title: "暂无内容", message: "小组页面没有解析到内容，可能页面结构变了。")
+                        EmptyStateView(icon: "person.3", title: "暂无内容", message: "可从右上角菜单打开网页。")
                     }
                 } else if isLoading {
                     ProgressView("加载小组…")
@@ -93,18 +93,17 @@ struct GroupListView: View {
                     }
                 }
 
-                Link("在 Bangumi 查看小组", destination: URL(string: "https://bgm.tv/group")!)
-                    .font(.system(size: 11))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle("小组")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/group")!)
         .task { await load() }
     }
 
@@ -148,7 +147,7 @@ struct GroupDetailView: View {
                     .padding(.top, 10)
 
                     if detail.topics.isEmpty {
-                        EmptyStateView(icon: "text.bubble", title: "暂无话题", message: "小组页面没有解析到话题，可能页面结构变了。")
+                        EmptyStateView(icon: "text.bubble", title: "暂无话题", message: "可从右上角菜单打开网页。")
                     } else {
                         VStack(spacing: 0) {
                             ForEach(detail.topics) { topic in
@@ -177,10 +176,6 @@ struct GroupDetailView: View {
                         }
                     }
 
-                    Link("在 Bangumi 打开小组", destination: URL(string: "https://bgm.tv/group/\(groupName)")!)
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 24)
                 } else if isLoading {
                     ProgressView("加载小组…")
                         .frame(maxWidth: .infinity)
@@ -192,12 +187,15 @@ struct GroupDetailView: View {
                 }
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle(detail?.title ?? groupName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/group/\(groupName)")!)
         .task { await load() }
     }
 
@@ -262,10 +260,6 @@ struct TopicDetailView: View {
                         Divider().padding(.leading, 62)
                     }
 
-                    Link("在 Bangumi 打开话题", destination: URL(string: "https://bgm.tv/group/topic/\(topicID)")!)
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 24)
                 } else if isLoading {
                     ProgressView("加载话题…")
                         .frame(maxWidth: .infinity)
@@ -277,12 +271,15 @@ struct TopicDetailView: View {
                 }
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle("话题")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/group/topic/\(topicID)")!)
         .task { await load() }
     }
 
@@ -314,7 +311,9 @@ struct BlogListView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if blogs.isEmpty {
-                    EmptyStateView(icon: "text.book.closed", title: "暂无日志", message: errorText ?? "日志页面没有解析到内容。")
+                    EmptyStateView(icon: "text.book.closed", title: "暂无日志", message: errorText ?? "", actionTitle: "重试") {
+                        Task { await load() }
+                    }
                 } else {
                     ForEach(blogs) { blog in
                         NavigationLink(value: Route.blog(blog.id)) {
@@ -342,23 +341,25 @@ struct BlogListView: View {
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
+                            .contentShape(Rectangle())
                         }
+                        .accessibilityIdentifier("blog-\(blog.id)")
                         .buttonStyle(.plain)
                         Divider().padding(.leading, 94)
                     }
                 }
 
-                Link("在 Bangumi 查看日志", destination: URL(string: "https://bgm.tv/blog")!)
-                    .font(.system(size: 11))
-                    .padding(20)
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle("日志")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/blog")!)
         .task { await load() }
     }
 
@@ -393,6 +394,7 @@ struct BlogDetailView: View {
                             .padding(.horizontal, 20)
                     }
                     Text(detail.title)
+                        .accessibilityIdentifier("blog-detail-title")
                         .font(.system(size: 24, weight: .bold))
                         .padding(.horizontal, 20)
                     HStack(spacing: 6) {
@@ -404,16 +406,13 @@ struct BlogDetailView: View {
                     .padding(.horizontal, 20)
 
                     Text(detail.content)
+                        .accessibilityIdentifier("blog-detail-content")
                         .font(.system(size: 14))
                         .lineSpacing(5)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 20)
 
-                    Link("在 Bangumi 打开日志", destination: URL(string: "https://bgm.tv/blog/\(blogID)")!)
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 20)
                 } else if isLoading {
                     ProgressView("加载日志…")
                         .frame(maxWidth: .infinity)
@@ -425,12 +424,15 @@ struct BlogDetailView: View {
                 }
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle("日志")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/blog/\(blogID)")!)
         .task { await load() }
     }
 
@@ -463,7 +465,7 @@ struct TimelineView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if items.isEmpty {
-                    EmptyStateView(icon: "clock.arrow.circlepath", title: "暂无动态", message: errorText ?? "这个用户还没有公开动态。")
+                    EmptyStateView(icon: "clock.arrow.circlepath", title: "暂无动态", message: errorText ?? "")
                 } else {
                     ForEach(items) { item in
                         Group {
@@ -480,17 +482,17 @@ struct TimelineView: View {
                     }
                 }
 
-                Link("在 Bangumi 查看时光机", destination: URL(string: "https://bgm.tv/user/\(username)/timeline")!)
-                    .font(.system(size: 11))
-                    .padding(20)
             }
             .padding(.top, 8)
+            .padding(.bottom, 24)
+            .bgmDesktopContent(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .navigationTitle("时光机")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/user/\(username)/timeline")!)
         .task { await load() }
     }
 

@@ -26,7 +26,7 @@ struct IndexDetailView: View {
                     .padding(.top, 10)
 
                     if subjects.isEmpty {
-                        Text("这个目录还没有条目。")
+                        Text("暂无条目")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 20)
@@ -56,10 +56,6 @@ struct IndexDetailView: View {
                         .padding(.horizontal, 20)
                     }
 
-                    Link("在 Bangumi 打开目录", destination: URL(string: "https://bgm.tv/index/\(indexID)")!)
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 24)
                 } else if isLoading {
                     ProgressView("加载目录…")
                         .frame(maxWidth: .infinity)
@@ -76,6 +72,7 @@ struct IndexDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/index/\(indexID)")!)
         .task { await load() }
     }
 
@@ -110,7 +107,7 @@ struct RevisionsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if revisions.isEmpty {
-                    EmptyStateView(icon: "clock.arrow.circlepath", title: "暂无编辑历史", message: errorText ?? "这个条目还没有公开的修订记录。")
+                    EmptyStateView(icon: "clock.arrow.circlepath", title: "暂无编辑历史", message: errorText ?? "")
                 } else {
                     ForEach(revisions) { revision in
                         HStack(alignment: .top, spacing: 10) {
@@ -140,9 +137,6 @@ struct RevisionsView: View {
                         Divider().padding(.leading, 50)
                     }
                 }
-                Link("在 Bangumi 查看条目", destination: URL(string: "https://bgm.tv/subject/\(subjectID)")!)
-                    .font(.system(size: 11))
-                    .padding(20)
             }
             .padding(.top, 8)
         }
@@ -151,6 +145,7 @@ struct RevisionsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: "https://bgm.tv/subject/\(subjectID)")!)
         .task { await load() }
     }
 

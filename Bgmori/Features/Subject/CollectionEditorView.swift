@@ -40,7 +40,7 @@ struct CollectionEditorView: View {
                             Label(type.title, systemImage: type.icon).tag(type)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                 }
 
                 Section("评分") {

@@ -19,7 +19,9 @@ struct CommentsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if comments.isEmpty {
-                    EmptyStateView(icon: "text.bubble", title: "还没有吐槽", message: errorText ?? "这里还很安静。")
+                    EmptyStateView(icon: "text.bubble", title: "还没有吐槽", message: errorText ?? "", actionTitle: "重试") {
+                        Task { await load(page: 1) }
+                    }
                 } else {
                     ForEach(visibleComments) { comment in
                         SocialCommentRow(comment: comment)
@@ -36,16 +38,12 @@ struct CommentsView: View {
                         Divider().padding(.leading, 62)
                     }
 
-                    if hasMore {
-                        Button {
-                            Task { await load(page: page + 1) }
-                        } label: {
-                            if isLoading { ProgressView() } else { Text("加载更多").font(.system(size: 13, weight: .semibold)) }
-                        }
-                        .buttonStyle(.glass)
-                        .padding(.vertical, 18)
-                        .frame(maxWidth: .infinity)
+                }
+                if !comments.isEmpty && (hasMore || errorText != nil) {
+                    PaginationFooter(offset: page, isLoading: isLoading, error: errorText) {
+                        await load(page: page + 1)
                     }
+
                 }
             }
             .padding(.bottom, 24)
@@ -55,6 +53,7 @@ struct CommentsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .bgmWebFallback(URL(string: episodeID.map { "https://bgm.tv/ep/\($0)" } ?? "https://bgm.tv/subject/\(subjectID)/comments")!)
         .task {
             await load(page: 1)
         }
@@ -76,7 +75,12 @@ struct CommentsView: View {
             } else {
                 fetched = try await app.social.subjectComments(subjectID: subjectID, page: page)
             }
-            if page == 1 { comments = fetched } else { comments.append(contentsOf: fetched) }
+            if page == 1 {
+                comments = fetched
+            } else {
+                var ids = Set(comments.map(\.id))
+                comments.append(contentsOf: fetched.filter { ids.insert($0.id).inserted })
+            }
             self.page = page
             hasMore = episodeID == nil && fetched.count >= 20
         } catch {

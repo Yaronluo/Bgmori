@@ -12,25 +12,13 @@ struct CategoryView: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    #if os(macOS)
-                    Text("分类").font(.largeTitle.bold())
-                    #endif
-                    Text("按兴趣，找下一部好作品。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 20)
-
-                Picker("内容类型", selection: Binding(
+                #if os(macOS)
+                Text("分类").font(.largeTitle.bold()).padding(.horizontal, 20)
+                #endif
+                TextTabs(values: SubjectType.browsingTypes, selection: Binding(
                     get: { store.type },
                     set: { store.selectType($0) }
-                )) {
-                    ForEach(SubjectType.browsingTypes) { type in
-                        Text(type.title).tag(type)
-                    }
-                }
-                .pickerStyle(.segmented)
+                ), title: { $0.title })
                 .padding(.horizontal, 20)
 
                 tagPicker
@@ -110,7 +98,7 @@ struct CategoryView: View {
     @ViewBuilder
     private var results: some View {
         if store.isLoading {
-            ProgressView("正在挑选\(store.type.title)…")
+            ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 64)
         } else if let error = store.errorText {
@@ -118,7 +106,7 @@ struct CategoryView: View {
                 Task { await store.load(query, force: true) }
             }
         } else if store.subjects.isEmpty {
-            EmptyStateView(icon: store.type.icon, title: "没有符合条件的作品", message: "试试其他题材或年份。", actionTitle: "重置筛选") {
+            EmptyStateView(icon: store.type.icon, title: "没有符合条件的作品", message: "", actionTitle: "重置筛选") {
                 store.tag = nil
                 store.year = nil
                 store.sort = .heat
@@ -129,7 +117,7 @@ struct CategoryView: View {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
                 ForEach(store.subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
-                        SubjectCard(subject: subject, width: 150)
+                        SubjectCard(subject: subject, width: nil)
                     }
                     .buttonStyle(.plain)
                 }
@@ -141,22 +129,10 @@ struct CategoryView: View {
     }
 
     private var pagination: some View {
-        VStack(spacing: 12) {
-            if let error = store.pageErrorText {
-                Text(error).font(.caption).foregroundStyle(.secondary)
-            }
-            if store.isLoadingMore {
-                ProgressView("正在加载更多…")
-            } else {
-                Button(store.pageErrorText == nil ? "加载更多" : "重新加载") {
-                    Task { await store.loadMore(query) }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            }
+        PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageErrorText) {
+            await store.loadMore(query)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .id(query)
         .padding(.horizontal, 20)
     }
 }

@@ -62,7 +62,7 @@ struct LibraryView: View {
             if app.isGuest {
                 LoginPromptView(
                     title: "登录后查看收藏",
-                    message: "Bgmori 会从 Bangumi 同步你的想看、在看、看过、搁置与抛弃列表。"
+                    message: ""
                 ) {
                     app.showLogin = true
                 }
@@ -92,7 +92,7 @@ struct LibraryView: View {
                         EmptyStateView(
                             icon: "books.vertical",
                             title: app.library.collections.isEmpty ? "还没有收藏" : "没有符合条件的条目",
-                            message: app.library.collections.isEmpty ? "去首页或搜索里找一部喜欢的作品吧。" : "换个筛选条件试试。"
+                            message: ""
                         )
                     }
                 } else if isGrid {
@@ -208,7 +208,7 @@ struct LibraryView: View {
             badge: item.progressText.isEmpty ? item.collectionType.title : item.progressText,
             progress: item.progressFraction,
             tint: .subjectTint(item.subjectType),
-            width: 150
+            width: nil
         )
     }
 

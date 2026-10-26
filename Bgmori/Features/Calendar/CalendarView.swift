@@ -19,7 +19,7 @@ struct CalendarView: View {
                     EmptyStateView(
                         icon: "calendar.badge.exclamationmark",
                         title: onlyWatching ? "这天没有在看的番" : "这天没有放送",
-                        message: onlyWatching ? "换成“全部”看看，或去收藏里加一部在看。" : "换一天看看，或稍后刷新。"
+                        message: ""
                     )
                 } else {
                     LazyVStack(spacing: 0) {
@@ -56,12 +56,6 @@ struct CalendarView: View {
                     .bgmCardBackground(cornerRadius: 22)
                     .padding(.horizontal, 20)
                 }
-
-                Text("放送时间以 Bangumi 为准，按周显示。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
             }
         }
         .background(Color.bgmBackground)

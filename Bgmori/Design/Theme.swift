@@ -178,7 +178,7 @@ struct EmptyStateView: View {
         ContentUnavailableView {
             Label(title, systemImage: icon)
         } description: {
-            Text(message)
+            if !message.isEmpty { Text(message) }
         } actions: {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)

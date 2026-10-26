@@ -35,9 +35,6 @@ struct SettingsView: View {
                             app.showLogin = true
                         }
                     }
-                    Text("也可以先在设置里填好 OAuth 配置，再登录。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -64,16 +61,13 @@ struct SettingsView: View {
                         Text(appearance.title).tag(appearance)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
             }
 
             Section("内容") {
                 Toggle("优先显示中文名", isOn: $settings.preferChineseName)
                 Toggle("默认隐藏剧透", isOn: $settings.hideSpoilers)
                 Toggle("显示 NSFW 内容", isOn: $settings.showNSFW)
-                Text("私人使用可开启；公开分发版本应保持关闭。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("通知") {
@@ -90,7 +84,7 @@ struct SettingsView: View {
                         }
                     }
                 ))
-                Text("每天 20:00 提醒今天在看的番；完全本地计算，不上传数据。")
+                Text("每天 20:00 提醒在看作品。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -116,8 +110,6 @@ struct SettingsView: View {
             Section("关于") {
                 LabeledContent("版本", value: settings.appVersion)
                 Link("Bangumi", destination: URL(string: "https://bgm.tv")!)
-                Link("Bangumi API 文档", destination: URL(string: "https://github.com/bangumi/api")!)
-                Link("Apple HIG · Materials", destination: URL(string: "https://developer.apple.com/design/human-interface-guidelines/materials")!)
                 Text("Bgmori 是非官方第三方客户端，与 Bangumi 官方无关联。所有条目、评分、评论版权归 Bangumi 及原作者所有。")
                     .font(.caption)
                     .foregroundStyle(.secondary)

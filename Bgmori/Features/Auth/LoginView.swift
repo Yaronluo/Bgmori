@@ -114,15 +114,6 @@ struct LoginView: View {
                 Section {
                     Button("先逛逛") { dismiss() }
                         .frame(maxWidth: .infinity)
-                } footer: {
-                    VStack(spacing: 6) {
-                        Text("无需登录，也可以浏览作品与每日放送。")
-                        Text("非官方客户端 · 数据来自 Bangumi")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
                 }
             }
             .listSectionSpacing(.compact)
@@ -263,8 +254,6 @@ struct LoginView: View {
                         .padding(.top, 10)
                     }
                     .font(.subheadline)
-                    Text("无需登录，也可以浏览作品与每日放送。")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(24)
             }

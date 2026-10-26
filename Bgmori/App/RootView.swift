@@ -242,6 +242,7 @@ struct RouteView: View {
         case .person(let id): PersonDetailView(kind: .person, id: id)
         case .user(let name): UserProfileView(username: name)
         case .comments(let id): CommentsView(subjectID: id, episodeID: nil)
+        case .blogs: BlogListView()
         case .blog(let id): BlogDetailView(blogID: id)
         case .group(let name): GroupDetailView(groupName: name)
         case .topic(let id): TopicDetailView(topicID: id)

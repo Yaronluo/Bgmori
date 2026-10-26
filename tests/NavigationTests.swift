@@ -11,6 +11,20 @@ struct NavigationTests {
         router.openSearch(query: "星际")
         precondition(router.searchQuery == "星际")
 
+        let blogs = AppRouter()
+        blogs.push(.blogs, in: .profile)
+        blogs.push(.blog(382246))
+        #if os(iOS)
+        precondition(blogs.profilePath == [.blogs, .blog(382246)])
+        blogs.setPath([.blogs], for: .profile)
+        precondition(blogs.profilePath.last == .blogs)
+        #else
+        precondition(blogs.macPath == [.blogs, .blog(382246)])
+        blogs.macPath.removeLast()
+        precondition(blogs.macPath.last == .blogs)
+        #endif
+        print("PASS: blog list and detail share a navigation path with back history")
+
         #if os(iOS)
         precondition(router.selectedSection == .categories)
         precondition(router.categoriesPath == [.subject(8), .search])
