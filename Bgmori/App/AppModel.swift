@@ -20,6 +20,8 @@ final class AppModel {
     var ranking: [Subject] = []
     var seasonal: [Subject] = []
     var isLoadingHome = false
+    var hasLoadedHome = false
+    var homeError: String?
     var showLogin = false
     var showSettings = false
     var toast: ToastMessage?
@@ -77,12 +79,17 @@ final class AppModel {
         applyDebugRouteIfNeeded()
         #endif
 
+        // Discover should paint as soon as possible: it does not depend on the
+        // account restore or collection sync, so start it alongside them.
+        async let calendarLoad: Void = loadCalendar()
+        async let homeLoad: Void = loadHome()
+
         await auth.restore()
         if auth.isLoggedIn, let username = auth.username {
             await library.loadAll(username: username, force: true)
         }
-        await loadCalendar()
-        await loadHome()
+        await calendarLoad
+        await homeLoad
         await updateDailyReminder()
     }
 
@@ -159,7 +166,11 @@ final class AppModel {
         guard !isLoadingHome else { return }
         isLoadingHome = true
         didLoadHome = true
-        defer { isLoadingHome = false }
+        homeError = nil
+        defer {
+            isLoadingHome = false
+            hasLoadedHome = true
+        }
 
         let now = Date()
         let year = Calendar.current.component(.year, from: now)
@@ -172,8 +183,10 @@ final class AppModel {
             ranking = rankingPageFilter(rankingResult.data)
             seasonal = rankingPageFilter(seasonalResult.data)
         } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? "首页加载失败"
+            homeError = message
             if ranking.isEmpty && seasonal.isEmpty {
-                showToast((error as? LocalizedError)?.errorDescription ?? "首页加载失败", isError: true)
+                showToast(message, isError: true)
             }
         }
     }

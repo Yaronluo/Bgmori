@@ -92,12 +92,14 @@ struct HomeView: View {
                     guestCard
                 }
 
-                if app.isLoadingHome && app.ranking.isEmpty {
-                    ProgressView()
+                if !app.hasLoadedHome || (app.isLoadingHome && app.ranking.isEmpty) {
+                    // The first launch used to fall through to the error state while
+                    // bootstrap was still restoring the account and calendar.
+                    ProgressView("加载中…")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
                 } else if app.ranking.isEmpty && app.seasonal.isEmpty && app.todayAiring.isEmpty {
-                    EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: "", actionTitle: "重试") {
+                    EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: app.homeError ?? "", actionTitle: "重试") {
                         Task { await app.refreshAll() }
                     }
                 }
