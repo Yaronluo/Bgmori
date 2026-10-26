@@ -19,6 +19,8 @@ final class AppModel {
     var calendarError: String?
     var ranking: [Subject] = []
     var seasonal: [Subject] = []
+    var trending: [Subject] = []
+    var movies: [Subject] = []
     var isLoadingHome = false
     var showLogin = false
     var showSettings = false
@@ -52,7 +54,17 @@ final class AppModel {
     }
 
     var todayAiring: [LegacySubject] {
-        calendar.first(where: { $0.weekday.id == todayWeekday })?.items ?? []
+        let items = calendar.first(where: { $0.weekday.id == todayWeekday })?.items ?? []
+        // Put shows the user is already following first, then the better rated ones.
+        return items.sorted { lhs, rhs in
+            let lhsWatching = library.isWatching(lhs.id)
+            let rhsWatching = library.isWatching(rhs.id)
+            if lhsWatching != rhsWatching { return lhsWatching }
+            let lhsScore = lhs.rating?.score ?? 0
+            let rhsScore = rhs.rating?.score ?? 0
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            return lhs.displayTitle.localizedStandardCompare(rhs.displayTitle) == .orderedAscending
+        }
     }
 
     var continueWatching: [UserSubjectCollection] {
@@ -63,10 +75,26 @@ final class AppModel {
     }
 
     var seasonLabel: String {
-        let now = Date()
-        let year = Calendar.current.component(.year, from: now)
-        let month = Calendar.current.component(.month, from: now)
-        return "\(year) 年 \(month) 月"
+        let season = currentSeason()
+        return "\(season.year) 年 \(season.month) 月"
+    }
+
+    var seasonTag: String {
+        let season = currentSeason()
+        return "\(season.year)年\(season.month)月"
+    }
+
+    private func currentSeason(for date: Date = .now) -> (year: Int, month: Int) {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
+        let year = components.year ?? 2026
+        let month = components.month ?? 1
+        let startMonth = ((month - 1) / 3) * 3 + 1
+        return (year, startMonth)
+    }
+
+    private func isoDate(_ date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 
     func bootstrap() async {
@@ -161,20 +189,88 @@ final class AppModel {
         didLoadHome = true
         defer { isLoadingHome = false }
 
-        let now = Date()
-        let year = Calendar.current.component(.year, from: now)
-        let month = Calendar.current.component(.month, from: now)
+        let season = currentSeason()
+        let today = isoDate(Date())
+        let recentStart = isoDate(Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date())
+        let includeNSFW = settings.showNSFW
 
-        do {
-            async let rankingPage = api.browseSubjects(type: SubjectType.anime.rawValue, sort: "rank", limit: 12)
-            async let seasonalPage = api.browseSubjects(type: SubjectType.anime.rawValue, sort: "date", year: year, month: month, limit: 12)
-            let (rankingResult, seasonalResult) = try await (rankingPage, seasonalPage)
-            ranking = rankingPageFilter(rankingResult.data)
-            seasonal = rankingPageFilter(seasonalResult.data)
-        } catch {
-            if ranking.isEmpty && seasonal.isEmpty {
-                showToast((error as? LocalizedError)?.errorDescription ?? "首页加载失败", isError: true)
+        var trendingFilter = SubjectSearchFilter()
+        trendingFilter.type = [SubjectType.anime.rawValue]
+        trendingFilter.airDate = [">=\(recentStart)", "<=\(today)"]
+        trendingFilter.nsfw = includeNSFW ? nil : false
+
+        var movieFilter = SubjectSearchFilter()
+        movieFilter.type = [SubjectType.anime.rawValue]
+        movieFilter.tag = ["剧场版"]
+        movieFilter.nsfw = includeNSFW ? nil : false
+
+        async let trendingPage = api.searchSubjects(
+            keyword: "",
+            sort: "heat",
+            filter: trendingFilter,
+            limit: 18,
+            cacheKey: "home-trending-\(recentStart)-\(today)-\(includeNSFW ? 1 : 0)",
+            ttl: 1_800
+        )
+        async let moviePage = api.searchSubjects(
+            keyword: "",
+            sort: "heat",
+            filter: movieFilter,
+            limit: 16,
+            cacheKey: "home-movies-\(includeNSFW ? 1 : 0)",
+            ttl: 3_600
+        )
+        async let rankingPage = api.browseSubjects(
+            type: SubjectType.anime.rawValue,
+            sort: "rank",
+            limit: 12,
+            force: force
+        )
+        async let seasonalPage = api.browseSubjects(
+            type: SubjectType.anime.rawValue,
+            sort: "rank",
+            year: season.year,
+            month: season.month,
+            limit: 18,
+            force: force
+        )
+
+        let trendingResult = try? await trendingPage
+        let movieResult = try? await moviePage
+        let rankingResult = try? await rankingPage
+        let seasonalResult = try? await seasonalPage
+
+        let loadedTrending = Array(rankingPageFilter(trendingResult?.data ?? []).prefix(8))
+        let loadedRanking = Array(rankingPageFilter(rankingResult?.data ?? []).prefix(12))
+        let loadedMovies = Array(rankingPageFilter(movieResult?.data ?? []).prefix(16))
+        var loadedSeasonal = Array(rankingPageFilter(seasonalResult?.data ?? []).prefix(18))
+
+        // Early in a season there may not be enough ranked entries yet; show the
+        // complete date-ordered slate instead of an almost empty shelf.
+        if loadedSeasonal.count < 4 {
+            if let fallback = try? await api.browseSubjects(
+                type: SubjectType.anime.rawValue,
+                sort: "date",
+                year: season.year,
+                month: season.month,
+                limit: 18,
+                force: force
+            ) {
+                loadedSeasonal = Array(rankingPageFilter(fallback.data).prefix(18))
             }
+        }
+
+        if !loadedTrending.isEmpty {
+            trending = loadedTrending
+        } else if trending.isEmpty, !loadedSeasonal.isEmpty {
+            trending = Array(loadedSeasonal.prefix(6))
+        }
+        if !loadedRanking.isEmpty { ranking = loadedRanking }
+        if !loadedSeasonal.isEmpty { seasonal = loadedSeasonal }
+        if !loadedMovies.isEmpty { movies = loadedMovies }
+
+        if loadedTrending.isEmpty && loadedRanking.isEmpty && loadedSeasonal.isEmpty && loadedMovies.isEmpty {
+            showToast("发现页加载失败，请检查网络后重试", isError: true)
         }
     }
 
@@ -229,6 +325,34 @@ final class AppModel {
 
     func requireLogin() {
         showLogin = true
+    }
+
+    func openCategories() {
+        router.selectedSection = .categories
+        #if os(macOS)
+        router.macPath.removeAll()
+        #endif
+    }
+
+    func openCategory(type: SubjectType = .anime, sort: CategorySort = .heat, year: Int? = nil, tag: String? = nil) {
+        categories.type = type
+        categories.sort = sort
+        categories.year = year
+        categories.tag = tag
+        categories.selections = [:]
+        router.setPath([], for: .categories)
+        router.selectedSection = .categories
+        #if os(macOS)
+        router.macPath.removeAll()
+        #endif
+    }
+
+    func openLibrary() {
+        router.setPath([], for: .library)
+        router.selectedSection = .library
+        #if os(macOS)
+        router.macPath.removeAll()
+        #endif
     }
 
     func updateDailyReminder() async {

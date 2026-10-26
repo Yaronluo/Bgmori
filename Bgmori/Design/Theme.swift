@@ -198,34 +198,33 @@ struct SectionHeader: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.bgmSection)
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(.primary)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.bgmCaption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let actionTitle, let action {
                 Button(action: action) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Text(actionTitle)
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.bold))
                     }
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.brandPink)
+                    .contentShape(Rectangle())
                     #if os(iOS)
                     .frame(minHeight: 44)
                     #endif
                 }
-                #if os(macOS)
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                #endif
             }
         }
         .padding(.horizontal, 20)
