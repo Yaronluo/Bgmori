@@ -39,9 +39,10 @@ actor APIClient {
         as type: T.Type,
         cacheKey: String? = nil,
         ttl: TimeInterval = 0,
-        auth: Bool = false
+        auth: Bool = false,
+        force: Bool = false
     ) async throws -> T {
-        if let cacheKey, ttl > 0, let data = await cache.read(cacheKey, maxAge: ttl) {
+        if !force, let cacheKey, ttl > 0, let data = await cache.read(cacheKey, maxAge: ttl) {
             if let value = try? decoder.decode(T.self, from: data) { return value }
         }
 
@@ -50,7 +51,7 @@ actor APIClient {
             if let cacheKey { await cache.write(cacheKey, data: data) }
             return try decode(T.self, from: data)
         } catch {
-            if let cacheKey, let data = await cache.readStale(cacheKey), let value = try? decoder.decode(T.self, from: data) {
+            if !force, let cacheKey, let data = await cache.readStale(cacheKey), let value = try? decoder.decode(T.self, from: data) {
                 return value
             }
             throw error

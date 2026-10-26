@@ -17,6 +17,7 @@ struct CollectionEditorView: View {
     @State private var isPrivate: Bool
     @State private var isSaving = false
     @State private var errorText: String?
+    @State private var showRemoval = false
 
     init(subject: Subject, episodes: [Episode], collection: UserSubjectCollection?) {
         self.subject = subject
@@ -55,6 +56,16 @@ struct CollectionEditorView: View {
                     tagsSection
                     commentSection
                     privacyRow
+
+                    if collection != nil {
+                        Divider()
+                        Button("移除收藏…", systemImage: "trash", role: .destructive) {
+                            showRemoval = true
+                        }
+                        .buttonStyle(.plain)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("collection-remove")
+                    }
 
                     if let errorText {
                         Label(errorText, systemImage: "exclamationmark.circle")
@@ -97,6 +108,12 @@ struct CollectionEditorView: View {
         }
         .tint(.brandPink)
         .interactiveDismissDisabled(isSaving)
+        .modifier(CollectionRemovalFlow(
+            subjectID: subject.id,
+            title: subject.displayTitle,
+            isPresented: $showRemoval,
+            onRemoved: { dismiss() }
+        ))
         #if os(iOS)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)

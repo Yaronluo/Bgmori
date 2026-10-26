@@ -33,7 +33,7 @@ extension APIClient {
         try await get("/v0/users/\(username)", as: User.self, cacheKey: "user-\(username)", ttl: 86_400)
     }
 
-    func userCollections(_ username: String, subjectType: Int? = nil, type: Int? = nil, limit: Int = 50, offset: Int = 0, auth: Bool = true) async throws -> Paged<UserSubjectCollection> {
+    func userCollections(_ username: String, subjectType: Int? = nil, type: Int? = nil, limit: Int = 50, offset: Int = 0, auth: Bool = true, force: Bool = false) async throws -> Paged<UserSubjectCollection> {
         var query: [URLQueryItem] = [
             .init(name: "limit", value: String(limit)),
             .init(name: "offset", value: String(offset))
@@ -41,7 +41,7 @@ extension APIClient {
         if let subjectType { query.append(.init(name: "subject_type", value: String(subjectType))) }
         if let type { query.append(.init(name: "type", value: String(type))) }
         let key = "collections-\(username)-\(subjectType ?? 0)-\(type ?? 0)-\(offset)"
-        return try await get("/v0/users/\(username)/collections", query: query, as: Paged<UserSubjectCollection>.self, cacheKey: key, ttl: 600, auth: auth)
+        return try await get("/v0/users/\(username)/collections", query: query, as: Paged<UserSubjectCollection>.self, cacheKey: key, ttl: 600, auth: auth, force: force)
     }
 
     func userCollection(_ username: String, subjectID: Int) async throws -> UserSubjectCollection {

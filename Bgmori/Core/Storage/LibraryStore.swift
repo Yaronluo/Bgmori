@@ -59,9 +59,10 @@ final class LibraryStore {
         }
     }
 
-    func loadAll(username: String, force: Bool = false) async {
-        if isLoading { return }
-        if !force, loadedUsername == username, !collections.isEmpty { return }
+    @discardableResult
+    func loadAll(username: String, force: Bool = false) async -> Bool {
+        if isLoading { return false }
+        if !force, loadedUsername == username, !collections.isEmpty { return true }
 
         isLoading = true
         lastError = nil
@@ -72,21 +73,24 @@ final class LibraryStore {
             var offset = 0
             var total = Int.max
             while offset < total {
-                let page = try await api.userCollections(username, limit: 50, offset: offset)
+                let page = try await api.userCollections(username, limit: 50, offset: offset, force: force)
                 total = page.total
                 for item in page.data { result[item.subjectId] = item }
                 offset += page.data.count
                 if page.data.isEmpty { break }
             }
             collections = result
+            episodeTypes = episodeTypes.filter { result[$0.key] != nil }
             loadedUsername = username
             // Hydrate progress for currently watching shows in the background.
             let ids = watching.prefix(12).map(\.subjectId)
             for id in ids {
                 await loadEpisodes(subjectID: id)
             }
+            return true
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return false
         }
     }
 

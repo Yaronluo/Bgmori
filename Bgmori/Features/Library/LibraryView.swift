@@ -56,6 +56,8 @@ struct LibraryView: View {
     @State private var sort: LibrarySort = .updated
     @State private var isGrid = false
     @State private var searchText = ""
+    @State private var removalTarget: UserSubjectCollection?
+    @State private var showRemoval = false
 
     var body: some View {
         Group {
@@ -78,6 +80,11 @@ struct LibraryView: View {
         }
         .background(Color.bgmBackground)
         .bgmLargeNavigationTitle("收藏")
+        .modifier(CollectionRemovalFlow(
+            subjectID: removalTarget?.subjectId ?? 0,
+            title: removalTarget?.title ?? "",
+            isPresented: $showRemoval
+        ))
         .task {
             if !isFilterPreview { await app.library.loadIfNeeded() }
         }
@@ -94,6 +101,20 @@ struct LibraryView: View {
     private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
+                if let error = app.library.lastError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                        Button("重试同步") {
+                            Task {
+                                if let username = app.auth.username {
+                                    await app.library.loadAll(username: username, force: true)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if filtered.isEmpty {
                     if app.library.isLoading {
                         ProgressView("同步收藏…")
@@ -109,12 +130,16 @@ struct LibraryView: View {
                 } else if isGrid {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16, alignment: .top)], alignment: .leading, spacing: 20) {
                         ForEach(filtered) { item in
-                            NavigationLink(value: Route.subject(item.subjectId)) {
-                                collectionCard(item)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                contextMenu(for: item)
+                            VStack(alignment: .leading, spacing: 8) {
+                                NavigationLink(value: Route.subject(item.subjectId)) {
+                                    collectionCard(item)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu { contextMenu(for: item) }
+                                HStack {
+                                    Spacer(minLength: 0)
+                                    actionsMenu(for: item)
+                                }
                             }
                         }
                     }
@@ -122,14 +147,18 @@ struct LibraryView: View {
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(filtered) { item in
-                            NavigationLink(value: Route.subject(item.subjectId)) {
-                                CollectionReviewRow(item: item)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 16)
+                            HStack(alignment: .top, spacing: 8) {
+                                NavigationLink(value: Route.subject(item.subjectId)) {
+                                    CollectionReviewRow(item: item)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("library-row-\(item.subjectId)")
+                                .contextMenu { contextMenu(for: item) }
+                                actionsMenu(for: item)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("library-row-\(item.subjectId)")
-                            .contextMenu { contextMenu(for: item) }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
                             Divider().padding(.horizontal, 20)
                         }
                     }
@@ -273,7 +302,27 @@ struct LibraryView: View {
             .disabled(item.type == type.rawValue)
         }
         Divider()
+        Button("移除收藏…", systemImage: "trash", role: .destructive) {
+            removalTarget = item
+            showRemoval = true
+        }
         Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/subject/\(item.subjectId)")!)
+    }
+
+    private func actionsMenu(for item: UserSubjectCollection) -> some View {
+        Menu {
+            contextMenu(for: item)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.medium))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("\(item.title)的收藏操作")
+        .accessibilityIdentifier("library-actions-\(item.subjectId)")
     }
 
     private var filtered: [UserSubjectCollection] {
