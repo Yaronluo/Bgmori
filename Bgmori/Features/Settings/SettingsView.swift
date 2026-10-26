@@ -107,10 +107,15 @@ struct SettingsView: View {
                 .disabled(isClearing)
             }
 
-            Section("关于") {
+            Section("关于软件") {
                 LabeledContent("版本", value: settings.appVersion)
                 Link("Bangumi", destination: URL(string: "https://bgm.tv")!)
                 Text("Bgmori 是非官方第三方客户端，与 Bangumi 官方无关联。所有条目、评分、评论版权归 Bangumi 及原作者所有。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Link("镜像服务", destination: URL(string: "https://bangumi.wiki")!)
+                Text("通过 bangumi.wiki 自动获取镜像地址，用于数据、图片和网页访问。登录及收藏请求也会经过所用镜像。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

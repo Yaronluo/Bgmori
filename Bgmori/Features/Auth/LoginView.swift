@@ -259,8 +259,6 @@ struct LoginView: View {
             }
             Divider()
             HStack {
-                Text("非官方客户端 · 数据来自 Bangumi")
-                    .font(.caption).foregroundStyle(.tertiary)
                 Spacer()
                 Button("先逛逛") { dismiss() }
             }

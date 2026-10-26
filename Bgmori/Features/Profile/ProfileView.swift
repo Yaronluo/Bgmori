@@ -716,16 +716,8 @@ struct ProfileView: View {
                 Text("Bgmori \(app.settings.appVersion)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text("非官方第三方客户端 · 社区内容只读")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
-            Link(destination: URL(string: "https://bgm.tv")!) {
-                Label("Bangumi", systemImage: "arrow.up.right")
-                    .font(.caption)
-            }
-            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
