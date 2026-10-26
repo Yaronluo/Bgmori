@@ -28,8 +28,28 @@ enum HTMLSupport {
         html.components(separatedBy: separator).dropFirst().map { String($0) }
     }
 
+    // Match the closing container by depth so nested quotes and spoilers retain their full text.
+    static func elementContents(id: String, in html: String) -> String? {
+        let escapedID = NSRegularExpression.escapedPattern(for: id)
+        let pattern = "<([a-z][a-z0-9]*)\\b[^>]*\\bid=[\"']" + escapedID + "[\"'][^>]*>"
+        guard let opening = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        let source = html as NSString
+        guard let match = opening.firstMatch(in: html, range: NSRange(location: 0, length: source.length)) else { return nil }
+        let tag = source.substring(with: match.range(at: 1))
+        let start = NSMaxRange(match.range)
+        guard let tags = try? NSRegularExpression(pattern: "</?" + tag + "\\b[^>]*>", options: .caseInsensitive) else { return nil }
+        var depth = 1
+        for token in tags.matches(in: html, range: NSRange(location: start, length: source.length - start)) {
+            let value = source.substring(with: token.range)
+            if value.hasPrefix("</") { depth -= 1 }
+            else if !value.hasSuffix("/>") { depth += 1 }
+            if depth == 0 { return source.substring(with: NSRange(location: start, length: token.range.location - start)) }
+        }
+        return nil
+    }
+
     static func text(_ html: String) -> String {
-        var value = html
+        var value = html.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         value = value.replacingOccurrences(of: #"<script.*?</script>"#, with: " ", options: [.regularExpression, .caseInsensitive])
         value = value.replacingOccurrences(of: #"<style.*?</style>"#, with: " ", options: [.regularExpression, .caseInsensitive])
         value = value.replacingOccurrences(of: #"<img[^>]*alt="([^"]*)"[^>]*>"#, with: "$1", options: [.regularExpression, .caseInsensitive])

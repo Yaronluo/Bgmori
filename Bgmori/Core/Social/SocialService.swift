@@ -10,7 +10,7 @@ actor SocialService {
     func subjectComments(subjectID: Int, page: Int = 1) async throws -> [SocialComment] {
         let url = URL(string: "https://bgm.tv/subject/\(subjectID)/comments?page=\(page)")!
         let html = try await api.rawHTML(url, cacheKey: "social-comments-\(subjectID)-\(page)", ttl: 3_600)
-        return parseSubjectComments(html, subjectID: subjectID)
+        return parseSubjectComments(html, subjectID: subjectID, page: page)
     }
 
     func episodeComments(episodeID: Int) async throws -> [SocialComment] {
@@ -46,7 +46,7 @@ actor SocialService {
     func blogDetail(id: Int) async throws -> BlogDetail {
         let url = URL(string: "https://bgm.tv/blog/\(id)")!
         let html = try await api.rawHTML(url, cacheKey: "social-blog-\(id)", ttl: 3_600)
-        return parseBlogDetail(html, id: id)
+        return try parseBlogDetail(html, id: id)
     }
 
     func timeline(username: String) async throws -> [TimelineItem] {
@@ -57,7 +57,7 @@ actor SocialService {
 
     // MARK: - Subject comments
 
-    private func parseSubjectComments(_ html: String, subjectID: Int) -> [SocialComment] {
+    private func parseSubjectComments(_ html: String, subjectID: Int, page: Int) -> [SocialComment] {
         let blocks = HTMLSupport.blocks(html, separator: #"<div class="item clearit""#)
         return blocks.enumerated().compactMap { index, block in
             let username = HTMLSupport.first(#"href="/user/([^"]+)" class="l""#, in: block) ?? "unknown"
@@ -69,7 +69,7 @@ actor SocialService {
             let text = HTMLSupport.first(#"<p class="comment">(.*?)</p>"#, in: block).map(HTMLSupport.text) ?? ""
             guard !text.isEmpty else { return nil }
             return SocialComment(
-                id: "\(subjectID)-\(index)-\(username)",
+                id: "\(subjectID)-\(page)-\(index)-\(username)",
                 username: username,
                 name: name,
                 avatarURL: Images.normalized(avatar),
@@ -218,12 +218,16 @@ actor SocialService {
         }
     }
 
-    private func parseBlogDetail(_ html: String, id: Int) -> BlogDetail {
-        let title = HTMLSupport.first(#"<title>([^<]+)</title>"#, in: html) ?? "日志 #\(id)"
-        let content = HTMLSupport.first(#"id="entry_content"[^>]*>(.*?)<div class="tags""#, in: html)
-            ?? HTMLSupport.first(#"id="entry_content"[^>]*>(.*?)</div>"#, in: html)
-            ?? ""
-        let author = HTMLSupport.first(#"class="author user-card">.*?class="l">([^<]+)</a>"#, in: html)
+    private func parseBlogDetail(_ html: String, id: Int) throws -> BlogDetail {
+        guard let content = HTMLSupport.elementContents(id: "entry_content", in: html),
+              !HTMLSupport.text(content).isEmpty else {
+            throw APIError.message("无法读取日志，可从右上角菜单打开网页。")
+        }
+        let title = HTMLSupport.first(#"<h1[^>]*class="title"[^>]*>(.*?)</h1>"#, in: html).map(HTMLSupport.text)
+            ?? HTMLSupport.first(#"<title>([^<]+)</title>"#, in: html).map(HTMLSupport.text)
+            ?? "日志"
+        let authorBlock = HTMLSupport.first(#"class="author user-card"[^>]*>(.*?)<div class="header""#, in: html) ?? ""
+        let author = HTMLSupport.first(#"<a[^>]*href="/user/[^"/]+"[^>]*>([^<]+)</a>"#, in: authorBlock).map(HTMLSupport.text)
         let date = HTMLSupport.first(#"([0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:\s+[0-9:]+)?)"#, in: html)
         let cover = HTMLSupport.first(#"<div class="cover">.*?<img src="([^"]*)""#, in: html)
         return BlogDetail(
