@@ -285,7 +285,7 @@ struct LoginPromptView: View {
             if !message.isEmpty { Text(message) }
         } actions: {
             Button(actionTitle, action: action)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .foregroundStyle(Color.bgmCanvas)
                 .tint(.brandPink)
         }
@@ -324,8 +324,14 @@ struct ToastView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .glassEffect(.regular, in: Capsule())
+        .modifier(ToastGlassModifier())
         .padding(.horizontal, 20)
+    }
+}
+
+private struct ToastGlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        GlassSurface(shape: AnyShape(Capsule())) { content }
     }
 }
 
@@ -385,33 +391,45 @@ struct TextTabs<Value: Hashable>: View {
     let values: [Value]
     @Binding var selection: Value
     let title: (Value) -> String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
+
+    private var controlHeight: CGFloat {
+        #if os(macOS)
+        32
+        #else
+        40
+        #endif
+    }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             tabs
             ScrollView(.horizontal, showsIndicators: false) { tabs.fixedSize(horizontal: true, vertical: false) }
         }
-        #if os(macOS)
-        .frame(maxWidth: 520)
-        #endif
     }
 
     private var tabs: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 2) {
             ForEach(values, id: \.self) { value in
-                Button { selection = value } label: {
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                        selection = value
+                    }
+                } label: {
                     Text(title(value))
                         .font(.subheadline.weight(selection == value ? .semibold : .regular))
                         .foregroundStyle(selection == value ? Color.primary : Color.secondary)
                         .fixedSize(horizontal: true, vertical: false)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .padding(.horizontal, 4)
-                        .overlay(alignment: .bottom) {
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: controlHeight)
+                        .background {
                             if selection == value {
-                                Capsule().fill(Color.brandPink).frame(width: 24, height: 3)
+                                Capsule().fill(Color.primary.opacity(0.07))
+                                    .matchedGeometryEffect(id: "selection", in: selectionAnimation)
                             }
                         }
-                        .contentShape(Rectangle())
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == value ? .isSelected : [])

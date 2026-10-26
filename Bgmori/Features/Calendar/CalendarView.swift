@@ -8,7 +8,6 @@ struct CalendarView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                weekdaySelector
                 scheduleHeader
 
                 if app.calendar.isEmpty {
@@ -58,6 +57,11 @@ struct CalendarView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            weekdaySelector
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .bgmFloatingControlMargins()
+        }
         .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
         .bgmLargeNavigationTitle("每日放送")
@@ -101,7 +105,7 @@ struct CalendarView: View {
     }
 
     private var weekdaySelector: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             ForEach(days) { day in
                 let isSelected = selectedWeekday == day.weekday.id
                 Button {
@@ -109,27 +113,40 @@ struct CalendarView: View {
                         selectedWeekday = day.weekday.id
                     }
                 } label: {
-                    VStack(spacing: 8) {
+                    #if os(macOS)
+                    HStack(spacing: 6) {
                         Text(day.weekday.shortName)
-                            .font(.subheadline.weight(isSelected ? .bold : .medium))
+                            .font(.subheadline.weight(isSelected ? .semibold : .regular))
                         Text("\(day.items.count)")
                             .font(.caption.monospacedDigit())
-                            .opacity(isSelected ? 0.9 : 0.5)
+                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
-                    .frame(maxWidth: .infinity, minHeight: 62)
-                    .background(isSelected ? Color.brandPink : Color.clear, in: RoundedRectangle(cornerRadius: 16))
-                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(isSelected ? Color.primary.opacity(0.07) : Color.clear, in: Capsule())
+                    .contentShape(Capsule())
+                    #else
+                    VStack(spacing: 3) {
+                        Text(day.weekday.shortName)
+                            .font(.caption.weight(isSelected ? .semibold : .regular))
+                        Text("\(day.items.count)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(isSelected ? Color.primary.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 18))
+                    .contentShape(RoundedRectangle(cornerRadius: 18))
+                    #endif
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(day.weekday.cn)，\(day.items.count) 部作品")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(6)
-        .bgmCardBackground(cornerRadius: 22)
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
+        .padding(4)
+        .frame(maxWidth: 620)
+        .bgmFloatingGlass(cornerRadius: 26, shadowRadius: 6)
     }
 
     private var days: [CalendarDay] {

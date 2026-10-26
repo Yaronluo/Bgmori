@@ -13,16 +13,6 @@ struct ProfileView: View {
 
                 accountCard
 
-                HStack(alignment: .top, spacing: 14) {
-                    Button { openLibrary() } label: {
-                        shortcut("我的收藏", icon: "books.vertical")
-                    }
-                    Button { app.showSettings = true } label: {
-                        shortcut("偏好设置", icon: "slider.horizontal.3")
-                    }
-                }
-                .buttonStyle(.plain)
-
                 VStack(alignment: .leading, spacing: 12) {
                     Text("探索与记录")
                         .font(.headline)
@@ -76,6 +66,25 @@ struct ProfileView: View {
             #endif
             .bgmDesktopContent(maxWidth: 820)
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack(spacing: 2) {
+                Button { openLibrary() } label: {
+                    Label("我的收藏", systemImage: "books.vertical")
+                        .bgmShortcutLabel()
+                }
+                Button { app.showSettings = true } label: {
+                    Label("偏好设置", systemImage: "slider.horizontal.3")
+                        .bgmShortcutLabel()
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .padding(4)
+            .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .bgmFloatingControlMargins(maxWidth: 820)
+        }
         .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
         .bgmLargeNavigationTitle("我的")
@@ -127,7 +136,7 @@ struct ProfileView: View {
                         Label("登录", systemImage: "arrow.right")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .buttonBorderShape(.capsule)
                     .foregroundStyle(Color.bgmCanvas)
                     .controlSize(.regular)
@@ -187,30 +196,6 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-    }
-
-    private func shortcut(_ title: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(Color.brandPink)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.headline).foregroundStyle(.primary)
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20).strokeBorder(Color.primary.opacity(0.05))
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private func actionRow(_ title: String, icon: String) -> some View {

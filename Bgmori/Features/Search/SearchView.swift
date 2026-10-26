@@ -44,12 +44,6 @@ struct SearchView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                #if os(macOS)
-                Text("搜索").font(.largeTitle.bold()).padding(.horizontal, 20)
-                #endif
-                searchField
-                scopePicker
-
                 if query.trimmed.isEmpty {
                     recentSection
                     suggestions
@@ -76,6 +70,10 @@ struct SearchView: View {
             .padding(.top, 8)
             .padding(.bottom, 28)
             .bgmDesktopContent(maxWidth: 820)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            searchControls
+                .bgmFloatingControlMargins(maxWidth: 820)
         }
         .scrollIndicators(.hidden)
         .onAppear {
@@ -108,6 +106,21 @@ struct SearchView: View {
         SearchRequest(keyword: query.trimmed, scope: scope, type: typeFilter, year: yearFilter, sort: sort, includeNSFW: app.settings.showNSFW)
     }
 
+    private var searchControls: some View {
+        #if os(macOS)
+        HStack(spacing: 16) {
+            searchField.frame(maxWidth: 460)
+            scopePicker.fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        VStack(alignment: .leading, spacing: 6) {
+            searchField
+            scopePicker
+        }
+        #endif
+    }
+
     private var searchField: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -125,14 +138,12 @@ struct SearchView: View {
         }
         .font(.body)
         .padding(.horizontal, 14)
-        .frame(minHeight: 48)
-        .background(Color.bgmSecondary, in: RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 20)
+        .frame(minHeight: 44)
+        .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
     }
 
     private var scopePicker: some View {
         TextTabs(values: SearchScope.allCases, selection: $scope, title: { $0.title })
-            .padding(.horizontal, 20)
     }
 
     @ViewBuilder

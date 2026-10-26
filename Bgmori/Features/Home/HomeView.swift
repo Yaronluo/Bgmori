@@ -100,6 +100,25 @@ struct HomeView: View {
             .padding(.top, 8)
             .bgmDesktopContent()
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack(spacing: 2) {
+                Button { app.router.openCalendar() } label: {
+                    Label("每日放送", systemImage: "calendar")
+                        .bgmShortcutLabel()
+                }
+                Button { app.router.selectedSection = .categories } label: {
+                    Label("浏览分类", systemImage: "square.grid.2x2")
+                        .bgmShortcutLabel()
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .padding(4)
+            .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .bgmFloatingControlMargins()
+        }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
         .refreshable { await app.refreshAll() }

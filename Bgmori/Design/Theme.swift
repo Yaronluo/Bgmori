@@ -89,11 +89,13 @@ extension Font {
 struct GlassSurface<Content: View>: View {
     var shape: AnyShape
     var content: Content
+    var interactive: Bool
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    init(shape: AnyShape = AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous)), @ViewBuilder content: () -> Content) {
+    init(shape: AnyShape = AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous)), interactive: Bool = false, @ViewBuilder content: () -> Content) {
         self.shape = shape
+        self.interactive = interactive
         self.content = content()
     }
 
@@ -103,8 +105,38 @@ struct GlassSurface<Content: View>: View {
                 .background(Color.bgmSurface, in: shape)
                 .overlay(shape.stroke(Color.primary.opacity(0.08), lineWidth: 1))
         } else {
-            content.glassEffect(.regular, in: shape)
+            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         }
+    }
+}
+
+extension View {
+    func bgmShortcutLabel() -> some View {
+        self
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 14)
+            #if os(macOS)
+            .frame(minHeight: 36)
+            #else
+            .frame(minHeight: 44)
+            #endif
+            .contentShape(Capsule())
+    }
+
+    /// Apply once to the floating control group; its children keep plain button styles.
+    func bgmFloatingGlass(cornerRadius: CGFloat = 26, shadowRadius: CGFloat = 14) -> some View {
+        GlassSurface(shape: AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)), interactive: true) {
+            self
+        }
+        .shadow(color: .bgmArtworkScrim.opacity(shadowRadius < 14 ? 0.04 : 0.08), radius: shadowRadius, y: 3)
+    }
+
+    func bgmFloatingControlMargins(maxWidth: CGFloat = 1120) -> some View {
+        self
+            .frame(maxWidth: maxWidth)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
     }
 }
 
@@ -182,7 +214,7 @@ struct EmptyStateView: View {
         } actions: {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .foregroundStyle(Color.bgmCanvas)
                     .tint(.brandPink)
                     .padding(.top, 4)

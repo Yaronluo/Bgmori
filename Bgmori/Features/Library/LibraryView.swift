@@ -82,7 +82,6 @@ struct LibraryView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 header
-                filterBar
                 if filtered.isEmpty {
                     if app.library.isLoading {
                         ProgressView("同步收藏…")
@@ -131,6 +130,14 @@ struct LibraryView: View {
                 Color.clear.frame(height: 20)
             }
             .padding(.top, 8)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            filterBar
+                .frame(maxWidth: 440)
+                .padding(4)
+                .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .bgmFloatingControlMargins()
         }
         .scrollIndicators(.hidden)
         .bgmSearchable(text: $searchText, prompt: "在收藏中搜索")
@@ -189,14 +196,14 @@ struct LibraryView: View {
                             .font(.subheadline.weight(.medium))
                             .padding(.horizontal, 13)
                             .padding(.vertical, 11)
-                            .foregroundStyle(filter == item ? Color.brandPink : Color.secondary)
-                            .background(filter == item ? Color.brandPink.opacity(0.12) : Color.bgmSurface, in: Capsule())
+                            .foregroundStyle(filter == item ? Color.primary : Color.secondary)
+                            .background(filter == item ? Color.primary.opacity(0.07) : Color.clear, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 4)
         }
     }
 

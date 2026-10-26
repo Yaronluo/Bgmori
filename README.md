@@ -40,7 +40,7 @@
 - [x] 纯白底黑白漫画少女图标，附[源图与生成说明](docs/branding/README.md)
 - [x] iOS 原生大标题与轻量搜索栏、分组列表、随系统字号缩放的内容层级
 - [x] 发现页：本季精选封面、作品横向书架、分组排行榜与社区入口
-- [x] Liquid Glass：自定义玻璃 Tab Bar、玻璃浮动操作条、系统导航栏/Sheet 材质
+- [x] Liquid Glass：自定义玻璃 Tab Bar、发现/我的快捷操作栏、分类/搜索/放送/收藏悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[两端浅深色截图](docs/screenshots/compact-controls/README.md)
 - [x] iPhone 四栏导航：发现 / 分类 / 收藏 / 我的，右上角搜索，今日放送从发现页进入
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统

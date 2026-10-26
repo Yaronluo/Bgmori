@@ -8,56 +8,17 @@ struct CategoryView: View {
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16, alignment: .top)]
 
     var body: some View {
-        @Bindable var categories = store
-
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                #if os(macOS)
-                Text("分类").font(.largeTitle.bold()).padding(.horizontal, 20)
-                #endif
-                TextTabs(values: SubjectType.browsingTypes, selection: Binding(
-                    get: { store.type },
-                    set: { store.selectType($0) }
-                ), title: { $0.title })
-                .padding(.horizontal, 20)
-
-                tagPicker
-
-                HStack {
-                    Label(store.type.title, systemImage: store.type.icon)
-                        .font(.headline)
-                    Spacer()
-                    Menu {
-                        Picker("年份", selection: $categories.year) {
-                            Text("全部年份").tag(Int?.none)
-                            ForEach(years, id: \.self) { year in
-                                Text(String(year)).tag(Optional(year))
-                            }
-                        }
-                    } label: {
-                        Text(store.year.map(String.init) ?? "全部年份")
-                    }
-                    .accessibilityLabel("年份：\(store.year.map(String.init) ?? "全部年份")")
-
-                    Menu {
-                        Picker("排序", selection: $categories.sort) {
-                            ForEach(CategorySort.allCases) { sort in
-                                Text(sort.title).tag(sort)
-                            }
-                        }
-                    } label: {
-                        Label(store.sort.title, systemImage: "arrow.up.arrow.down")
-                    }
-                    .accessibilityLabel("排序：\(store.sort.title)")
-                }
-                .font(.subheadline)
-                .padding(.horizontal, 20)
-
                 results
             }
             .padding(.top, 12)
             .padding(.bottom, 28)
             .bgmDesktopContent()
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            filterControls
+                .bgmFloatingControlMargins()
         }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
@@ -66,33 +27,102 @@ struct CategoryView: View {
         .refreshable { await store.load(query, force: true) }
     }
 
-    private var years: [Int] {
-        Array((1900...Calendar.current.component(.year, from: Date())).reversed())
-    }
-
-    private var tagPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                tagButton("全部题材", value: nil)
-                ForEach(store.type.browsingTags, id: \.self) { tag in
-                    tagButton(tag, value: tag)
-                }
+    private var filterControls: some View {
+        #if os(macOS)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 24) {
+                typePicker
+                Spacer(minLength: 0)
+                filterMenus
             }
-            .padding(.horizontal, 20)
+            VStack(alignment: .leading, spacing: 8) {
+                typePicker
+                filterMenus.padding(.horizontal, 8)
+            }
         }
+        #else
+        VStack(alignment: .leading, spacing: 4) {
+            typePicker
+            filterMenus.padding(.horizontal, 8)
+        }
+        #endif
     }
 
-    private func tagButton(_ title: String, value: String?) -> some View {
-        Button { store.tag = value } label: {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .foregroundStyle(store.tag == value ? Color.brandPink : Color.secondary)
-                .background(store.tag == value ? Color.brandPink.opacity(0.12) : Color.bgmSurface, in: Capsule())
+    private var typePicker: some View {
+        TextTabs(values: SubjectType.browsingTypes, selection: Binding(
+            get: { store.type },
+            set: { store.selectType($0) }
+        ), title: { $0.title })
+        .padding(4)
+        .frame(maxWidth: 370)
+        .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
+    }
+
+    private var filterMenus: some View {
+        @Bindable var categories = store
+        return HStack(spacing: 20) {
+            Menu {
+                Picker("题材", selection: $categories.tag) {
+                    Text("全部题材").tag(String?.none)
+                    ForEach(store.type.browsingTags, id: \.self) { tag in
+                        Text(tag).tag(Optional(tag))
+                    }
+                }
+            } label: {
+                filterLabel(store.tag ?? "题材")
+            }
+            .accessibilityLabel("题材：\(store.tag ?? "全部题材")")
+
+            Menu {
+                Picker("年份", selection: $categories.year) {
+                    Text("全部年份").tag(Int?.none)
+                    ForEach(years, id: \.self) { year in
+                        Text(String(year)).tag(Optional(year))
+                    }
+                }
+            } label: {
+                filterLabel(store.year.map(String.init) ?? "年份")
+            }
+            .accessibilityLabel("年份：\(store.year.map(String.init) ?? "全部年份")")
+
+            Menu {
+                Picker("排序", selection: $categories.sort) {
+                    ForEach(CategorySort.allCases) { sort in
+                        Text(sort.title).tag(sort)
+                    }
+                }
+            } label: {
+                filterLabel(store.sort.title, icon: "arrow.up.arrow.down")
+            }
+            .accessibilityLabel("排序：\(store.sort.title)")
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(store.tag == value ? .isSelected : [])
+        .tint(.primary)
+        #if os(macOS)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        #endif
+        .foregroundStyle(.secondary)
+    }
+
+    private func filterLabel(_ title: String, icon: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let icon { Image(systemName: icon).font(.caption) }
+            Text(title).font(.subheadline)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+        }
+        .fixedSize()
+        #if os(iOS)
+        .frame(minHeight: 40)
+        #else
+        .frame(minHeight: 32)
+        #endif
+        .contentShape(Rectangle())
+    }
+
+    private var years: [Int] {
+        Array((1900...Calendar.current.component(.year, from: Date())).reversed())
     }
 
     @ViewBuilder

@@ -89,7 +89,6 @@ struct PhoneShell: View {
 
 struct BgmoriTabBar: View {
     @Binding var selection: AppSection
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
@@ -125,15 +124,7 @@ struct BgmoriTabBar: View {
             }
         }
         .padding(5)
-        .background {
-            if reduceTransparency {
-                Capsule().fill(Color.bgmSurface)
-                    .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 1))
-            } else {
-                Capsule().fill(Color.clear)
-                    .glassEffect(.regular, in: Capsule())
-            }
-        }
+        .bgmFloatingGlass(cornerRadius: 40)
     }
 }
 #endif

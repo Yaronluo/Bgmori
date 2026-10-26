@@ -79,7 +79,7 @@ struct LoginView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.large)
                     .tint(.brandPink)
                     .disabled(isWorking || !settings.hasOAuthConfig)
@@ -227,7 +227,7 @@ struct LoginView: View {
                         }
                         .frame(width: 220)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.large)
                     .disabled(isWorking || !settings.hasOAuthConfig)
                     if let errorText {

@@ -47,8 +47,6 @@ struct SubjectDetailView: View {
         .navigationTitle(subject?.displayTitle ?? "条目")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         #endif
         .toolbar {
@@ -222,7 +220,7 @@ struct SubjectDetailView: View {
                     } label: {
                         Label(app.library.collection(for: subject.id)?.collectionType.title ?? "收藏作品", systemImage: "plus")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     if subject.type != SubjectType.book.rawValue {
                         Button {
                             guard app.auth.isLoggedIn else { app.showLogin = true; return }
@@ -230,7 +228,7 @@ struct SubjectDetailView: View {
                         } label: {
                             Label(app.isGuest ? "记录进度" : nextEpisodeLabel(subject), systemImage: "checkmark.circle")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                     }
                 }
                 .controlSize(.large)
