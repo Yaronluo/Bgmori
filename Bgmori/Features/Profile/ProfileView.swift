@@ -1,99 +1,47 @@
+import Foundation
 import SwiftUI
 
 struct ProfileView: View {
     @Environment(AppModel.self) private var app
+
     @State private var showIndexLookup = false
+    @State private var friends: [FriendSummary] = []
+    @State private var isLoadingFriends = false
+    @State private var friendError: String?
+    @State private var characterTotal = 0
+    @State private var personTotal = 0
+    @State private var isLoadingPeople = false
+    @State private var peopleError: String?
+
+    private var isSignedIn: Bool { app.auth.isLoggedIn }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                #if os(macOS)
-                Text("我的").font(.largeTitle.bold())
-                #endif
+            LazyVStack(alignment: .leading, spacing: 28) {
+                hero
 
-                accountCard
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("探索与记录")
-                        .font(.headline)
-                        .padding(.leading, 4)
-
-                    VStack(spacing: 0) {
-                        NavigationLink { GroupListView() } label: {
-                            actionRow("小组与讨论", icon: "person.2")
-                        }
-                        rowDivider
-                        NavigationLink(value: Route.blogs) {
-                            actionRow("日志", icon: "text.book.closed")
-                        }
-                        rowDivider
-                        Button { showIndexLookup = true } label: {
-                            actionRow("查看目录", icon: "list.bullet.rectangle")
-                        }
-                        if let username = app.auth.username {
-                            rowDivider
-                            NavigationLink(value: Route.timeline(username)) {
-                                actionRow("我的时光机", icon: "clock.arrow.circlepath")
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 20))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 20).strokeBorder(Color.primary.opacity(0.05))
-                    }
+                if isSignedIn {
+                    personalContent
+                } else if !recentItems.isEmpty {
+                    recentSection
                 }
 
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Bgmori \(app.settings.appVersion)")
-                            .font(.caption2)
-                    }
-                    Spacer()
-                    Link(destination: URL(string: "https://bgm.tv")!) {
-                        Label("Bangumi", systemImage: "arrow.up.right")
-                    }
-                    .foregroundStyle(.secondary)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+                communitySection
+                toolsSection
+                footer
             }
-            .padding(.top, 8)
-            .padding(.bottom, 28)
+            .padding(.top, 6)
+            .padding(.bottom, 34)
             #if os(iOS)
             .padding(.horizontal, 20)
             #endif
-            .bgmDesktopContent(maxWidth: 820)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 2) {
-                Button { openLibrary() } label: {
-                    Label("我的收藏", systemImage: "books.vertical")
-                        .bgmShortcutLabel()
-                }
-                Button { app.showSettings = true } label: {
-                    Label("偏好设置", systemImage: "slider.horizontal.3")
-                        .bgmShortcutLabel()
-                }
-            }
-            .font(.subheadline.weight(.medium))
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .padding(4)
-            .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .bgmFloatingControlMargins(maxWidth: 820)
+            .bgmDesktopContent(maxWidth: 980)
         }
         .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
         .bgmLargeNavigationTitle("我的")
-        .task { await app.library.loadIfNeeded() }
-        .refreshable {
-            if let username = app.auth.username {
-                await app.library.loadAll(username: username, force: true)
-            }
-        }
+        .task(id: app.auth.username) { await load() }
+        .refreshable { await refresh() }
         .sheet(isPresented: $showIndexLookup) {
             IndexLookupView().environment(app)
                 #if os(macOS)
@@ -102,129 +50,869 @@ struct ProfileView: View {
         }
     }
 
-    private var accountCard: some View {
+    // MARK: - Hero
+
+    private var hero: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                AvatarView(url: app.auth.user?.avatarURL, size: 58)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(app.auth.user?.displayName ?? "我的 Bangumi")
-                        .font(.title2.bold())
-                        .foregroundStyle(.primary)
-                    if let username = app.auth.username {
-                        Text("@" + username).font(.subheadline).foregroundStyle(.secondary)
-                    }
+            #if os(macOS)
+            HStack(alignment: .center, spacing: 28) {
+                VStack(alignment: .leading, spacing: 16) {
+                    identity
+                    actionsRow
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 20)
+                if isSignedIn {
+                    statsGrid
+                        .frame(width: 360)
+                }
+            }
+            #else
+            identity
+            actionsRow
+            if isSignedIn {
+                statsGrid
+            }
+            #endif
+        }
+        .padding(22)
+        .background { heroBackground }
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06))
+        }
+    }
+
+    private var identity: some View {
+        HStack(alignment: .top, spacing: 16) {
+            AvatarView(url: app.auth.user?.avatarURL, size: 82)
+                .overlay {
+                    Circle().strokeBorder(Color.bgmSurface.opacity(0.9), lineWidth: 3)
+                }
+                .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(displayName)
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+
+                if let username = app.auth.username, !app.isGuest {
+                    Text("@\(username)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let signature {
+                    Text(signature)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if app.isGuest {
+                    Text("登录后同步收藏、评分与观看进度。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            if let sign = app.auth.user?.sign, !sign.trimmed.isEmpty {
-                Text(sign)
-                    .font(.subheadline)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var actionsRow: some View {
+        HStack(spacing: 10) {
+            if app.isGuest {
+                Button { app.showLogin = true } label: {
+                    Label("登录 Bangumi", systemImage: "person.crop.circle.badge.checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 36)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.brandPink)
+                .foregroundStyle(Color.bgmCanvas)
+                .buttonBorderShape(.capsule)
+            } else {
+                Button { openLibrary() } label: {
+                    Label("我的收藏", systemImage: "books.vertical.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 36)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.brandPink)
+                .foregroundStyle(Color.bgmCanvas)
+                .buttonBorderShape(.capsule)
+
+                Button { app.showSettings = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 38, height: 38)
+                        .background(Color.bgmSurface.opacity(0.8), in: Circle())
+                        .overlay {
+                            Circle().strokeBorder(Color.primary.opacity(0.06))
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("偏好设置")
+                .help("偏好设置")
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var statsGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            ProfileStatTile(
+                value: statValue(app.library.collections.count),
+                title: "全部收藏",
+                tint: .brandPink
+            )
+            ProfileStatTile(
+                value: statValue(app.library.counts[.doing] ?? 0),
+                title: "在看",
+                tint: .collectionTint(CollectionType.doing.rawValue)
+            )
+            ProfileStatTile(
+                value: statValue(app.library.counts[.done] ?? 0),
+                title: "看过",
+                tint: .collectionTint(CollectionType.done.rawValue)
+            )
+            ProfileStatTile(
+                value: statValue(app.library.counts[.wish] ?? 0),
+                title: "想看",
+                tint: .collectionTint(CollectionType.wish.rawValue)
+            )
+        }
+    }
+
+    private var heroBackground: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.brandPink.opacity(isSignedIn ? 0.14 : 0.07),
+                        Color.bgmSurface
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(Color.brandPink.opacity(isSignedIn ? 0.10 : 0.05))
+                    .frame(width: 230, height: 230)
+                    .blur(radius: 45)
+                    .offset(x: 70, y: -110)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var displayName: String {
+        if app.isGuest { return "我的 Bangumi" }
+        return app.auth.user?.displayName ?? app.auth.displayName
+    }
+
+    private var signature: String? {
+        guard !app.isGuest,
+              let raw = app.auth.user?.sign,
+              !raw.trimmed.isEmpty else { return nil }
+        return raw.trimmed
+    }
+
+    private func statValue(_ value: Int) -> String? {
+        if app.library.isLoading && app.library.collections.isEmpty { return nil }
+        return value.formatted()
+    }
+
+    // MARK: - Personal stats
+
+    @ViewBuilder
+    private var personalContent: some View {
+        if app.library.isLoading && app.library.collections.isEmpty {
+            syncLoadingCard
+        } else if let error = app.library.lastError, app.library.collections.isEmpty {
+            syncErrorCard(error)
+        } else if app.library.collections.isEmpty {
+            emptyLibraryCard
+        } else {
+            if !app.continueWatching.isEmpty {
+                continueSection
+            }
+            if !recentItems.isEmpty {
+                recentSection
+            }
+            overviewSection
+        }
+    }
+
+    private var syncLoadingCard: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("正在同步收藏…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .profileCard(cornerRadius: 18)
+    }
+
+    private func syncErrorCard(_ error: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("收藏同步失败")
+                    .font(.subheadline.weight(.semibold))
+                Text(error)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            Button("重试") {
+                Task {
+                    if let username = app.auth.username {
+                        await app.library.loadAll(username: username, force: true)
+                    }
+                }
+            }
+            .buttonStyle(.glass)
+            .disabled(app.library.isLoading)
+        }
+        .padding(16)
+        .profileCard(cornerRadius: 18)
+    }
+
+    private var emptyLibraryCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "books.vertical")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.brandPink)
+                .frame(width: 42, height: 42)
+                .background(Color.brandPink.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("还没有收藏")
+                    .font(.subheadline.weight(.semibold))
+                Text("去发现喜欢的作品，收藏会显示在这里。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button("去发现") { openHome() }
+                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.brandPink)
+        }
+        .padding(16)
+        .profileCard(cornerRadius: 18)
+    }
+
+    private var continueSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSectionHeader(
+                title: "继续观看",
+                subtitle: "\(app.library.watching.count) 部在看",
+                actionTitle: "全部收藏"
+            ) {
+                openLibrary()
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(app.continueWatching) { item in
+                        NavigationLink(value: Route.subject(item.subjectId)) {
+                            CoverCard(
+                                title: item.title,
+                                subtitle: item.epStatus > 0 ? "看到 \(item.epStatus) 话" : "在看",
+                                coverURL: item.coverURL,
+                                progress: item.progressFraction,
+                                tint: .subjectTint(item.subjectType),
+                                width: 132
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSectionHeader(
+                title: "最近浏览",
+                subtitle: "\(recentItems.count) 部作品"
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(recentItems) { item in
+                        NavigationLink(value: Route.subject(item.id)) {
+                            CoverCard(
+                                title: item.title,
+                                subtitle: item.typeName,
+                                coverURL: item.coverURL,
+                                tint: .subjectTint(item.type),
+                                width: 112
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("最近浏览：\(item.title)")
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private var overviewSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSectionHeader(
+                title: "收藏概览",
+                subtitle: "\(app.library.collections.count) 部作品 · \(rated.count) 部已评分",
+                actionTitle: rated.isEmpty ? nil : "全部评分"
+            ) {
+                app.router.push(.ratings, in: .profile)
+            }
+
+            #if os(macOS)
+            HStack(alignment: .top, spacing: 16) {
+                ratingCard
+                typeCard
+                    .frame(width: 342)
+            }
+            #else
+            VStack(spacing: 14) {
+                ratingCard
+                typeCard
+            }
+            #endif
+        }
+    }
+
+    private var ratingCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(averageText)
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    Text("平均评分 · \(rated.count) 部已评分")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(completionText)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    Text("完成率")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            RatingDistributionBars(counts: ratingCounts, height: 38)
+
+            Divider()
+
+            if recentRated.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "star")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    Text("给看过的作品打分，这里会出现你的评分与短评。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 3)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(recentRated.enumerated()), id: \.element.subjectId) { index, item in
+                        ratingRow(item)
+                        if index < recentRated.count - 1 {
+                            Divider().padding(.leading, 40)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .profileCard()
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private func ratingRow(_ item: UserSubjectCollection) -> some View {
+        NavigationLink(value: Route.subject(item.subjectId)) {
+            HStack(spacing: 10) {
+                CachedAsyncImage(
+                    url: item.coverURL,
+                    maxPixel: 120,
+                    placeholderTint: .subjectTint(item.subjectType)
+                )
+                .frame(width: 30, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("\(SubjectType.title(for: item.subjectType)) · \(item.rate) 分")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                RatingStars(score: Double(item.rate), size: 9)
+            }
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var typeCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("收藏构成")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Text("\(app.library.collections.count) 部")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 11) {
+                ForEach(SubjectType.browsingTypes) { type in
+                    typeRow(type)
+                }
             }
 
             Divider()
 
-            if app.isGuest {
-                HStack(spacing: 12) {
-                    Text("同步收藏、评分与进度")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    Button { app.showLogin = true } label: {
-                        Label("登录", systemImage: "arrow.right")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
-                    .foregroundStyle(Color.bgmCanvas)
-                    .controlSize(.regular)
-                }
-            } else {
-                collectionOverview
-            }
-        }
-        .padding(20)
-        .background {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(LinearGradient(colors: [Color.brandPink.opacity(0.08), Color.bgmSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 22).strokeBorder(Color.primary.opacity(0.05))
-        }
-    }
-
-    @ViewBuilder
-    private var collectionOverview: some View {
-        if app.library.isLoading && app.library.collections.isEmpty {
-            ProgressView("正在同步收藏…")
-                .font(.caption)
-                .frame(maxWidth: .infinity)
-        } else if app.library.lastError == nil || !app.library.collections.isEmpty {
             HStack(spacing: 0) {
-                collectionStat(app.library.collections.count, title: "全部收藏")
-                collectionStat(app.library.counts[.doing] ?? 0, title: "在看")
-                collectionStat(app.library.counts[.done] ?? 0, title: "看过")
-                collectionStat(app.library.counts[.wish] ?? 0, title: "想看")
+                quickStat(value: "\(rated.count)", title: "已评分", icon: "star.fill", tint: .brandPink)
+                Divider().frame(height: 26)
+                quickStat(value: "\(reviewCount)", title: "短评", icon: "text.bubble", tint: .collectionTint(1))
+                Divider().frame(height: 26)
+                quickStat(value: favoriteTypeTitle, title: "最多", icon: "chart.bar.fill", tint: .collectionTint(2))
             }
-        }
-        if let error = app.library.lastError {
-            HStack {
-                Text("收藏同步失败：\(error)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("重试") {
-                    Task {
-                        if let username = app.auth.username {
-                            await app.library.loadAll(username: username, force: true)
-                        }
-                    }
+
+            Divider()
+
+            Button { openCategories() } label: {
+                HStack(spacing: 7) {
+                    Label("按类型浏览", systemImage: "square.grid.2x2")
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
                 }
-                .disabled(app.library.isLoading)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 28)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+        }
+        .padding(18)
+        .profileCard()
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private func typeRow(_ type: SubjectType) -> some View {
+        let count = typeCount(type)
+        let tint = Color.subjectTint(type.rawValue)
+        return VStack(spacing: 4) {
+            HStack(spacing: 7) {
+                Image(systemName: type.icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 14)
+                Text(type.title)
+                    .font(.caption)
+                Spacer(minLength: 0)
+                Text("\(count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.06))
+                    Capsule()
+                        .fill(tint.opacity(0.75))
+                        .frame(width: count == 0 ? 0 : max(3, proxy.size.width * CGFloat(count) / CGFloat(maxTypeCount)))
+                }
+            }
+            .frame(height: 4)
         }
     }
 
-    private func collectionStat(_ value: Int, title: String) -> some View {
-        VStack(spacing: 5) {
-            Text(value, format: .number)
-                .font(.title3.bold().monospacedDigit())
-                .foregroundStyle(.primary)
-            Text(title).font(.caption).foregroundStyle(.secondary)
+    private func quickStat(value: String, title: String, icon: String, tint: Color) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(tint)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)：\(value)")
     }
 
-    private func actionRow(_ title: String, icon: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color.brandPink)
-                .frame(width: 38, height: 38)
-                .background(Color.brandPink.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+    // MARK: - Community & tools
+
+    private var communitySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSectionHeader(
+                title: "社区",
+                subtitle: isSignedIn ? "好友、小组与我的记录" : "在 Bangumi 发现同好"
+            )
+
+            LazyVGrid(columns: featureColumns, spacing: 12) {
+                if isSignedIn, let username = app.auth.username {
+                    NavigationLink(value: Route.friends(username)) {
+                        ProfileTileLabel(
+                            icon: "person.2.fill",
+                            title: "好友",
+                            subtitle: friendSubtitle,
+                            tint: .brandPink,
+                            accessory: friendAccessory
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                NavigationLink {
+                    GroupListView()
+                } label: {
+                    ProfileTileLabel(
+                        icon: "person.3.fill",
+                        title: "小组与讨论",
+                        subtitle: "热门小组与话题",
+                        tint: .collectionTint(4)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink(value: Route.blogs) {
+                    ProfileTileLabel(
+                        icon: "text.book.closed.fill",
+                        title: "日志",
+                        subtitle: "作品之外的文字",
+                        tint: .collectionTint(2)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if isSignedIn, let username = app.auth.username {
+                    NavigationLink(value: Route.timeline(username)) {
+                        ProfileTileLabel(
+                            icon: "clock.arrow.circlepath",
+                            title: "时光机",
+                            subtitle: "我的收藏动态",
+                            tint: .collectionTint(1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
-        .contentShape(Rectangle())
     }
 
-    private var rowDivider: some View { Divider().padding(.leading, 64) }
+    private var toolsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSectionHeader(
+                title: "更多",
+                subtitle: isSignedIn ? "人物收藏与工具" : "工具与设置"
+            )
+
+            LazyVGrid(columns: featureColumns, spacing: 12) {
+                if isSignedIn, let username = app.auth.username {
+                    NavigationLink(value: Route.people(username)) {
+                        ProfileTileLabel(
+                            icon: "person.crop.rectangle.stack.fill",
+                            title: "人物收藏",
+                            subtitle: peopleSubtitle,
+                            tint: .collectionTint(1),
+                            accessory: peopleAccessory
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button { app.router.openSearch() } label: {
+                        ProfileTileLabel(
+                            icon: "magnifyingglass",
+                            title: "搜索",
+                            subtitle: "找作品、角色与人物",
+                            tint: .collectionTint(1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button { showIndexLookup = true } label: {
+                    ProfileTileLabel(
+                        icon: "list.bullet.rectangle.portrait",
+                        title: "查看目录",
+                        subtitle: "打开一份作品清单",
+                        tint: .collectionTint(4)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button { app.router.openCalendar() } label: {
+                    ProfileTileLabel(
+                        icon: "calendar",
+                        title: "每日放送",
+                        subtitle: "今天的放送表",
+                        tint: .collectionTint(3)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button { app.showSettings = true } label: {
+                    ProfileTileLabel(
+                        icon: "slider.horizontal.3",
+                        title: "偏好设置",
+                        subtitle: "界面、内容与通知",
+                        tint: .collectionTint(2)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Bgmori \(app.settings.appVersion)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text("非官方第三方客户端 · 社区内容只读")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            Link(destination: URL(string: "https://bgm.tv")!) {
+                Label("Bangumi", systemImage: "arrow.up.right")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+    }
+
+    private var featureColumns: [GridItem] {
+        #if os(macOS)
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+        #else
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+        #endif
+    }
+
+    private var friendSubtitle: String {
+        if isLoadingFriends { return "正在读取…" }
+        if friendError != nil { return "打开好友列表" }
+        if friends.isEmpty { return "还没有好友" }
+        return "\(friends.count) 位好友"
+    }
+
+    private var friendAccessory: AnyView? {
+        guard !friends.isEmpty else { return nil }
+        return AnyView(
+            FriendAvatarStack(urls: friends.prefix(3).map(\.avatarURL), size: 22)
+        )
+    }
+
+    private var peopleSubtitle: String {
+        if isLoadingPeople { return "正在读取…" }
+        let total = characterTotal + personTotal
+        if total == 0 { return "角色与人物" }
+        return "\(total) 位"
+    }
+
+    private var peopleAccessory: AnyView? {
+        let total = characterTotal + personTotal
+        guard total > 0 else { return nil }
+        return AnyView(
+            Text("\(total)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Color.collectionTint(1))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.collectionTint(1).opacity(0.12), in: Capsule())
+        )
+    }
+
+    // MARK: - Derived data
+
+    private var recentItems: [RecentSubject] {
+        Array(
+            app.recentSubjects.subjects
+                .filter { app.settings.showNSFW || !$0.nsfw }
+                .prefix(10)
+        )
+    }
+
+    private var rated: [UserSubjectCollection] {
+        app.library.collections.values.filter { $0.rate > 0 }
+    }
+
+    private var recentRated: [UserSubjectCollection] {
+        Array(
+            rated
+                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                .prefix(3)
+        )
+    }
+
+    private var ratingCounts: [Int] {
+        var counts = Array(repeating: 0, count: 10)
+        for item in app.library.collections.values where item.rate > 0 {
+            counts[min(max(item.rate, 1), 10) - 1] += 1
+        }
+        return counts
+    }
+
+    private var reviewCount: Int {
+        rated.filter { $0.reviewText != nil }.count
+    }
+
+    private var favoriteTypeTitle: String {
+        guard let favorite = SubjectType.browsingTypes.max(by: { typeCount($0) < typeCount($1) }),
+              typeCount(favorite) > 0 else { return "—" }
+        return favorite.title
+    }
+
+    private var averageText: String {
+        guard !rated.isEmpty else { return "—" }
+        let average = Double(rated.reduce(0) { $0 + $1.rate }) / Double(rated.count)
+        return String(format: "%.1f", average)
+    }
+
+    private var completionText: String {
+        let total = app.library.collections.count
+        guard total > 0 else { return "—" }
+        let done = app.library.counts[.done] ?? 0
+        return String(format: "%.1f%%", Double(done) / Double(total) * 100)
+    }
+
+    private var maxTypeCount: Int {
+        max(SubjectType.browsingTypes.map { typeCount($0) }.max() ?? 0, 1)
+    }
+
+    private func typeCount(_ type: SubjectType) -> Int {
+        app.library.collections.values.filter { $0.subjectType == type.rawValue }.count
+    }
+
+    // MARK: - Actions & loading
 
     private func openLibrary() {
         app.router.selectedSection = .library
         #if os(macOS)
         app.router.macPath.removeAll()
         #endif
+    }
+
+    private func openCategories() {
+        app.router.selectedSection = .categories
+        #if os(macOS)
+        app.router.macPath.removeAll()
+        #endif
+    }
+
+    private func openHome() {
+        app.router.selectedSection = .home
+        #if os(macOS)
+        app.router.macPath.removeAll()
+        #endif
+    }
+
+    private func load() async {
+        await app.library.loadIfNeeded()
+        guard let username = app.auth.username, !app.isGuest else {
+            friends = []
+            characterTotal = 0
+            personTotal = 0
+            friendError = nil
+            peopleError = nil
+            return
+        }
+        await loadFriends(username: username)
+        await loadPeople(username: username)
+    }
+
+    private func refresh() async {
+        guard let username = app.auth.username, !app.isGuest else { return }
+        await app.library.loadAll(username: username, force: true)
+        await loadFriends(username: username, force: true)
+        await loadPeople(username: username, force: true)
+    }
+
+    private func loadFriends(username: String, force: Bool = false) async {
+        guard !isLoadingFriends else { return }
+        isLoadingFriends = true
+        friendError = nil
+        defer { isLoadingFriends = false }
+        do {
+            friends = try await app.social.friends(username: username, force: force)
+        } catch {
+            friendError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func loadPeople(username: String, force: Bool = false) async {
+        guard !isLoadingPeople else { return }
+        isLoadingPeople = true
+        peopleError = nil
+        defer { isLoadingPeople = false }
+
+        let auth = app.auth.isLoggedIn
+        var failure: String?
+        do {
+            characterTotal = try await app.api
+                .userCharacterCollections(username, limit: 1, auth: auth, force: force)
+                .total
+        } catch {
+            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        do {
+            personTotal = try await app.api
+                .userPersonCollections(username, limit: 1, auth: auth, force: force)
+                .total
+        } catch {
+            failure = failure ?? ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        peopleError = failure
     }
 }
 

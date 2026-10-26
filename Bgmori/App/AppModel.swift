@@ -147,6 +147,15 @@ final class AppModel {
         case "login": showLogin = true
         case "settings": showSettings = true
         case "profile": router.selectedSection = .profile
+        case "friends":
+            router.selectedSection = .profile
+            router.profilePath = [.friends(value.isEmpty ? "yaron" : value)]
+        case "people":
+            router.selectedSection = .profile
+            router.profilePath = [.people(value.isEmpty ? "yaron" : value)]
+        case "ratings":
+            router.selectedSection = .profile
+            router.profilePath = [.ratings]
         default: break
         }
         #if os(macOS)

@@ -19,6 +19,12 @@ actor SocialService {
         return parseEpisodeComments(html, episodeID: episodeID)
     }
 
+    func friends(username: String, force: Bool = false) async throws -> [FriendSummary] {
+        let url = URL(string: "https://bgm.tv/user/\(username)/friends")!
+        let html = try await api.rawHTML(url, cacheKey: "social-friends-\(username)", ttl: force ? 0 : 1_800)
+        return parseFriends(html)
+    }
+
     func groupHome() async throws -> GroupHome {
         let url = URL(string: "https://bgm.tv/group")!
         let html = try await api.rawHTML(url, cacheKey: "social-groups", ttl: 1_800)
@@ -105,6 +111,28 @@ actor SocialService {
                 state: nil,
                 time: time,
                 text: text
+            )
+        }
+    }
+
+    // MARK: - Friends
+
+    private func parseFriends(_ html: String) -> [FriendSummary] {
+        let list = HTMLSupport.elementContents(id: "memberUserList", in: html) ?? html
+        let blocks = list.components(separatedBy: #"<li class="user"#).dropFirst()
+        var seen: Set<String> = []
+        return blocks.compactMap { block -> FriendSummary? in
+            guard let username = HTMLSupport.first(#"href="/user/([^"/]+)""#, in: block),
+                  !username.isEmpty,
+                  seen.insert(username).inserted else { return nil }
+            let avatar = HTMLSupport.first(#"background-image:url\('([^']*)'\)"#, in: block)
+            let rawName = HTMLSupport.first(#"</span>\s*([^<]+)</a></strong>"#, in: block)
+                ?? HTMLSupport.first(#"<strong>.*?<a[^>]*>(.*?)</a>"#, in: block)
+            let name = rawName.map(HTMLSupport.text)?.trimmed ?? ""
+            return FriendSummary(
+                username: username,
+                name: name.isEmpty ? username : name,
+                avatarURL: Images.normalized(avatar)
             )
         }
     }
