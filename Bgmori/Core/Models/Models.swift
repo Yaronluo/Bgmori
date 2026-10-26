@@ -786,8 +786,18 @@ struct Paged<T: Decodable & Sendable>: Decodable, Sendable {
     let total: Int
     let limit: Int
     let offset: Int
+    // Locally filtered pages still advance past every row returned by the source.
+    let nextOffset: Int
 
     enum CodingKeys: String, CodingKey { case data, total, limit, offset }
+
+    init(data: [T], total: Int, limit: Int, offset: Int, nextOffset: Int? = nil) {
+        self.data = data
+        self.total = total
+        self.limit = limit
+        self.offset = offset
+        self.nextOffset = nextOffset ?? offset + data.count
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -795,6 +805,7 @@ struct Paged<T: Decodable & Sendable>: Decodable, Sendable {
         total = (try? c.decode(Int.self, forKey: .total)) ?? data.count
         limit = (try? c.decode(Int.self, forKey: .limit)) ?? data.count
         offset = (try? c.decode(Int.self, forKey: .offset)) ?? 0
+        nextOffset = offset + data.count
     }
 }
 

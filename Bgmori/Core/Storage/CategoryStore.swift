@@ -120,11 +120,10 @@ final class CategoryStore {
     private func append(_ page: Paged<Subject>, query: CategoryQuery) {
         var ids = Set(subjects.map(\.id))
         subjects.append(contentsOf: page.data.filter {
-            $0.type == query.type.rawValue && (query.includeNSFW || !$0.nsfw)
-            && (query.platform == nil || $0.platform == query.platform) && ids.insert($0.id).inserted
+            query.matches($0) && ids.insert($0.id).inserted
         })
         // Advance by the server page, including entries removed by local content filtering.
-        nextOffset = page.offset + page.data.count
-        hasMore = !page.data.isEmpty && nextOffset < page.total
+        nextOffset = page.nextOffset
+        hasMore = nextOffset > page.offset && nextOffset < page.total
     }
 }

@@ -91,10 +91,14 @@ struct CategoryView: View {
                         Text(sort.title).tag(sort)
                     }
                 }
+                .pickerStyle(.inline)
+                Divider()
+                Link("在浏览器中查看", destination: query.browserURL)
             } label: {
                 filterLabel(store.sort.title, icon: "arrow.up.arrow.down")
             }
             .accessibilityLabel("排序：\(store.sort.title)")
+            .accessibilityIdentifier("category-sort")
         }
         .buttonStyle(.plain)
         .tint(.primary)
@@ -135,6 +139,8 @@ struct CategoryView: View {
             EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: error, actionTitle: "重试") {
                 Task { await store.load(query, force: true) }
             }
+            Link("在浏览器中查看", destination: query.browserURL)
+                .frame(maxWidth: .infinity)
         } else if store.subjects.isEmpty {
             EmptyStateView(icon: store.type.icon, title: "没有符合条件的作品", message: "", actionTitle: "重置筛选") {
                 store.tag = nil

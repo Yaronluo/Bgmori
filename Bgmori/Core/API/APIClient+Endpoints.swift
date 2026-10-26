@@ -54,7 +54,7 @@ extension APIClient {
         try await get("/v0/subjects/\(id)", as: Subject.self, cacheKey: "subject-\(id)", ttl: 86_400)
     }
 
-    func browseSubjects(type: Int, sort: String, year: Int? = nil, month: Int? = nil, limit: Int = 12, offset: Int = 0) async throws -> Paged<Subject> {
+    func browseSubjects(type: Int, sort: String, year: Int? = nil, month: Int? = nil, limit: Int = 12, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
         var query: [URLQueryItem] = [
             .init(name: "type", value: String(type)),
             .init(name: "sort", value: sort),
@@ -64,7 +64,7 @@ extension APIClient {
         if let year { query.append(.init(name: "year", value: String(year))) }
         if let month { query.append(.init(name: "month", value: String(month))) }
         let key = "browse-\(type)-\(sort)-\(year ?? 0)-\(month ?? 0)-\(offset)-\(limit)"
-        return try await get("/v0/subjects", query: query, as: Paged<Subject>.self, cacheKey: key, ttl: 1_800)
+        return try await get("/v0/subjects", query: query, as: Paged<Subject>.self, cacheKey: key, ttl: force ? 0 : 1_800)
     }
 
     func searchSubjects(keyword: String, sort: String = "match", filter: SubjectSearchFilter? = nil, limit: Int = 24, offset: Int = 0) async throws -> Paged<Subject> {
@@ -82,6 +82,12 @@ extension APIClient {
     }
 
     func categorySubjects(query: CategoryQuery, limit: Int = 24, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
+        if query.sort == .date {
+            return try await categoryDateSubjects(query: query, limit: limit, offset: offset, force: force)
+        }
+        guard let sort = query.sort.searchSort else {
+            return try await categoryBrowserSubjects(query: query, limit: limit, offset: offset, force: force)
+        }
         var filter = SubjectSearchFilter()
         filter.type = [query.type.rawValue]
         filter.tag = query.tag.map { [$0] }
@@ -91,7 +97,7 @@ extension APIClient {
             filter.airDate = [">=\(year)-01-01", "<\(year + 1)-01-01"]
         }
         if query.sort == .rank { filter.rank = [">0"] }
-        let body = SubjectSearchRequest(keyword: "", sort: query.sort.rawValue, filter: filter)
+        let body = SubjectSearchRequest(keyword: "", sort: sort, filter: filter)
         let keyEncoder = JSONEncoder()
         keyEncoder.outputFormatting = .sortedKeys
         let cacheKey = "categories-v2-\(String(decoding: try keyEncoder.encode(body), as: UTF8.self))-\(limit)-\(offset)"
@@ -104,6 +110,77 @@ extension APIClient {
             cacheKey: cacheKey,
             ttl: force ? 0 : 1_800
         )
+    }
+
+    private func categoryDateSubjects(query: CategoryQuery, limit: Int, offset: Int, force: Bool) async throws -> Paged<Subject> {
+        // The website's date view requires a cookie login; public browsing provides the same date order.
+        let page = try await browseSubjects(type: query.type.rawValue, sort: "date", year: query.year,
+                                            limit: limit, offset: offset, force: force)
+        let candidates = page.data.filter { query.matches($0) }
+        var subjects = candidates
+        if let tag = query.tag {
+            subjects = try await withThrowingTaskGroup(of: (Int, Bool).self) { group in
+                for (index, subject) in candidates.enumerated() {
+                    group.addTask { (index, try await self.categorySubject(subject, hasTag: tag, force: force)) }
+                }
+                var matches: Set<Int> = []
+                for try await (index, matched) in group where matched { matches.insert(index) }
+                return candidates.enumerated().filter { matches.contains($0.offset) }.map(\.element)
+            }
+        }
+        return Paged(data: subjects, total: page.total, limit: limit, offset: offset, nextOffset: page.nextOffset)
+    }
+
+    private func categorySubject(_ subject: Subject, hasTag tag: String, force: Bool) async throws -> Bool {
+        // Detail responses contain only the top tags; verify a custom tag against the search index.
+        var filter = SubjectSearchFilter()
+        filter.type = [subject.type]
+        filter.tag = [tag]
+        filter.nsfw = subject.nsfw
+        let body = SubjectSearchRequest(keyword: subject.name, sort: "match", filter: filter)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let key = String(decoding: try encoder.encode(body), as: UTF8.self)
+        var offset = 0
+        while true {
+            try Task.checkCancellation()
+            let page = try await post("/v0/search/subjects", body: body,
+                                      query: [.init(name: "limit", value: "50"), .init(name: "offset", value: String(offset))],
+                                      as: Paged<Subject>.self, auth: false,
+                                      cacheKey: "category-tag-\(key)-\(offset)", ttl: force ? 0 : 1_800)
+            if page.data.contains(where: { $0.id == subject.id }) { return true }
+            if page.data.isEmpty || page.nextOffset >= page.total { return false }
+            offset = page.nextOffset
+        }
+    }
+
+    private func categoryBrowserSubjects(query: CategoryQuery, limit: Int, offset: Int, force: Bool) async throws -> Paged<Subject> {
+        var ids: [Int] = []
+        var total = offset
+        while ids.count < limit {
+            try Task.checkCancellation()
+            let position = offset + ids.count
+            let page = position / CategoryBrowserPage.size + 1
+            var components = URLComponents(url: query.browserURL, resolvingAgainstBaseURL: false)!
+            components.queryItems = (components.queryItems ?? []) + [.init(name: "page", value: String(page))]
+            let url = components.url!
+            let html = try await rawHTML(url, cacheKey: "category-browser-\(url.absoluteString)", ttl: force ? 0 : 1_800)
+            let parsed = try CategoryBrowserPage.parse(html, page: page)
+            total = parsed.total
+            let slice = parsed.ids.dropFirst(position % CategoryBrowserPage.size).prefix(limit - ids.count)
+            ids.append(contentsOf: slice)
+            if slice.isEmpty || offset + ids.count >= total { break }
+        }
+        // Hydrate official IDs in their original order, including NSFW and public-tag metadata.
+        let subjects = try await withThrowingTaskGroup(of: (Int, Subject).self) { group in
+            for (index, id) in ids.enumerated() {
+                group.addTask { (index, try await self.subject(id)) }
+            }
+            var rows: [(Int, Subject)] = []
+            for try await row in group { rows.append(row) }
+            return rows.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+        return Paged(data: subjects, total: total, limit: limit, offset: offset)
     }
 
     func categoryFilters(type: SubjectType, force: Bool = false) async throws -> [CategoryFilterGroup] {

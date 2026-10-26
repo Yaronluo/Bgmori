@@ -1,17 +1,30 @@
 import Foundation
 
 enum CategorySort: String, CaseIterable, Identifiable, Sendable {
-    case heat
     case rank
-    case score
+    case heat = "trends"
+    case collects
+    case date
+    case title
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .heat: "热门优先"
-        case .rank: "口碑排行"
-        case .score: "评分优先"
+        case .rank: "排名"
+        case .heat: "热度"
+        case .collects: "收藏"
+        case .date: "日期"
+        case .title: "名称"
+        }
+    }
+
+    // The public search API calls collection count "heat"; website trends are distinct.
+    var searchSort: String? {
+        switch self {
+        case .rank: "rank"
+        case .collects: "heat"
+        case .heat, .date, .title: nil
         }
     }
 }
@@ -24,6 +37,50 @@ struct CategoryQuery: Hashable, Sendable {
     var includeNSFW = false
     var metaTags: [String] = []
     var platform: String?
+
+    var browserURL: URL {
+        var url = type.browserURL
+        if let tag { url.appendPathComponent(tag) }
+        else if let tag = metaTags.first(where: { !$0.hasPrefix("-") }) { url.appendPathComponent(tag) }
+        if let year {
+            url.appendPathComponent("airtime")
+            url.appendPathComponent(String(year))
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = [.init(name: "sort", value: sort.rawValue)]
+        return components.url!
+    }
+
+    func matches(_ subject: Subject) -> Bool {
+        guard subject.type == type.rawValue, includeNSFW || !subject.nsfw,
+              platform == nil || subject.platform == platform else { return false }
+        guard sort.searchSort == nil else { return true } // Search already applies these filters.
+        if let year, subject.date?.hasPrefix("\(year)-") != true { return false }
+        let tags = Set(subject.metaTags.map { $0.lowercased() })
+        return metaTags.allSatisfy { tag in
+            tag.hasPrefix("-") ? !tags.contains(String(tag.dropFirst()).lowercased()) : tags.contains(tag.lowercased())
+        }
+    }
+}
+
+enum CategoryBrowserPage {
+    static let size = 24
+
+    static func parse(_ html: String, page: Int) throws -> (ids: [Int], total: Int) {
+        guard let list = HTMLSupport.elementContents(id: "browserItemList", in: html) else {
+            throw APIError.decoding("官网排序解析失败，请重试或在浏览器中查看。")
+        }
+        let rows = HTMLSupport.all(#"<li\b[^>]*\bid=["']item_(\d+)["']"#, in: list)
+        let ids = rows.compactMap(Int.init)
+        guard ids.count == HTMLSupport.matches(#"<li\b"#, in: list).count, Set(ids).count == ids.count,
+              !ids.isEmpty || HTMLSupport.elementContents(id: "browserTools", in: html) != nil else {
+            throw APIError.decoding("官网排序解析失败，请重试或在浏览器中查看。")
+        }
+        let links = HTMLSupport.all(#"href=["'][^"']*[?&](?:amp;)?page=(\d+)[^"']*["']"#, in: html).compactMap(Int.init)
+        let lastPage = max(page, links.max() ?? page)
+        let total = lastPage == page ? (page - 1) * size + ids.count : lastPage * size
+        return (ids, total)
+    }
 }
 
 struct CategoryFilterOption: Hashable, Sendable, Identifiable {

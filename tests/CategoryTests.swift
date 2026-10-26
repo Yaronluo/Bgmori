@@ -22,6 +22,33 @@ private final class TestServer: @unchecked Sendable {
     func response(for request: URLRequest) -> StubResponse {
         lock.withLock {
             requests += 1
+            if request.url?.host == "bgm.tv", request.url?.query?.contains("page=") == true {
+                let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                let page = Int(items.first { $0.name == "page" }!.value!)!
+                let ids = page == 1 ? Array(701...724) : [725, 726]
+                let html = "<div id='browserTools'></div><ul id='browserItemList'>"
+                    + ids.map { "<li id='item_\($0)'><a href='/subject/\($0)'>作品</a></li>" }.joined()
+                    + "</ul>" + (page == 1 ? "<a href='?sort=title&amp;page=2'>2</a>" : "")
+                return StubResponse(data: Data(html.utf8), status: fail ? 503 : 200, delay: 0.01)
+            }
+            if request.httpMethod == "GET", request.url?.path == "/v0/subjects" {
+                let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                precondition(items.first { $0.name == "sort" }!.value == "date")
+                let offset = Int(items.first { $0.name == "offset" }!.value!)!
+                let ids = offset == 0 ? [801, 802] : [803, 804]
+                let rows: [[String: Any]] = ids.map { id in
+                    ["id": id, "type": 2, "name": id == 803 ? "tag-match" : "tag-miss", "nsfw": false,
+                     "date": id < 803 ? "2021-01-01" : "2020-01-01", "meta_tags": ["TV", "科幻"]]
+                }
+                let data = try! JSONSerialization.data(withJSONObject: ["data": rows, "total": 4, "offset": offset, "limit": 24])
+                return StubResponse(data: data, status: 200, delay: 0.01)
+            }
+            if request.httpMethod == "GET", request.url?.path.hasPrefix("/v0/subjects/") == true {
+                let id = Int(request.url!.lastPathComponent)!
+                let data = try! JSONSerialization.data(withJSONObject: ["id": id, "type": 2, "nsfw": id == 702,
+                    "date": "2020-01-01", "meta_tags": ["TV", "科幻"]] as [String: Any])
+                return StubResponse(data: data, status: fail ? 503 : 200, delay: id == 701 ? 0.15 : 0.01)
+            }
             if request.url?.host == "bgm.tv" {
                 precondition(request.value(forHTTPHeaderField: "User-Agent") == APIClient.safariUserAgent)
                 return StubResponse(data: Data(CategoryTests.catalogFixture.utf8), status: fail ? 503 : 200, delay: 0.01)
@@ -44,9 +71,15 @@ private final class TestServer: @unchecked Sendable {
             } else { fatalError("Missing request body") }
             let payload = try! JSONSerialization.jsonObject(with: body) as! [String: Any]
             let filter = payload["filter"] as! [String: Any]
-            precondition(payload["keyword"] as? String == "")
+            if payload["keyword"] as? String != "" {
+                precondition(filter["tag"] as? [String] == ["完整标签"])
+                let rows: [[String: Any]] = payload["keyword"] as? String == "tag-match" ? [["id": 803, "type": 2]] : []
+                let data = try! JSONSerialization.data(withJSONObject: ["data": rows, "total": rows.count, "offset": 0, "limit": 50])
+                return StubResponse(data: data, status: 200, delay: 0.01)
+            }
             precondition(filter["nsfw"] as? Bool == false)
             let type = (filter["type"] as! [Int])[0]
+            precondition(["rank", "heat"].contains(payload["sort"] as! String), "Website sorts must not be sent to search")
             let tag = (filter["tag"] as! [String])[0]
             if tag.contains("metadata") {
                 precondition(filter["meta_tags"] as? [String] == ["TV", "科幻"] || filter["meta_tags"] as? [String] == ["TV", "恋爱"])
@@ -110,6 +143,7 @@ struct CategoryTests {
     @MainActor
     static func main() async throws {
         try checkCatalogParsing()
+        try checkWebsiteSorting()
         if CommandLine.arguments.contains("--live") {
             try await checkLiveData()
             return
@@ -138,8 +172,8 @@ struct CategoryTests {
         CategoryProtocol.server.setFailure(false)
         print("PASS: cached search and offline fallback")
 
-        let anime = CategoryQuery(type: .anime, tag: "\(run)-race")
-        let book = CategoryQuery(type: .book, tag: "\(run)-race")
+        let anime = CategoryQuery(type: .anime, sort: .collects, tag: "\(run)-race")
+        let book = CategoryQuery(type: .book, sort: .collects, tag: "\(run)-race")
         let oldLoad = Task { await store.load(anime) }
         try await Task.sleep(for: .milliseconds(60))
         await store.load(book)
@@ -147,7 +181,7 @@ struct CategoryTests {
         precondition(store.subjects.map(\.id) == [101] && !store.isLoading)
         print("PASS: late animation response cannot replace selected books")
 
-        let retry = CategoryQuery(type: .book, tag: "\(run)-retry")
+        let retry = CategoryQuery(type: .book, sort: .collects, tag: "\(run)-retry")
         CategoryProtocol.server.setFailure(true)
         await store.load(retry)
         precondition(store.subjects.isEmpty && store.errorText != nil && !store.isLoading)
@@ -160,7 +194,7 @@ struct CategoryTests {
         precondition(store.tag == nil && store.year == 2020)
         print("PASS: initial error retry and resetting topic when switching content type")
 
-        var metadataQuery = CategoryQuery(type: .anime, tag: "\(run)-metadata", metaTags: ["科幻", "TV"])
+        var metadataQuery = CategoryQuery(type: .anime, sort: .collects, tag: "\(run)-metadata", metaTags: ["科幻", "TV"])
         _ = try await api.categorySubjects(query: metadataQuery)
         let metadataCount = CategoryProtocol.server.count
         metadataQuery.metaTags.reverse()
@@ -201,6 +235,21 @@ struct CategoryTests {
         precondition(AppSection.allCases.count == 6)
         precondition(router.path(for: .categories) == [.subject(8)] && router.path(for: .search) == [.subject(9)])
         print("PASS: six sections with independent navigation paths")
+        let dateQuery = CategoryQuery(type: .anime, sort: .date, year: 2020, tag: "完整标签", metaTags: ["TV", "科幻"])
+        await store.load(dateQuery)
+        precondition(store.subjects.isEmpty && store.nextOffset == 2 && store.hasMore)
+        await store.loadMore(dateQuery)
+        precondition(store.subjects.map(\.id) == [803] && store.nextOffset == 4 && !store.hasMore)
+        print("PASS: date browsing, full custom-tag lookup, and pagination past a locally empty page")
+        let browserQuery = CategoryQuery(type: .anime, sort: .title)
+        await store.load(browserQuery)
+        precondition(store.subjects.map(\.id) == Array(701...724).filter { $0 != 702 })
+        precondition(store.nextOffset == 24 && store.hasMore)
+        await store.loadMore(browserQuery)
+        precondition(store.subjects.suffix(2).map(\.id) == [725, 726] && !store.hasMore)
+        let slice = try await api.categorySubjects(query: browserQuery, limit: 3, offset: 23)
+        precondition(slice.data.map(\.id) == [724, 725, 726] && slice.total == 26)
+        print("PASS: website order survives concurrent hydration, NSFW filtering, pagination and page boundaries")
         await cache.clear()
     }
 
@@ -212,7 +261,7 @@ struct CategoryTests {
             let groups = try await api.categoryFilters(type: type, force: true)
             precondition(groups.allSatisfy { !$0.options.isEmpty })
             print("PASS live \(type.title) catalog: \(groups.map { "\($0.title) \($0.options.count)" }.joined(separator: ", "))")
-            let page = try await api.categorySubjects(query: CategoryQuery(type: type), limit: 3, force: true)
+            let page = try await api.categorySubjects(query: CategoryQuery(type: type, sort: .collects), limit: 3, force: true)
             precondition(!page.data.isEmpty && page.data.allSatisfy { $0.type == type.rawValue && !$0.nsfw })
             print("PASS live \(type.title): \(page.data.map(\.displayTitle).joined(separator: ", "))")
         }
@@ -227,12 +276,52 @@ struct CategoryTests {
                                                         (.music, ["OST", "动画"]), (.game, ["PC", "RPG"]),
                                                         (.real, ["电视剧", "日本", "悬疑"])]
         for (type, tags) in combinations {
-            let page = try await api.categorySubjects(query: CategoryQuery(type: type, metaTags: tags), limit: 3, force: true)
+            let page = try await api.categorySubjects(query: CategoryQuery(type: type, sort: .collects, metaTags: tags), limit: 3, force: true)
             precondition(!page.data.isEmpty && page.data.allSatisfy { $0.type == type.rawValue && !$0.nsfw })
             precondition(page.data.allSatisfy { Set(tags.map { $0.lowercased() }).isSubset(of: Set($0.metaTags.map { $0.lowercased() })) })
             print("PASS live \(type.title) public-tag combination: \(tags.joined(separator: " + "))")
         }
+        for sort in [CategorySort.heat, .title] {
+            let query = CategoryQuery(type: .anime, sort: sort)
+            let page = try await api.categorySubjects(query: query, limit: 3, force: true)
+            precondition(!page.data.isEmpty)
+            let html = try await api.rawHTML(query.browserURL, cacheKey: "live-order-\(sort.rawValue)", ttl: 0)
+            let expected = try CategoryBrowserPage.parse(html, page: 1).ids
+            precondition(page.data.map(\.id) == Array(expected.prefix(3)))
+            print("PASS live website \(sort.title): \(page.data.map(\.displayTitle).joined(separator: ", "))")
+        }
+        let dates = try await api.categorySubjects(query: CategoryQuery(type: .anime, sort: .date), limit: 3, force: true)
+        precondition(dates.data.count == 3)
+        let dateValues = dates.data.compactMap(\.date)
+        precondition(dateValues == dateValues.sorted(by: >))
+        print("PASS live date order: \(dates.data.map(\.displayTitle).joined(separator: ", "))")
         await cache.clear()
+    }
+
+    private static func checkWebsiteSorting() throws {
+        precondition(CategorySort.allCases.map(\.title) == ["排名", "热度", "收藏", "日期", "名称"])
+        precondition(CategorySort.collects.searchSort == "heat" && CategorySort.heat.searchSort == nil)
+        let query = CategoryQuery(type: .anime, sort: .date, year: 2020, tag: "科幻", metaTags: ["TV", "日本"])
+        precondition(query.browserURL.path == "/anime/browser/科幻/airtime/2020")
+        precondition(query.browserURL.query == "sort=date")
+        let html = "<div id='browserTools'></div><ul id='browserItemList'><li id='item_9'></li><li id='item_8'></li></ul><a href='?sort=title&amp;page=12'>尾页</a>"
+        let page = try CategoryBrowserPage.parse(html, page: 1)
+        precondition(page.ids == [9, 8] && page.total == 288)
+        let subject = try JSONDecoder().decode(Subject.self, from: Data(#"{"id":8,"type":2,"date":"2020-01-01","meta_tags":["TV","日本"]}"#.utf8))
+        precondition(query.matches(subject))
+        var excluded = query
+        excluded.metaTags = ["-TV"]
+        precondition(!excluded.matches(subject))
+        excluded = query
+        excluded.year = 2021
+        precondition(!excluded.matches(subject))
+        for malformed in ["<html>challenge</html>", "<ul id='browserItemList'><li id='item_9'></li><li id='item_9'></li></ul>"] {
+            do {
+                _ = try CategoryBrowserPage.parse(malformed, page: 1)
+                preconditionFailure("Broken website pages must fail visibly")
+            } catch {}
+        }
+        print("PASS: five official sort options, website URLs, ordering, page counts, combined filters and parser errors")
     }
 
     static let catalogFixture = #"""
