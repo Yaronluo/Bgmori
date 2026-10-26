@@ -33,6 +33,8 @@
 - [x] 章节进度：单话切换、批量“看到第 N 话”
 - [x] 书籍卷/话进度
 - [x] 收藏库：默认图文列表，显示个人评分、收藏更新日期与短评（空短评隐藏），顶部按动画 / 书籍 / 音乐 / 游戏 / 三次元分类，可组合收藏状态筛选、个人评分排序、可切换网格
+- [x] 我的：账号概览、继续观看、最近浏览、评分分布与收藏构成、好友、角色 / 人物收藏、时光机与社区入口；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
+- [x] 我的评分：平均分、评分分布、按评分 / 更新 / 标题排序的短评列表
 - [x] 本地缓存：API JSON 缓存、图片磁盘/内存缓存、离线可读
 - [x] 本地每日放送通知（完全本地计算）
 
@@ -46,7 +48,8 @@
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
 - [x] 收藏顶部改为紧凑文字分类，以短下划线标记当前类型；状态收进次级菜单，移除大块玻璃底板；[两端浅深色截图](docs/screenshots/library-compact/README.md)
 - [x] 发现快捷入口与标题对齐，分类使用紧凑文字导航，放送使用轻量周历；手机分类筛选合并为一行，年份和排序收进筛选面板；[两端浅深色截图](docs/screenshots/page-navigation/README.md)
-- [x] Liquid Glass：自定义玻璃 Tab Bar、我的快捷操作栏、搜索悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[早期两端浅深色截图](docs/screenshots/compact-controls/README.md)
+- [x] Liquid Glass：自定义玻璃 Tab Bar、搜索悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[早期两端浅深色截图](docs/screenshots/compact-controls/README.md)
+- [x] 我的页重做为个人仪表盘，新增好友、角色/人物收藏与本页评分列表；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
 - [x] iPhone 四栏导航：发现 / 分类 / 收藏 / 我的，右上角搜索，今日放送从发现页进入
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统
@@ -138,7 +141,7 @@ Bgmori/
 ## 已知限制
 
 - 官方 API 没有评论/小组/日志/发布接口；这些页面采用 **匿名 HTML 只读解析**，页面结构变化时可能失效，失效会回退到 Safari。
-- 不支持发吐槽、回帖、发日志、发话题、好友动态、提醒、维基编辑（没有公开写接口）。
+- 不支持发吐槽、回帖、发日志、发话题、提醒、维基编辑（没有公开写接口）。好友列表与角色/人物收藏为只读，不支持添加好友、好友动态或写操作。
 - 审核/公开分发需要处理 Bangumi 商标、UGC 举报与 R18 过滤；当前是私人使用版本，默认关闭 NSFW，设置里可手动开启。
 - OAuth 未预置 Client ID/Secret，需按上面的步骤配置。
 - 系统级 Widget、App Intents、Handoff、Spotlight 尚未接入；当前版本聚焦客户端本体。
@@ -157,9 +160,11 @@ Bgmori/
 | --- | --- | --- |
 | ![条目](docs/screenshots/redesign/subject-light.png) | ![吐槽](docs/screenshots/comments.png) | ![登录](docs/screenshots/login.png) |
 
-| 收藏（游客） | 我的 | 设置 |
+| 收藏（游客） | 我的（Mac） | 设置 |
 | --- | --- | --- |
-| ![收藏](docs/screenshots/redesign/library-light.png) | ![我的](docs/screenshots/redesign/profile-light.png) | ![设置](docs/screenshots/settings.png) |
+| ![收藏](docs/screenshots/redesign/library-light.png) | ![我的](docs/screenshots/profile-dashboard/mac-profile-light.png) | ![设置](docs/screenshots/settings.png) |
+
+我的页的浅深色、概览、好友、人物收藏与评分列表见 [profile-dashboard](docs/screenshots/profile-dashboard/README.md)。
 
 ## 致谢
 

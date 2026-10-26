@@ -48,6 +48,34 @@ extension APIClient {
         try await get("/v0/users/\(username)/collections/\(subjectID)", as: UserSubjectCollection.self, cacheKey: "collection-\(username)-\(subjectID)", ttl: 60, auth: true)
     }
 
+    func userCharacterCollections(_ username: String, limit: Int = 100, offset: Int = 0, auth: Bool = false, force: Bool = false) async throws -> Paged<UserCharacterCollection> {
+        try await get(
+            "/v0/users/\(username)/collections/-/characters",
+            query: [
+                .init(name: "limit", value: String(limit)),
+                .init(name: "offset", value: String(offset))
+            ],
+            as: Paged<UserCharacterCollection>.self,
+            cacheKey: "character-collections-\(username)-\(offset)-\(limit)",
+            ttl: force ? 0 : 600,
+            auth: auth
+        )
+    }
+
+    func userPersonCollections(_ username: String, limit: Int = 100, offset: Int = 0, auth: Bool = false, force: Bool = false) async throws -> Paged<UserPersonCollection> {
+        try await get(
+            "/v0/users/\(username)/collections/-/persons",
+            query: [
+                .init(name: "limit", value: String(limit)),
+                .init(name: "offset", value: String(offset))
+            ],
+            as: Paged<UserPersonCollection>.self,
+            cacheKey: "person-collections-\(username)-\(offset)-\(limit)",
+            ttl: force ? 0 : 600,
+            auth: auth
+        )
+    }
+
     // MARK: - Subjects
 
     func subject(_ id: Int) async throws -> Subject {

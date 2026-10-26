@@ -656,6 +656,89 @@ struct Character: Decodable, Identifiable, Hashable, Sendable {
     var coverURL: URL? { images?.thumbURL }
 }
 
+struct UserCharacterCollection: Decodable, Identifiable, Sendable {
+    let id: Int
+    let name: String
+    let type: Int
+    let images: Images?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, images
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(Int.self, forKey: .id)) ?? 0
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        type = (try? c.decode(Int.self, forKey: .type)) ?? 0
+        images = try? c.decode(Images.self, forKey: .images)
+        createdAt = try? c.decode(String.self, forKey: .createdAt)
+    }
+
+    var coverURL: URL? { images?.thumbURL }
+    var typeName: String {
+        switch type {
+        case 2: "机体"
+        case 3: "舰船"
+        case 4: "组织"
+        default: "角色"
+        }
+    }
+}
+
+struct UserPersonCollection: Decodable, Identifiable, Sendable {
+    let id: Int
+    let name: String
+    let type: Int
+    let career: [String]
+    let images: Images?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, career, images
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(Int.self, forKey: .id)) ?? 0
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        type = (try? c.decode(Int.self, forKey: .type)) ?? 0
+        career = (try? c.decode([String].self, forKey: .career)) ?? []
+        images = try? c.decode(Images.self, forKey: .images)
+        createdAt = try? c.decode(String.self, forKey: .createdAt)
+    }
+
+    var coverURL: URL? { images?.thumbURL }
+    var typeName: String {
+        switch type {
+        case 2: "公司"
+        case 3: "组合"
+        default: "人物"
+        }
+    }
+    var careerText: String {
+        career.map(Self.careerTitle).joined(separator: " · ")
+    }
+
+    private static func careerTitle(_ raw: String) -> String {
+        switch raw {
+        case "producer": "制作人"
+        case "mangaka": "漫画家"
+        case "artist": "画师"
+        case "seiyu": "声优"
+        case "writer": "作家"
+        case "illustrator": "插画师"
+        case "actor": "演员"
+        case "singer": "歌手"
+        case "director": "导演"
+        default: raw
+        }
+    }
+}
+
 struct PersonDetail: Decodable, Identifiable, Sendable {
     let id: Int
     let name: String

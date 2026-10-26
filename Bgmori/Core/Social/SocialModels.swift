@@ -11,6 +11,14 @@ struct SocialComment: Identifiable, Hashable, Sendable {
     let text: String
 }
 
+struct FriendSummary: Identifiable, Hashable, Sendable {
+    let username: String
+    let name: String
+    let avatarURL: URL?
+
+    var id: String { username }
+}
+
 struct GroupSummary: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
