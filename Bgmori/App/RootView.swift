@@ -184,7 +184,11 @@ struct MacShell: View {
                 SectionRootView(section: router.selectedSection)
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
             }
+            // Keep the window backdrop stable while the detail column swaps
+            // pages, so the glass sidebar toggle does not flash white.
+            .background(Color.bgmCanvas)
         }
+        .background(Color.bgmCanvas)
         .frame(minWidth: 960, minHeight: 640)
     }
 }
