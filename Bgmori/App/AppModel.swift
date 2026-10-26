@@ -107,6 +107,8 @@ final class AppModel {
         applyDebugRouteIfNeeded()
         #endif
 
+        await api.prepareMirrors()
+
         // Discover should paint as soon as possible: it does not depend on the
         // account restore or collection sync, so start it alongside them.
         async let calendarLoad: Void = loadCalendar()

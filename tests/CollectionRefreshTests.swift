@@ -40,7 +40,7 @@ private final class CollectionProtocol: URLProtocol, @unchecked Sendable {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CollectionProtocol.self]
         let session = URLSession(configuration: configuration)
-        let api = APIClient(session: session, cache: cache)
+        let api = APIClient(session: session, cache: cache, routing: MirrorRouting(), discoverMirrors: false)
         let responses = CollectionResponses.shared
         // Anonymous public data only; no credentials are read or fabricated.
         responses.set(#"{"total":1,"limit":50,"offset":0,"data":[{"subject_id":8,"subject_type":2,"type":3}]}"#)

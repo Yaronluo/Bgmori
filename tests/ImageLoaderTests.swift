@@ -60,7 +60,7 @@ struct ImageLoaderTests {
         configuration.protocolClasses = [ImageStubProtocol.self]
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        let loader = ImageLoader(session: session, directory: directory)
+        let loader = ImageLoader(session: session, directory: directory, routing: MirrorRouting())
         let original = URL(string: "https://lain.bgm.tv/pic/cover/l/test/cover.jpg")!
         let resized = ImageLoader.requestURL(for: original, maxPixel: 597)
         precondition(resized.path == "/r/600/pic/cover/l/test/cover.jpg")
@@ -90,7 +90,7 @@ struct ImageLoaderTests {
         precondition(ImageRequests.shared.recorded.count == 1, "All sizes sharing a source must share one download")
         precondition(ImageRequests.shared.recorded.first?.value(forHTTPHeaderField: "User-Agent") == APIClient.userAgent)
         _ = await loader.image(for: original, maxPixel: 597)
-        let diskLoader = ImageLoader(session: session, directory: directory)
+        let diskLoader = ImageLoader(session: session, directory: directory, routing: MirrorRouting())
         let diskImage = await diskLoader.image(for: original, maxPixel: 597)
         precondition(diskImage != nil && ImageRequests.shared.recorded.count == 1)
         print("PASS: concurrent sizes share one request, stay sharp, and reuse memory/disk caches")
@@ -160,7 +160,7 @@ struct ImageLoaderTests {
             precondition((response as? HTTPURLResponse)?.statusCode == 200)
             sizes.append(data.count)
         }
-        let loader = ImageLoader(session: session, directory: directory)
+        let loader = ImageLoader(session: session, directory: directory, routing: MirrorRouting())
         let image = await loader.image(for: url, maxPixel: 597)
         precondition(image?.cgImage.height == 597 && sizes[1] < sizes[0])
         print("PASS live: original \(sizes[0]) bytes -> resized \(sizes[1]) bytes; decoded \(image!.cgImage.width)x\(image!.cgImage.height)")

@@ -108,7 +108,9 @@ enum CategoryCatalog {
             guard !["时间", "拼音筛选", "标签"].contains(title), !title.isEmpty else { continue }
             var seen: Set<String> = []
             let options = HTMLSupport.matches(#"<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>"#, in: section[2]).compactMap { link -> CategoryFilterOption? in
-                guard let url = HTMLSupport.absoluteURL(HTMLSupport.decodeEntities(link[1])), url.host == "bgm.tv" else { return nil }
+                guard let rawURL = HTMLSupport.absoluteURL(HTMLSupport.decodeEntities(link[1])) else { return nil }
+                let url = MirrorRouting.shared.canonicalURL(for: rawURL)
+                guard url.host == "bgm.tv" else { return nil }
                 let parts = url.path.split(separator: "/").map(String.init)
                 guard parts.count == 3, parts[0] == type.browserSection, parts[1] == "browser" else { return nil }
                 let value = parts[2]

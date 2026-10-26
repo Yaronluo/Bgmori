@@ -205,7 +205,7 @@ final class AppRouter {
             return
         }
 
-        guard components.host == "bgm.tv" || components.host == "bangumi.tv" else { return }
+        guard MirrorRouting.shared.canonicalURL(for: url).host == "bgm.tv" else { return }
         let parts = components.path.split(separator: "/").map(String.init)
         guard parts.count >= 2 else { return }
         switch parts[0] {

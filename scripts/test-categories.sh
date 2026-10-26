@@ -7,7 +7,7 @@ xcrun swiftc -swift-version 6 -parse-as-library \
   Bgmori/Core/Models/Models.swift \
   Bgmori/Core/Models/CategoryModels.swift \
   Bgmori/Core/Social/HTMLSupport.swift \
-  Bgmori/Core/API/APIClient.swift \
+  Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/APIClient.swift \
   Bgmori/Core/API/APIClient+Endpoints.swift \
   Bgmori/Core/API/APIError.swift \
   Bgmori/Core/API/RateLimiter.swift \

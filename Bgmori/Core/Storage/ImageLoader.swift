@@ -12,13 +12,15 @@ actor ImageLoader {
 
     private let session: URLSession
     private let directory: URL
+    private let routing: MirrorRouting
     private var memory: [String: SendableImage] = [:]
     private var memoryOrder: [String] = []
     private let memoryLimit = 180
     private var downloads: [URL: Task<Data?, Never>] = [:]
     private var generation = UUID()
 
-    init(session: URLSession? = nil, directory: URL? = nil) {
+    init(session: URLSession? = nil, directory: URL? = nil, routing: MirrorRouting = .shared) {
+        self.routing = routing
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.urlCache = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
@@ -32,7 +34,8 @@ actor ImageLoader {
 
     func image(for url: URL, maxPixel: Int) async -> SendableImage? {
         guard maxPixel > 0, !Task.isCancelled else { return nil }
-        let requestURL = Self.requestURL(for: url, maxPixel: maxPixel)
+        let canonical = routing.canonicalURL(for: url)
+        let requestURL = Self.requestURL(for: canonical, maxPixel: maxPixel)
         let key = "\(requestURL.absoluteString)#\(maxPixel)"
         if let cached = memory[key] {
             return cached
@@ -41,7 +44,7 @@ actor ImageLoader {
         let currentGeneration = generation
         // Reuse full-size images cached by earlier versions, including when offline.
         var cgImage: CGImage?
-        if requestURL != url, let original = diskData(for: url) {
+        if requestURL != url, let original = diskData(for: url) ?? diskData(for: canonical) {
             cgImage = downsample(data: original, maxPixel: maxPixel)
         }
         if cgImage == nil, let data = await data(for: requestURL) {
@@ -98,20 +101,26 @@ actor ImageLoader {
         if let download = downloads[url] { return await download.value }
 
         let currentGeneration = generation
-        let download = Task { [session] () -> Data? in
-            do {
-                var request = URLRequest(url: url)
-                request.assumesHTTP3Capable = false
-                request.setValue(APIClient.userAgent, forHTTPHeaderField: "User-Agent")
-                let (data, response) = try await session.data(for: request)
-                guard !Task.isCancelled,
-                      let http = response as? HTTPURLResponse,
-                      (200...299).contains(http.statusCode), !data.isEmpty,
-                      CGImageSourceCreateWithData(data as CFData, nil) != nil else { return nil }
-                return data
-            } catch {
-                return nil
+        let download = Task { [session, routing] () -> Data? in
+            for candidate in routing.candidates(for: url, forRequest: true) {
+                do {
+                    try Task.checkCancellation()
+                    var request = URLRequest(url: candidate)
+                    request.assumesHTTP3Capable = false
+                    request.timeoutInterval = 15
+                    request.setValue(APIClient.userAgent, forHTTPHeaderField: "User-Agent")
+                    let (data, response) = try await session.data(for: request)
+                    guard !Task.isCancelled else { return nil }
+                    guard let http = response as? HTTPURLResponse,
+                          (200...299).contains(http.statusCode), !data.isEmpty,
+                          CGImageSourceCreateWithData(data as CFData, nil) != nil else { continue }
+                    return data
+                } catch {
+                    if Task.isCancelled { return nil }
+                    routing.markUnavailable(candidate)
+                }
             }
+            return nil
         }
         downloads[url] = download
         let data = await download.value

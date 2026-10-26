@@ -151,7 +151,7 @@ struct CategoryTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CategoryProtocol.self]
         let cache = DiskCache(namespace: "BgmoriCategoryTests")
-        let api = APIClient(session: URLSession(configuration: configuration), cache: cache)
+        let api = APIClient(session: URLSession(configuration: configuration), cache: cache, routing: MirrorRouting(), discoverMirrors: false)
         let store = CategoryStore(api: api)
         let run = UUID().uuidString
         let query = CategoryQuery(type: .anime, sort: .rank, year: 2020, tag: "\(run)-filters")
@@ -221,7 +221,7 @@ struct CategoryTests {
         print("PASS: website catalog loading, caching, selection and switching content types")
 
         let panelCache = DiskCache(namespace: "BgmoriCatalogCancellation-\(run)")
-        let panelStore = CategoryStore(api: APIClient(session: URLSession(configuration: configuration), cache: panelCache))
+        let panelStore = CategoryStore(api: APIClient(session: URLSession(configuration: configuration), cache: panelCache, routing: MirrorRouting(), discoverMirrors: false))
         let panelLoad = Task { await panelStore.loadFilters(for: .anime) }
         await Task.yield()
         panelLoad.cancel()

@@ -17,6 +17,7 @@ struct BgmoriApp: App {
         Settings {
             SettingsView()
                 .environment(app)
+                .environment(\.openURL, browserAction)
                 .frame(minWidth: 620, minHeight: 520)
         }
         #else
@@ -31,7 +32,14 @@ struct BgmoriApp: App {
     private var rootView: some View {
         RootView()
             .environment(app)
+            .environment(\.openURL, browserAction)
             .onOpenURL { app.handleOpenURL($0) }
+    }
+
+    private var browserAction: OpenURLAction {
+        OpenURLAction { url in
+            .systemAction(MirrorRouting.shared.preferredURL(for: url))
+        }
     }
 }
 

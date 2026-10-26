@@ -20,12 +20,22 @@ struct SocialTests {
             let social = SocialService(api: api)
             let blogs = try await social.blogList()
             precondition(!blogs.isEmpty)
-            for blog in blogs.prefix(3) {
-                let detail = try await social.blogDetail(id: blog.id)
+            var verified = 0
+            for blog in blogs.prefix(8) {
+                let detail: BlogDetail
+                do {
+                    detail = try await social.blogDetail(id: blog.id)
+                } catch APIError.notFound {
+                    print("SKIP: live blog \(blog.id) was removed after entering the list")
+                    continue
+                }
                 precondition(!detail.content.isEmpty)
                 precondition(!detail.title.isEmpty)
                 print("PASS: live blog \(detail.id), \(detail.content.count) characters")
+                verified += 1
+                if verified == 3 { break }
             }
+            precondition(verified == 3, "Verify three existing live blog bodies")
         }
     }
 }

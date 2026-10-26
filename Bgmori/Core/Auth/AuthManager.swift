@@ -85,7 +85,8 @@ final class AuthManager {
 
         do {
             let state = UUID().uuidString
-            var components = URLComponents(string: "https://bgm.tv/oauth/authorize")!
+            let authorizationURL = await api.browserURL(URL(string: "https://bgm.tv/oauth/authorize")!)
+            var components = URLComponents(url: authorizationURL, resolvingAgainstBaseURL: false)!
             components.queryItems = [
                 .init(name: "client_id", value: settings.oauthClientID.trimmed),
                 .init(name: "response_type", value: "code"),
