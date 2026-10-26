@@ -13,6 +13,9 @@ final class AppModel {
     let categories: CategoryStore
 
     var calendar: [CalendarDay] = []
+    var isLoadingCalendar = false
+    var hasLoadedCalendar = false
+    var calendarError: String?
     var ranking: [Subject] = []
     var seasonal: [Subject] = []
     var isLoadingHome = false
@@ -128,11 +131,21 @@ final class AppModel {
 
     func loadCalendar(force: Bool = false) async {
         guard force || !didLoadCalendar else { return }
+        guard !isLoadingCalendar else { return }
         didLoadCalendar = true
+        isLoadingCalendar = true
+        calendarError = nil
+        defer {
+            isLoadingCalendar = false
+            hasLoadedCalendar = true
+        }
+
         do {
             calendar = try await api.calendar().sorted { $0.weekday.id < $1.weekday.id }
         } catch {
-            showToast((error as? LocalizedError)?.errorDescription ?? "放送表加载失败", isError: true)
+            let message = (error as? LocalizedError)?.errorDescription ?? "放送表加载失败"
+            calendarError = message
+            showToast(message, isError: true)
         }
     }
 

@@ -12,7 +12,7 @@
 ### 浏览
 
 - [x] 首页：继续观看、今日放送、本季新番、排行榜、社区入口
-- [x] 每日放送：周一–周日切换、只看在看、评分与进度
+- [x] 每日放送：周日期切换、今天高亮、只看在看、评分与观看进度
 - [x] 分类：动画 / 书籍 / 音乐 / 游戏 / 三次元，同步官网的分类、题材、来源、地区、受众及游戏平台等选项，支持搜索与组合筛选、年份筛选、热度 / 排名 / 评分排序、滚动自动翻页
 - [x] 条目详情：封面 Hero、评分/排名、标签、信息栏、章节、角色、制作人员、关联条目、吐槽预览
 - [x] 章节详情：播出信息、时长、简介、吐槽
@@ -135,7 +135,9 @@ Bgmori/
 
 | 首页（深色） | 放送 | 搜索 |
 | --- | --- | --- |
-| ![首页深色](docs/screenshots/redesign/home-dark.png) | ![放送](docs/screenshots/redesign/calendar-light.png) | ![搜索](docs/screenshots/redesign/search-light.png) |
+| ![首页深色](docs/screenshots/redesign/home-dark.png) | ![放送](docs/screenshots/calendar-refresh/iphone-calendar-light.png) | ![搜索](docs/screenshots/redesign/search-light.png) |
+
+每日放送的周历、卡片细节与 Mac 截图见 [calendar-refresh](docs/screenshots/calendar-refresh/README.md)。
 
 | 条目 | 吐槽 | 登录 |
 | --- | --- | --- |
