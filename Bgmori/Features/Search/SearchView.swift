@@ -43,28 +43,11 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 26) {
                 if query.trimmed.isEmpty {
-                    recentSection
-                    suggestions
-                } else if store.isSearching {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 60)
-                } else if let errorText = store.errorText {
-                    EmptyStateView(icon: "wifi.exclamationmark", title: "搜索失败", message: errorText, actionTitle: "重试") {
-                        Task { await store.load(request, api: app.api) }
-                    }
-                } else if store.results.isEmpty {
-                    EmptyStateView(icon: "magnifyingglass", title: "没有找到", message: "")
+                    landing
                 } else {
-                    resultGrid
-                }
-                if !query.trimmed.isEmpty && !store.isSearching && store.errorText == nil && store.hasMore {
-                    PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageError) {
-                        await store.loadMore(request, api: app.api)
-                    }
-                    .id(request)
+                    resultsContent
                 }
             }
             .padding(.top, 8)
@@ -85,6 +68,10 @@ struct SearchView: View {
             if !newValue.isEmpty, newValue != query { query = newValue }
         }
         .task(id: request) { await store.load(request, api: app.api) }
+        .task(id: "\(query.trimmed.isEmpty)-\(app.settings.showNSFW)") {
+            guard query.trimmed.isEmpty else { return }
+            await store.loadTrending(api: app.api, includeNSFW: app.settings.showNSFW)
+        }
         .background(Color.bgmCanvas)
         .bgmNavigationTitle("搜索")
         .toolbar {
@@ -100,6 +87,82 @@ struct SearchView: View {
                 .presentationDetents([.medium])
                 #endif
         }
+    }
+
+    private var landing: some View {
+        SearchLandingView(
+            recentSearches: recent,
+            recentSubjects: app.recentSubjects.subjects,
+            includeNSFW: app.settings.showNSFW,
+            trending: store.trending,
+            isLoadingTrending: store.isLoadingTrending,
+            trendingError: store.trendingErrorText,
+            onSearch: { term in
+                scope = .subject
+                query = term
+                remember()
+            },
+            onClearRecentSearches: {
+                recent.removeAll()
+                UserDefaults.standard.set(recent, forKey: "recentSearches")
+            },
+            onClearRecentSubjects: {
+                app.recentSubjects.clear()
+            },
+            onBrowseCategory: { type in
+                browse(type)
+            },
+            onReloadTrending: {
+                Task {
+                    await store.loadTrending(api: app.api, includeNSFW: app.settings.showNSFW, force: true)
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var resultsContent: some View {
+        if store.isSearching {
+            ProgressView("正在搜索…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
+        } else if let errorText = store.errorText {
+            EmptyStateView(icon: "wifi.exclamationmark", title: "搜索失败", message: errorText, actionTitle: "重试") {
+                Task { await store.load(request, api: app.api) }
+            }
+        } else if store.results.isEmpty {
+            EmptyStateView(
+                icon: "magnifyingglass",
+                title: "没有找到相关结果",
+                message: "没有找到“\(query.trimmed)”。试试更短的关键词，或换个类型与年份。",
+                actionTitle: scope == .subject ? "浏览分类" : nil
+            ) {
+                browse(typeFilter ?? .anime)
+            }
+        } else {
+            resultsHeader
+            resultGrid
+            if store.hasMore {
+                PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageError) {
+                    await store.loadMore(request, api: app.api)
+                }
+                .id(request)
+            }
+        }
+    }
+
+    private var resultsHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("搜索结果")
+                .font(.title3.weight(.semibold))
+            if store.total > 0 {
+                Text("约 \(store.total.formatted()) 条")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
     }
 
     private var request: SearchRequest {
@@ -144,57 +207,6 @@ struct SearchView: View {
 
     private var scopePicker: some View {
         TextTabs(values: SearchScope.allCases, selection: $scope, title: { $0.title })
-    }
-
-    @ViewBuilder
-    private var recentSection: some View {
-        if !recent.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("最近搜索").font(.headline)
-                    Spacer()
-                    Button("清空", systemImage: "trash") {
-                        recent.removeAll()
-                        UserDefaults.standard.set(recent, forKey: "recentSearches")
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                }
-                FlowLayout(spacing: 8, lineSpacing: 8) {
-                    ForEach(recent, id: \.self) { term in
-                        TagChip(name: term) { query = term; remember() }
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-        }
-    }
-
-    private var suggestions: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("推荐").font(.headline)
-            FlowLayout(spacing: 10, lineSpacing: 10) {
-                ForEach(["CLANNAD", "攻壳机动队", "俄罗斯方块", "坂本龙一"], id: \.self) { term in
-                    Button {
-                        scope = .subject
-                        query = term
-                        remember()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(term).foregroundStyle(.primary)
-                            Image(systemName: "arrow.up.left").foregroundStyle(.tertiary)
-                        }
-                        .font(.subheadline)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(Color.bgmSecondary, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(.horizontal, 20)
     }
 
     private var resultGrid: some View {
@@ -259,6 +271,22 @@ struct SearchView: View {
         .contentShape(Rectangle())
     }
 
+    private func browse(_ type: SubjectType) {
+        app.categories.selectType(type)
+        app.categories.year = nil
+        app.categories.tag = nil
+        app.categories.selections = [:]
+        app.categories.sort = .heat
+        #if os(macOS)
+        app.router.selectedSection = .categories
+        app.router.macPath.removeAll()
+        #else
+        // Search can be pushed on top of the category stack; return to its root.
+        app.router.categoriesPath.removeAll()
+        app.router.selectedSection = .categories
+        #endif
+    }
+
     private func remember() {
         let term = query.trimmed
         guard !term.isEmpty else { return }
@@ -287,6 +315,11 @@ final class SearchStore {
     private(set) var hasMore = false
     private(set) var errorText: String?
     private(set) var pageError: String?
+    private(set) var total = 0
+    private(set) var trending: [Subject] = []
+    private(set) var isLoadingTrending = false
+    private(set) var trendingErrorText: String?
+    private var loadedTrendingNSFW: Bool?
     private var currentRequest: SearchRequest?
     private var generation = UUID()
     private(set) var nextOffset = 0
@@ -297,6 +330,7 @@ final class SearchStore {
         currentRequest = request
         results = []
         nextOffset = 0
+        total = 0
         hasMore = false
         pageError = nil
         errorText = nil
@@ -312,6 +346,26 @@ final class SearchStore {
         } catch {
             guard generation == id, !Task.isCancelled else { return }
             errorText = error.localizedDescription
+        }
+    }
+
+    func loadTrending(api: APIClient, includeNSFW: Bool, force: Bool = false) async {
+        if !force, loadedTrendingNSFW == includeNSFW, !trending.isEmpty { return }
+        guard !isLoadingTrending else { return }
+        isLoadingTrending = true
+        trendingErrorText = nil
+        defer { isLoadingTrending = false }
+        do {
+            let page = try await api.categorySubjects(
+                query: CategoryQuery(type: .anime, sort: .heat, includeNSFW: includeNSFW),
+                limit: 12
+            )
+            guard !Task.isCancelled else { return }
+            trending = page.data.filter { includeNSFW || !$0.nsfw }
+            loadedTrendingNSFW = includeNSFW
+        } catch {
+            guard !Task.isCancelled else { return }
+            trendingErrorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -334,6 +388,7 @@ final class SearchStore {
     private func append(_ page: (items: [SearchItem], nextOffset: Int, total: Int)) {
         var ids = Set(results.map(\.id))
         results.append(contentsOf: page.items.filter { ids.insert($0.id).inserted })
+        total = page.total
         hasMore = page.nextOffset > nextOffset && page.nextOffset < page.total
         nextOffset = page.nextOffset
     }

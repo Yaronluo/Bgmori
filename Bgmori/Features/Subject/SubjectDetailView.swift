@@ -769,6 +769,9 @@ struct SubjectDetailView: View {
         do {
             let subject = try await app.api.subject(subjectID)
             self.subject = subject
+            if !subject.nsfw || app.settings.showNSFW {
+                app.recentSubjects.record(subject)
+            }
             if selectedEpisodeType == 0, !episodes.contains(where: { $0.type == 0 }) {
                 selectedEpisodeType = 0
             }

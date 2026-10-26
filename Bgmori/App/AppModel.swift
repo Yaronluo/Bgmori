@@ -11,6 +11,7 @@ final class AppModel {
     let router: AppRouter
     let social: SocialService
     let categories: CategoryStore
+    let recentSubjects: RecentSubjectsStore
 
     var calendar: [CalendarDay] = []
     var ranking: [Subject] = []
@@ -35,6 +36,7 @@ final class AppModel {
         self.router = AppRouter()
         self.social = SocialService(api: api)
         self.categories = CategoryStore(api: api)
+        self.recentSubjects = RecentSubjectsStore()
     }
 
     var isGuest: Bool { !auth.isLoggedIn }
