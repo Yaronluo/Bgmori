@@ -6,14 +6,19 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 32) {
-                #if os(macOS)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("发现").font(.largeTitle.bold())
-                }
-                .padding(.horizontal, 20)
-                #endif
-                if let featured = featuredSubject {
-                    featuredSection(featured)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        #if os(macOS)
+                        Text("发现").font(.title2.bold())
+                        Spacer(minLength: 20)
+                        #endif
+                        quickLinks
+                    }
+                    .padding(.horizontal, 20)
+
+                    if let featured = featuredSubject {
+                        featuredSection(featured)
+                    }
                 }
 
                 if !app.continueWatching.isEmpty {
@@ -100,25 +105,6 @@ struct HomeView: View {
             .padding(.top, 8)
             .bgmDesktopContent()
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 2) {
-                Button { app.router.openCalendar() } label: {
-                    Label("每日放送", systemImage: "calendar")
-                        .bgmShortcutLabel()
-                }
-                Button { app.router.selectedSection = .categories } label: {
-                    Label("浏览分类", systemImage: "square.grid.2x2")
-                        .bgmShortcutLabel()
-                }
-            }
-            .font(.subheadline.weight(.medium))
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .padding(4)
-            .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .bgmFloatingControlMargins()
-        }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
         .refreshable { await app.refreshAll() }
@@ -140,6 +126,26 @@ struct HomeView: View {
             }
         }
         #endif
+    }
+
+    private var quickLinks: some View {
+        HStack(spacing: 24) {
+            Button { app.router.openCalendar() } label: {
+                Label("每日放送", systemImage: "calendar")
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("home-calendar")
+            Button { app.router.selectedSection = .categories } label: {
+                Label("浏览分类", systemImage: "square.grid.2x2")
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("home-categories")
+        }
+        .font(.subheadline)
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
     }
 
     private var featuredSubject: Subject? {
@@ -335,6 +341,7 @@ struct FeaturedSubjectCard: View {
         .foregroundStyle(Color.bgmOnArtwork)
         .frame(height: dynamicTypeSize.isAccessibilitySize ? 420 : 260)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

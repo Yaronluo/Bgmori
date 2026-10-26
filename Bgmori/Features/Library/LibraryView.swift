@@ -94,7 +94,6 @@ struct LibraryView: View {
     private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                header
                 if filtered.isEmpty {
                     if app.library.isLoading {
                         ProgressView("同步收藏…")
@@ -175,50 +174,73 @@ struct LibraryView: View {
 
     private var filterControls: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 10) {
-                Text("类型").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+            #if os(macOS)
+            HStack(spacing: 24) {
                 LibraryTypePicker(selection: $subjectType)
+                statusMenu
+                Spacer(minLength: 0)
             }
-            HStack(spacing: 10) {
-                Text("状态").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
-                filterBar
+            header
+            #else
+            LibraryTypePicker(selection: $subjectType)
+            HStack(spacing: 12) {
+                header
+                Spacer(minLength: 0)
+                statusMenu
             }
+            #endif
         }
-        .padding(10)
-        .frame(maxWidth: 560, alignment: .leading)
-        .bgmFloatingGlass(cornerRadius: 18, shadowRadius: 6)
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .bgmFloatingControlMargins()
+        .background(Color.bgmBackground)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(subjectType.map(SubjectType.title(for:)) ?? "全部收藏") · \(typedCollections.count) 部作品 · \(typedCollections.filter { $0.type == CollectionType.doing.rawValue }.count) 部在看")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("library-summary")
-        }
-        .padding(.horizontal, 20)
+        Text("\(typedCollections.count) 部作品 · \(typedCollections.filter { $0.type == CollectionType.doing.rawValue }.count) 部在看")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("library-summary")
     }
 
-    private var filterBar: some View {
-        HStack(spacing: 2) {
-            ForEach(LibraryFilter.allCases) { item in
-                Button {
-                    withAnimation(.snappy(duration: 0.2)) { filter = item }
-                } label: {
+    private var statusMenu: some View {
+        Menu {
+            Picker("收藏状态", selection: $filter) {
+                ForEach(LibraryFilter.allCases) { item in
                     Text(item.title)
-                        .font(.caption.weight(filter == item ? .semibold : .regular))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                        .foregroundStyle(filter == item ? Color.primary : Color.secondary)
-                        .background(filter == item ? Color.primary.opacity(0.05) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-                        .contentShape(Rectangle())
+                        .tag(item)
+                        .accessibilityIdentifier("library-status-\(item.rawValue)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(filter == item ? .isSelected : [])
-                .accessibilityIdentifier("library-status-\(item.rawValue)")
             }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 5) {
+                Text(filter == .all ? "全部状态" : filter.title)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+            }
+            .font(.caption)
+            .foregroundStyle(filter == .all ? Color.secondary : Color.primary)
+            #if os(macOS)
+            .frame(minHeight: 28)
+            #else
+            .frame(minHeight: 44)
+            #endif
+            .contentShape(Rectangle())
         }
+        #if os(macOS)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        #else
+        .menuStyle(.borderlessButton)
+        #endif
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("收藏状态")
+        .accessibilityValue(filter == .all ? "全部状态" : filter.title)
+        .accessibilityIdentifier("library-status-menu")
     }
 
     private func collectionCard(_ item: UserSubjectCollection) -> some View {

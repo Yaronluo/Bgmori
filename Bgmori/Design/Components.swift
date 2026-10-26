@@ -613,6 +613,7 @@ struct TextTabs<Value: Hashable>: View {
     @Binding var selection: Value
     let title: (Value) -> String
     var horizontalPadding: CGFloat = 14
+    var usesUnderline = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
@@ -620,7 +621,7 @@ struct TextTabs<Value: Hashable>: View {
         #if os(macOS)
         32
         #else
-        40
+        usesUnderline ? 44 : 40
         #endif
     }
 
@@ -641,14 +642,20 @@ struct TextTabs<Value: Hashable>: View {
                 } label: {
                     Text(title(value))
                         .font(.subheadline.weight(selection == value ? .semibold : .regular))
-                        .foregroundStyle(selection == value ? Color.primary : Color.secondary)
+                        .foregroundStyle(selection == value ? (usesUnderline ? Color.brandPink : Color.primary) : Color.secondary)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, horizontalPadding)
                         .frame(minHeight: controlHeight)
                         .background {
-                            if selection == value {
+                            if selection == value && !usesUnderline {
                                 Capsule().fill(Color.primary.opacity(0.07))
                                     .matchedGeometryEffect(id: "selection", in: selectionAnimation)
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if selection == value && usesUnderline {
+                                Capsule().fill(Color.brandPink)
+                                    .frame(width: 20, height: 2)
                             }
                         }
                         .contentShape(Capsule())

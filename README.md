@@ -44,7 +44,9 @@
 - [x] 搜索落地页：分类入口、灵感词、最近浏览与热门书架；[两端浅深色截图](docs/screenshots/search-landing/README.md)
 - [x] 年份选择使用紧凑滚动列表，封面标题固定预留两行并在超长时省略；[两端浅深色截图](docs/screenshots/year-picker-cards/README.md)
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
-- [x] Liquid Glass：自定义玻璃 Tab Bar、发现/我的快捷操作栏、分类/搜索/放送/收藏悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[两端浅深色截图](docs/screenshots/compact-controls/README.md)
+- [x] 收藏顶部改为紧凑文字分类，以短下划线标记当前类型；状态收进次级菜单，移除大块玻璃底板；[两端浅深色截图](docs/screenshots/library-compact/README.md)
+- [x] 发现快捷入口与标题对齐，分类使用紧凑文字导航，放送使用轻量周历；手机分类筛选合并为一行，年份和排序收进筛选面板；[两端浅深色截图](docs/screenshots/page-navigation/README.md)
+- [x] Liquid Glass：自定义玻璃 Tab Bar、我的快捷操作栏、搜索悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[早期两端浅深色截图](docs/screenshots/compact-controls/README.md)
 - [x] iPhone 四栏导航：发现 / 分类 / 收藏 / 我的，右上角搜索，今日放送从发现页进入
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统

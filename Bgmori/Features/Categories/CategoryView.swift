@@ -19,11 +19,19 @@ struct CategoryView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             filterControls
-                .bgmFloatingControlMargins()
+                .padding(.horizontal, 20)
+                #if os(macOS)
+                .frame(maxWidth: 1120)
+                .padding(.horizontal, 28)
+                #endif
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .background(Color.bgmCanvas)
+                .overlay(alignment: .bottom) { Divider() }
         }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
-        .bgmLargeNavigationTitle("分类")
+        .bgmNavigationTitle("分类")
         .task(id: query) { await store.load(query) }
         .refreshable { await store.load(query, force: true) }
         .sheet(isPresented: $showFilters) {
@@ -45,9 +53,21 @@ struct CategoryView: View {
             }
         }
         #else
-        VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
             typePicker
-            filterMenus.padding(.horizontal, 8)
+            Button {
+                showFilters = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.subheadline)
+                    .foregroundStyle(hasActiveFilters ? Color.brandPink : Color.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("分类筛选")
+            .accessibilityValue(hasActiveFilters ? "已设置筛选条件" : "全部年份，\(store.sort.title)")
+            .accessibilityIdentifier("category-filters")
         }
         #endif
     }
@@ -56,10 +76,11 @@ struct CategoryView: View {
         TextTabs(values: SubjectType.browsingTypes, selection: Binding(
             get: { store.type },
             set: { store.selectType($0) }
-        ), title: { $0.title })
-        .padding(4)
-        .frame(maxWidth: 370)
-        .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
+        ), title: { $0.title }, horizontalPadding: 10, usesUnderline: true)
+    }
+
+    private var hasActiveFilters: Bool {
+        store.selectedFilterCount > 0 || store.year != nil || store.sort != .heat
     }
 
     private var filterMenus: some View {
@@ -169,6 +190,14 @@ private struct CategoryFilterSheet: View {
 
     private var searchText: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    private var canReset: Bool {
+        #if os(iOS)
+        store.selectedFilterCount > 0 || store.year != nil || store.sort != .heat
+        #else
+        store.selectedFilterCount > 0
+        #endif
+    }
+
     private var groups: [CategoryFilterGroup] {
         store.filterGroups.compactMap { group in
             let options = group.options.filter {
@@ -181,12 +210,41 @@ private struct CategoryFilterSheet: View {
     }
 
     var body: some View {
-        FilterSheet("\(store.type.title)筛选", canReset: store.selectedFilterCount > 0, reset: {
+        FilterSheet("\(store.type.title)筛选", canReset: canReset, reset: {
             store.selections = [:]
             store.tag = nil
+            #if os(iOS)
+            store.year = nil
+            store.sort = .heat
+            #endif
             search = ""
         }, accessory: AnyView(catalogMenu)) {
             VStack(spacing: 0) {
+                #if os(iOS)
+                HStack(spacing: 24) {
+                    YearPickerButton(selection: $store.year) {
+                        Label(store.year.map(String.init) ?? "全部年份", systemImage: "calendar")
+                    }
+                    Menu {
+                        Picker("排序", selection: $store.sort) {
+                            ForEach(CategorySort.allCases) { sort in
+                                Text(sort.title).tag(sort)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Label(store.sort.title, systemImage: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("排序：\(store.sort.title)")
+                    .accessibilityIdentifier("category-sort")
+                    Spacer(minLength: 0)
+                }
+                .font(.subheadline)
+                .frame(minHeight: 44)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                Divider().padding(.horizontal, 20)
+                #endif
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                     TextField("搜索分类、题材、平台", text: $search)

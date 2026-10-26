@@ -23,7 +23,7 @@ struct CalendarView: View {
                     }
                     .frame(width: contentWidth, alignment: .leading)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 18)
+                    .padding(.top, 12)
                     .padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
@@ -37,14 +37,17 @@ struct CalendarView: View {
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     weekdaySelector
-                        .frame(width: contentWidth)
-                        .padding(.vertical, 8)
+                        .frame(maxWidth: 420)
+                        .frame(width: contentWidth, alignment: .leading)
+                        .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
+                        .background(Color.bgmGroupedBackground)
+                        .overlay(alignment: .bottom) { Divider() }
                 }
             }
         }
         .background(Color.bgmGroupedBackground)
-        .bgmLargeNavigationTitle("每日放送")
+        .bgmNavigationTitle("每日放送")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -169,8 +172,6 @@ struct CalendarView: View {
                 }
             }
         }
-        .padding(5)
-        .bgmFloatingGlass(cornerRadius: 26, shadowRadius: 6)
     }
 
     private var weekDates: [Int: Date] {
@@ -281,38 +282,33 @@ private struct WeekdayChip: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                HStack(spacing: 3) {
-                    Text(day.weekday.shortName)
-                        .font(.caption2.weight(isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-                    Text("\(day.items.count)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(isSelected ? Color.primary.opacity(0.55) : Color.secondary.opacity(0.7))
-                }
+                Text(day.weekday.shortName)
+                    .font(.caption2.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
                 Text(dayNumber)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(isToday ? Color.brandPink : Color.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
 
-                Circle()
-                    .fill(Color.brandPink)
-                    .frame(width: 4, height: 4)
-                    .opacity(isToday ? 1 : 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 52)
+            #if os(macOS)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            #else
+            .frame(maxWidth: .infinity, minHeight: 48)
+            #endif
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.primary.opacity(0.07))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.brandPink.opacity(0.08))
                         .matchedGeometryEffect(id: "selected-day", in: namespace)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityText)
