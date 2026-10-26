@@ -48,6 +48,15 @@ extension Color {
         #endif
     }
 
+    /// Grouped page canvas: the surface cards sit on this color.
+    static var bgmGroupedBackground: Color {
+        #if os(iOS)
+        Color(uiColor: .systemGroupedBackground)
+        #else
+        Color(nsColor: .underPageBackgroundColor)
+        #endif
+    }
+
     static var bgmSecondary: Color {
         Color.primary.opacity(0.07)
     }
