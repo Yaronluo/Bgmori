@@ -20,6 +20,7 @@
 		456AAEE36A25DD44E89E7790 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D83B48129417AAEFC8FF45 /* Keychain.swift */; };
 		4A618D01F5FDA25AF31C3F3D /* RateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E67FB12956B4AF9A3F67A3EC /* RateLimiter.swift */; };
 		4E2BEF61C3C5BC4D003315D8 /* APIClient+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400A1B591FB98F0589FD3EC3 /* APIClient+Endpoints.swift */; };
+		5D0D39962E4837D427FB6305 /* TagResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 541F34A07EF1EA3F62EB6EE8 /* TagResultsView.swift */; };
 		608FFEA763FFE483ED74AA7D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC7DF02D5DDC0F78DC46A6F /* APIClient.swift */; };
 		64646CE5D0E0951D07BF82E3 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EA25A979D6CE77B005FF7B /* AppRouter.swift */; };
 		6C44FF311EA90CC6BD22E1C1 /* CategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209ED8EAE061970AA57BECF3 /* CategoryView.swift */; };
@@ -68,6 +69,7 @@
 		51D83B48129417AAEFC8FF45 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		521CD6E625A609413A8CD1DB /* SubjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectDetailView.swift; sourceTree = "<group>"; };
 		539C49A9FD64DA38E1C7C63A /* CollectionEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionEditorView.swift; sourceTree = "<group>"; };
+		541F34A07EF1EA3F62EB6EE8 /* TagResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagResultsView.swift; sourceTree = "<group>"; };
 		63D3F6E4A9B3EDAFE125A984 /* EpisodeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDetailView.swift; sourceTree = "<group>"; };
 		6E090669CE60F5D9E3EBC09E /* BgmoriApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BgmoriApp.swift; sourceTree = "<group>"; };
 		72198155A931505FA0D01F04 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 			children = (
 				CDF2F518B5D00912B0A3D5EB /* SearchLanding.swift */,
 				72198155A931505FA0D01F04 /* SearchView.swift */,
+				541F34A07EF1EA3F62EB6EE8 /* TagResultsView.swift */,
 			);
 			path = Search;
 			sourceTree = "<group>";
@@ -462,6 +465,7 @@
 				B50A117FFEC6DBCBC23AF6AD /* SocialService.swift in Sources */,
 				C2E68A772F9BEA74F70DB494 /* SocialViews.swift in Sources */,
 				327A21C6AC8A0C236A82DEDF /* SubjectDetailView.swift in Sources */,
+				5D0D39962E4837D427FB6305 /* TagResultsView.swift in Sources */,
 				FD60598959B7C80A42D656FA /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

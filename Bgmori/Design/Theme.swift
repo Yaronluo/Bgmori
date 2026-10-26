@@ -95,6 +95,30 @@ extension Font {
     static let bgmNumber = Font.system(.headline, design: .rounded).monospacedDigit()
 }
 
+struct BgmPanelModifier: ViewModifier {
+    var cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            #if os(iOS)
+            .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            #else
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            }
+            #endif
+    }
+}
+
+extension View {
+    /// Grouped card surface: grouped fill on iOS, a lifted panel on macOS.
+    func bgmPanel(cornerRadius: CGFloat = 16) -> some View {
+        modifier(BgmPanelModifier(cornerRadius: cornerRadius))
+    }
+}
+
 struct GlassSurface<Content: View>: View {
     var shape: AnyShape
     var content: Content

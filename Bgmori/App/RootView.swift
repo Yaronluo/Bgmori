@@ -240,6 +240,7 @@ struct RouteView: View {
         case .timeline(let name): TimelineView(username: name)
         case .index(let id): IndexDetailView(indexID: id)
         case .revisions(let id): RevisionsView(subjectID: id)
+        case .tag(let name): TagResultsView(tag: name)
         }
     }
 }

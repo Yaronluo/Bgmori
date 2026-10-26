@@ -38,6 +38,56 @@ struct CachedAsyncImage: View {
     }
 }
 
+/// Fills its frame like `CachedAsyncImage(contentMode: .fill)`, but anchors the
+/// crop so tall character artwork keeps the head in view.
+struct FocusedAsyncImage: View {
+    let url: URL?
+    var maxPixel: Int = 400
+    var placeholderTint: Color = .bgmSecondary
+    var focus: UnitPoint = .top
+
+    @State private var image: SendableImage?
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if let image {
+                    let size = CGSize(width: CGFloat(image.cgImage.width), height: CGFloat(image.cgImage.height))
+                    let scale = max(proxy.size.width / max(size.width, 1), proxy.size.height / max(size.height, 1))
+                    let width = size.width * scale
+                    let height = size.height * scale
+
+                    Image(decorative: image.cgImage, scale: 1)
+                        .resizable()
+                        .frame(width: width, height: height)
+                        .position(
+                            x: (proxy.size.width - width) * focus.x + width / 2,
+                            y: (proxy.size.height - height) * focus.y + height / 2
+                        )
+                } else {
+                    LinearGradient(
+                        colors: [placeholderTint.opacity(0.55), placeholderTint.opacity(0.22)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.system(size: 18, weight: .light))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
+        }
+        .task(id: "\(url?.absoluteString ?? "")-\(Int(maxPixel))") {
+            image = nil
+            guard let url else { return }
+            image = await ImageLoader.shared.image(for: url, maxPixel: maxPixel)
+        }
+    }
+}
+
 struct CoverCard: View {
     @Environment(\.displayScale) private var displayScale
 
@@ -228,6 +278,41 @@ struct TagChip: View {
         #endif
         .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
         .background(isSelected ? Color.brandPink : Color.bgmSecondary, in: Capsule())
+    }
+}
+
+/// A titled panel used by detail pages. The card clips its content so horizontal
+/// shelves stay inside the rounded surface.
+struct SectionCard<Content: View>: View {
+    let title: String
+    var accessory: AnyView?
+    let content: Content
+
+    init(_ title: String, accessory: AnyView? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.accessory = accessory
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(title)
+                    #if os(iOS)
+                    .font(.system(size: 17, weight: .semibold))
+                    #else
+                    .font(.system(size: 15, weight: .semibold))
+                    #endif
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                accessory
+            }
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bgmPanel(cornerRadius: 16)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

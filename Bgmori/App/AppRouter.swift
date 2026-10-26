@@ -62,6 +62,7 @@ enum Route: Hashable {
     case timeline(String)
     case index(Int)
     case revisions(Int)
+    case tag(String)
 }
 
 @MainActor
