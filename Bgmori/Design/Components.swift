@@ -31,7 +31,9 @@ struct CachedAsyncImage: View {
         .task(id: "\(url?.absoluteString ?? "")-\(Int(maxPixel))") {
             image = nil
             guard let url else { return }
-            image = await ImageLoader.shared.image(for: url, maxPixel: maxPixel)
+            let loaded = await ImageLoader.shared.image(for: url, maxPixel: maxPixel)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }
