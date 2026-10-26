@@ -349,7 +349,7 @@ struct HomeView: View {
         EmptyStateView(
             icon: "wifi.exclamationmark",
             title: "暂时无法加载",
-            message: "请检查网络连接后重试。",
+            message: app.homeError ?? "请检查网络连接后重试。",
             actionTitle: "重试"
         ) {
             Task { await app.refreshAll() }
@@ -418,27 +418,26 @@ struct HomeView: View {
         return "\(components.month ?? 1) 月 \(components.day ?? 1) 日 · \(names[weekday])"
     }
 
-    private var showsSkeleton: Bool {
-        app.isLoadingHome
-            && app.trending.isEmpty
+    private var hasNoHomeContent: Bool {
+        app.trending.isEmpty
             && app.seasonal.isEmpty
             && app.ranking.isEmpty
             && app.movies.isEmpty
             && app.continueWatching.isEmpty
             && app.todayAiring.isEmpty
+    }
+
+    private var showsSkeleton: Bool {
+        // Keep the skeleton up from launch until the first discover load finishes;
+        // otherwise the empty state flashes while the account is being restored.
+        (!app.hasLoadedHome || app.isLoadingHome) && hasNoHomeContent
     }
 
     private var showsEmptyState: Bool {
-        !app.isLoadingHome
-            && app.trending.isEmpty
-            && app.seasonal.isEmpty
-            && app.ranking.isEmpty
-            && app.movies.isEmpty
-            && app.continueWatching.isEmpty
-            && app.todayAiring.isEmpty
+        app.hasLoadedHome && !app.isLoadingHome && hasNoHomeContent
     }
 
     private var showsGuestCard: Bool {
-        app.isGuest && !app.isLoadingHome && !showsEmptyState
+        app.isGuest && app.hasLoadedHome && !app.isLoadingHome && !showsEmptyState
     }
 }

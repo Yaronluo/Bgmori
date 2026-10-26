@@ -769,11 +769,14 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
     let name: String
     let nameCn: String
     let images: Images?
+    /// `/v0/characters/{id}/subjects` and `/v0/persons/{id}/subjects` return a
+    /// single cover URL instead of the `images` object used by subject relations.
+    let image: String?
     let relation: String
     let type: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, name, images, relation, type
+        case id, name, images, image, relation, staff, type
         case nameCn = "name_cn"
     }
 
@@ -783,7 +786,11 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
         name = (try? c.decode(String.self, forKey: .name)) ?? ""
         nameCn = (try? c.decode(String.self, forKey: .nameCn)) ?? ""
         images = try? c.decode(Images.self, forKey: .images)
-        relation = (try? c.decode(String.self, forKey: .relation)) ?? ""
+        image = try? c.decode(String.self, forKey: .image)
+        // Character/person credits call the relation "staff"; subject relations use "relation".
+        relation = (try? c.decode(String.self, forKey: .relation))
+            ?? (try? c.decode(String.self, forKey: .staff))
+            ?? ""
         type = (try? c.decode(Int.self, forKey: .type)) ?? 0
     }
 
@@ -791,7 +798,7 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     var displayTitle: String { nameCn.isEmpty ? name : nameCn }
-    var coverURL: URL? { images?.gridURL }
+    var coverURL: URL? { images?.gridURL ?? Images.normalized(image) }
 }
 
 // MARK: - Calendar

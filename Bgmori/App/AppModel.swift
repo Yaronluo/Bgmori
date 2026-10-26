@@ -22,6 +22,8 @@ final class AppModel {
     var trending: [Subject] = []
     var movies: [Subject] = []
     var isLoadingHome = false
+    var hasLoadedHome = false
+    var homeError: String?
     var showLogin = false
     var showSettings = false
     var toast: ToastMessage?
@@ -105,12 +107,17 @@ final class AppModel {
         applyDebugRouteIfNeeded()
         #endif
 
+        // Discover should paint as soon as possible: it does not depend on the
+        // account restore or collection sync, so start it alongside them.
+        async let calendarLoad: Void = loadCalendar()
+        async let homeLoad: Void = loadHome()
+
         await auth.restore()
         if auth.isLoggedIn, let username = auth.username {
             await library.loadAll(username: username, force: true)
         }
-        await loadCalendar()
-        await loadHome()
+        await calendarLoad
+        await homeLoad
         await updateDailyReminder()
     }
 
@@ -196,7 +203,11 @@ final class AppModel {
         guard !isLoadingHome else { return }
         isLoadingHome = true
         didLoadHome = true
-        defer { isLoadingHome = false }
+        homeError = nil
+        defer {
+            isLoadingHome = false
+            hasLoadedHome = true
+        }
 
         let season = currentSeason()
         let today = isoDate(Date())
@@ -279,7 +290,9 @@ final class AppModel {
         if !loadedMovies.isEmpty { movies = loadedMovies }
 
         if loadedTrending.isEmpty && loadedRanking.isEmpty && loadedSeasonal.isEmpty && loadedMovies.isEmpty {
-            showToast("发现页加载失败，请检查网络后重试", isError: true)
+            let message = "发现页加载失败，请检查网络后重试"
+            homeError = message
+            showToast(message, isError: true)
         }
     }
 
