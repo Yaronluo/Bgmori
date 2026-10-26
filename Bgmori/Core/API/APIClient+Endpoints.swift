@@ -85,13 +85,16 @@ extension APIClient {
         var filter = SubjectSearchFilter()
         filter.type = [query.type.rawValue]
         filter.tag = query.tag.map { [$0] }
+        filter.metaTags = query.metaTags.isEmpty ? nil : Array(Set(query.metaTags)).sorted()
         filter.nsfw = query.includeNSFW ? nil : false
         if let year = query.year {
             filter.airDate = [">=\(year)-01-01", "<\(year + 1)-01-01"]
         }
         if query.sort == .rank { filter.rank = [">0"] }
         let body = SubjectSearchRequest(keyword: "", sort: query.sort.rawValue, filter: filter)
-        let cacheKey = "categories-\(query.type.rawValue)-\(query.sort.rawValue)-\(query.year ?? 0)-\(query.tag ?? "")-\(query.includeNSFW)-\(limit)-\(offset)"
+        let keyEncoder = JSONEncoder()
+        keyEncoder.outputFormatting = .sortedKeys
+        let cacheKey = "categories-v2-\(String(decoding: try keyEncoder.encode(body), as: UTF8.self))-\(limit)-\(offset)"
         return try await post(
             "/v0/search/subjects",
             body: body,
@@ -101,6 +104,11 @@ extension APIClient {
             cacheKey: cacheKey,
             ttl: force ? 0 : 1_800
         )
+    }
+
+    func categoryFilters(type: SubjectType, force: Bool = false) async throws -> [CategoryFilterGroup] {
+        let html = try await rawHTML(type.browserURL, cacheKey: "category-filters-\(type.rawValue)", ttl: force ? 0 : 86_400)
+        return try CategoryCatalog.parse(html, type: type)
     }
 
     func searchCharacters(keyword: String, limit: Int = 24, offset: Int = 0) async throws -> Paged<Character> {
