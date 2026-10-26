@@ -556,6 +556,10 @@ struct UserSubjectCollection: Decodable, Identifiable, Sendable {
     var collectionType: CollectionType { CollectionType(rawValue: type) ?? .wish }
     var title: String { subject?.displayTitle ?? "条目 #\(subjectId)" }
     var coverURL: URL? { subject?.coverURL }
+    var reviewText: String? {
+        guard let text = comment?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
+    }
     var progressText: String {
         let total = subject?.eps ?? 0
         if total > 0 { return "\(epStatus)/\(total)" }

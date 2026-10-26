@@ -43,7 +43,7 @@ enum LibrarySort: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .updated: "最近更新"
-        case .score: "评分"
+        case .score: "我的评分"
         case .title: "标题"
         }
     }
@@ -54,7 +54,7 @@ struct LibraryView: View {
     @State private var filter: LibraryFilter = .all
     @State private var subjectType: Int?
     @State private var sort: LibrarySort = .updated
-    @State private var isGrid = true
+    @State private var isGrid = false
     @State private var searchText = ""
 
     var body: some View {
@@ -111,19 +111,14 @@ struct LibraryView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(filtered) { item in
                             NavigationLink(value: Route.subject(item.subjectId)) {
-                                SubjectRow(
-                                    title: item.title,
-                                    subtitle: "\(item.collectionType.title) · \(item.progressText) · \(item.subject?.ratingText ?? "—")",
-                                    coverURL: item.coverURL,
-                                    trailing: item.progressText,
-                                    tint: .subjectTint(item.subjectType)
-                                )
+                                CollectionReviewRow(item: item)
                                 .padding(.horizontal, 20)
-                                .padding(.vertical, 6)
+                                .padding(.vertical, 16)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("library-row-\(item.subjectId)")
                             .contextMenu { contextMenu(for: item) }
-                            Divider().padding(.leading, 84)
+                            Divider().padding(.horizontal, 20)
                         }
                     }
                 }
@@ -208,15 +203,22 @@ struct LibraryView: View {
     }
 
     private func collectionCard(_ item: UserSubjectCollection) -> some View {
-        CoverCard(
-            title: item.title,
-            subtitle: "\(item.collectionType.title) · \(item.progressText) · \(item.subject?.ratingText ?? "—")",
-            coverURL: item.coverURL,
-            badge: item.progressText.isEmpty ? item.collectionType.title : item.progressText,
-            progress: item.progressFraction,
-            tint: .subjectTint(item.subjectType),
-            width: nil
-        )
+        VStack(alignment: .leading, spacing: 10) {
+            CoverCard(
+                title: item.title,
+                subtitle: item.collectionType.title,
+                coverURL: item.coverURL,
+                badge: item.collectionType == .doing && !item.progressText.isEmpty ? item.progressText : nil,
+                progress: item.progressFraction,
+                tint: .subjectTint(item.subjectType),
+                width: nil
+            )
+            CollectionPersonalRating(rate: item.rate)
+            if let review = item.reviewText {
+                CollectionReviewText(text: review)
+                    .lineLimit(4)
+            }
+        }
     }
 
     @ViewBuilder
@@ -245,10 +247,14 @@ struct LibraryView: View {
         case .updated:
             items.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
         case .score:
-            items.sort { ($0.subject?.score ?? 0) > ($1.subject?.score ?? 0) }
+            items.sort {
+                if $0.rate != $1.rate { return $0.rate > $1.rate }
+                return ($0.updatedAt ?? "") > ($1.updatedAt ?? "")
+            }
         case .title:
             items.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         }
         return items
     }
+
 }
