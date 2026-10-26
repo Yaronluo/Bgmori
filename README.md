@@ -28,7 +28,7 @@
 - [x] OAuth 2.0 登录（Authorization Code + ASWebAuthenticationSession）
 - [x] 手动 Access Token 登录（方便私人使用）
 - [x] Token 刷新、Keychain 存储、401 处理
-- [x] 收藏状态：想看 / 看过 / 在看 / 搁置 / 抛弃
+- [x] 收藏状态：想看 / 看过 / 在看 / 搁置 / 抛弃；收藏编辑采用分段状态、十分制评分滑杆、进度条与轻量输入区，Mac 评分与进度并排；[两端浅深色截图](docs/screenshots/collection-editor/README.md)
 - [x] 评分（1–10）、标签、短评、私密标记
 - [x] 章节进度：单话切换、批量“看到第 N 话”
 - [x] 书籍卷/话进度
