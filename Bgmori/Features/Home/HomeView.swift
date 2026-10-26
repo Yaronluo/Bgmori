@@ -108,6 +108,7 @@ struct HomeView: View {
         Text(dateLine)
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("今天是 \(dateLine)")
     }
 
@@ -131,7 +132,9 @@ struct HomeView: View {
                 Text(title)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
             }
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 12)
             #if os(macOS)
             .frame(height: 30)
@@ -146,6 +149,7 @@ struct HomeView: View {
             #endif
         }
         .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
         .accessibilityIdentifier(identifier)
     }
 
@@ -310,6 +314,7 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 20)
+        .accessibilityIdentifier("home-guest-card")
     }
 
     private var loadingSkeleton: some View {
