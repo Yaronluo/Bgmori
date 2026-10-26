@@ -37,6 +37,7 @@
 - [x] 我的：账号概览、继续观看、最近浏览、评分分布与收藏构成、好友、角色 / 人物收藏、时光机与社区入口；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
 - [x] 我的评分：平均分、评分分布、按评分 / 更新 / 标题排序的短评列表
 - [x] 本地缓存：API JSON 缓存、图片磁盘/内存缓存、离线可读
+- [x] 自动镜像：从 bangumi.wiki 获取 API、图片与网页地址，缓存镜像目录并使用 ETag 更新；读取失败时尝试其他地址，写请求不自动重复发送
 - [x] 本地每日放送通知（完全本地计算）
 
 ### 设计
@@ -98,7 +99,9 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 导航回归检查：`bash scripts/test-navigation.sh`，分别运行 Mac 与 iPhone 17 模拟器上的搜索、放送、日志详情和返回路径检查。
 
-日志解析检查：`bash scripts/test-social.sh`；加上 `--live` 会读取真实日志列表并验证前三篇正文。
+日志解析检查：`bash scripts/test-social.sh`；加上 `--live` 会读取真实日志列表并验证三篇仍可访问的正文，列表中已删除的日志会明确跳过。
+
+镜像接入检查：`bash scripts/test-mirrors.sh --live`，在 Mac 与 iPhone 17 上验证域名更新、目录缓存、ETag、读取回退、人机验证识别、写请求不重放，以及真实条目和封面加载。来源说明统一位于「设置 → 关于软件」。
 
 ## 登录配置
 
