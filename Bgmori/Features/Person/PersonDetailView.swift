@@ -77,6 +77,7 @@ struct PersonDetailView: View {
                 relatedSection
             }
             .padding(.top, 10)
+            .bgmDesktopContent(maxWidth: 1000)
         }
     }
 
@@ -101,6 +102,7 @@ struct PersonDetailView: View {
                 relatedSection
             }
             .padding(.top, 10)
+            .bgmDesktopContent(maxWidth: 1000)
         }
     }
 
@@ -167,25 +169,19 @@ struct PersonDetailView: View {
                 Text("参与作品")
                     .font(.bgmSection)
                     .padding(.horizontal, 20)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12, alignment: .top)], alignment: .leading, spacing: 14) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 16, alignment: .top)], alignment: .leading, spacing: 20) {
                     ForEach(related) { item in
                         NavigationLink(value: Route.subject(item.id)) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                CachedAsyncImage(url: item.coverURL, maxPixel: 260, placeholderTint: .subjectTint(item.type))
-                                    .frame(height: 140)
-                                    .frame(maxWidth: .infinity)
-                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                                Text(item.displayTitle)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .lineLimit(2, reservesSpace: true)
-                                    .truncationMode(.tail)
-                                Text(item.relation)
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                            CoverCard(
+                                title: item.displayTitle,
+                                subtitle: item.relation,
+                                coverURL: item.coverURL,
+                                tint: .subjectTint(item.type),
+                                width: nil
+                            )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("person-related-\(item.id)")
                     }
                 }
                 .padding(.horizontal, 20)
