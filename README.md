@@ -57,6 +57,14 @@
 
 ## 运行
 
+在当前 Mac 上构建并更新日常使用的应用：
+
+```bash
+bash scripts/build-install-macos.sh
+```
+
+脚本会构建 arm64 Mac 版本、校验本地签名、备份旧应用、替换 `/Applications/Bgmori.app` 并重新打开，最后比对安装包与构建产物。旧应用保存在 `~/Library/Application Support/Bgmori/BuildBackups/`。只执行 `xcodebuild` 会更新构建目录，不会替换「应用程序」里的副本。
+
 ```bash
 cd Bgmori
 open Bgmori.xcodeproj
