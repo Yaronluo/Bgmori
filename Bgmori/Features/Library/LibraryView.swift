@@ -127,8 +127,11 @@ struct LibraryView: View {
             .padding(.top, 8)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            filterBar
-                .frame(maxWidth: 440)
+            VStack(alignment: .leading, spacing: 4) {
+                LibraryTypePicker(selection: $subjectType)
+                filterBar
+            }
+                .frame(maxWidth: 460, alignment: .leading)
                 .padding(4)
                 .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,21 +147,15 @@ struct LibraryView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Picker("类型", selection: $subjectType) {
-                        Text("全部类型").tag(Int?.none)
-                        ForEach(SubjectType.allCases) { type in
-                            Text(type.title).tag(Optional(type.rawValue))
-                        }
-                    }
                     Picker("排序", selection: $sort) {
                         ForEach(LibrarySort.allCases) { value in
                             Text(value.title).tag(value)
                         }
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    Image(systemName: "arrow.up.arrow.down")
                 }
-                .accessibilityLabel("筛选")
+                .accessibilityLabel("排序")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -173,9 +170,10 @@ struct LibraryView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("\(app.library.collections.count) 部作品 · \(app.library.watching.count) 部在看")
+            Text("\(subjectType.map(SubjectType.title(for:)) ?? "全部收藏") · \(typedCollections.count) 部作品 · \(typedCollections.filter { $0.type == CollectionType.doing.rawValue }.count) 部在看")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("library-summary")
         }
         .padding(.horizontal, 20)
     }
@@ -236,9 +234,8 @@ struct LibraryView: View {
     }
 
     private var filtered: [UserSubjectCollection] {
-        var items = Array(app.library.collections.values)
+        var items = typedCollections
         if let type = filter.type { items = items.filter { $0.type == type.rawValue } }
-        if let subjectType { items = items.filter { $0.subjectType == subjectType } }
         if !searchText.trimmed.isEmpty {
             let query = searchText.trimmed
             items = items.filter { $0.title.localizedCaseInsensitiveContains(query) }
@@ -257,4 +254,7 @@ struct LibraryView: View {
         return items
     }
 
+    private var typedCollections: [UserSubjectCollection] {
+        app.library.collections.values.filter { subjectType == nil || $0.subjectType == subjectType }
+    }
 }

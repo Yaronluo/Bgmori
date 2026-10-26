@@ -393,6 +393,7 @@ struct TextTabs<Value: Hashable>: View {
     let values: [Value]
     @Binding var selection: Value
     let title: (Value) -> String
+    var horizontalPadding: CGFloat = 14
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
@@ -423,7 +424,7 @@ struct TextTabs<Value: Hashable>: View {
                         .font(.subheadline.weight(selection == value ? .semibold : .regular))
                         .foregroundStyle(selection == value ? Color.primary : Color.secondary)
                         .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, horizontalPadding)
                         .frame(minHeight: controlHeight)
                         .background {
                             if selection == value {
