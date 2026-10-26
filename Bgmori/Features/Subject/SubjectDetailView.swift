@@ -967,11 +967,11 @@ struct SubjectDetailView: View {
                                 Color.bgmSecondary.opacity(0.6)
                                     .aspectRatio(2.0 / 3.0, contentMode: .fit)
                                     .overlay {
-                                        FocusedAsyncImage(
+                                        CachedAsyncImage(
                                             url: character.coverURL,
                                             maxPixel: 420,
-                                            placeholderTint: .brandPink,
-                                            focus: .top
+                                            contentMode: .fit,
+                                            placeholderTint: .brandPink
                                         )
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -1012,7 +1012,7 @@ struct SubjectDetailView: View {
                     ForEach(persons.prefix(12)) { person in
                         NavigationLink(value: Route.person(person.id)) {
                             HStack(spacing: 10) {
-                                CachedAsyncImage(url: person.coverURL, maxPixel: 160)
+                                CachedAsyncImage(url: person.coverURL, maxPixel: 160, contentMode: .fit)
                                     .frame(width: 32, height: 42)
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
@@ -1054,7 +1054,8 @@ struct SubjectDetailView: View {
 
                                     Text(relation.displayTitle)
                                         .font(.system(size: 11.5, weight: .medium))
-                                        .lineLimit(2)
+                                        .lineLimit(2, reservesSpace: true)
+                                        .truncationMode(.tail)
                                         .frame(width: 92, alignment: .leading)
 
                                     Text(relation.relation)

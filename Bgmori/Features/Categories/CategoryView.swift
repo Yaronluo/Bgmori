@@ -73,17 +73,9 @@ struct CategoryView: View {
             .accessibilityLabel("分类筛选")
             .accessibilityIdentifier("category-filters")
 
-            Menu {
-                Picker("年份", selection: $categories.year) {
-                    Text("全部年份").tag(Int?.none)
-                    ForEach(years, id: \.self) { year in
-                        Text(String(year)).tag(Optional(year))
-                    }
-                }
-            } label: {
+            YearPickerButton(selection: $categories.year) {
                 filterLabel(store.year.map(String.init) ?? "年份")
             }
-            .accessibilityLabel("年份：\(store.year.map(String.init) ?? "全部年份")")
 
             Menu {
                 Picker("排序", selection: $categories.sort) {
@@ -123,10 +115,6 @@ struct CategoryView: View {
         .frame(minHeight: 32)
         #endif
         .contentShape(Rectangle())
-    }
-
-    private var years: [Int] {
-        Array((1900...Calendar.current.component(.year, from: Date())).reversed())
     }
 
     @ViewBuilder
@@ -175,12 +163,10 @@ struct CategoryView: View {
 }
 
 private struct CategoryFilterSheet: View {
-    @Environment(\.dismiss) private var dismiss
     @Bindable var store: CategoryStore
     let includeNSFW: Bool
     @State private var search = ""
 
-    private let columns = [GridItem(.adaptive(minimum: 86), spacing: 8)]
     private var searchText: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var groups: [CategoryFilterGroup] {
@@ -195,109 +181,134 @@ private struct CategoryFilterSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if store.isLoadingFilters && store.filterGroups.isEmpty {
-                        ProgressView("正在同步分类")
-                            .frame(maxWidth: .infinity).padding(.vertical, 40)
+        FilterSheet("\(store.type.title)筛选", canReset: store.selectedFilterCount > 0, reset: {
+            store.selections = [:]
+            store.tag = nil
+            search = ""
+        }, accessory: AnyView(catalogMenu)) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("搜索分类、题材、平台", text: $search)
+                        .textFieldStyle(.plain)
+                        .accessibilityIdentifier("category-filter-search")
+                    if !search.isEmpty {
+                        Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                            .accessibilityLabel("清除搜索")
                     }
-                    if let error = store.filtersErrorText {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(error).font(.subheadline).foregroundStyle(.secondary)
-                            HStack(spacing: 20) {
-                                Button("重试") { Task { await store.loadFilters(for: store.type, force: true) } }
-                                Link("在浏览器中查看", destination: store.type.browserURL)
-                            }
+                }
+                .padding(10)
+                .background(Color.bgmSecondary.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if store.isLoadingFilters && store.filterGroups.isEmpty {
+                            ProgressView("正在同步分类")
+                                .frame(maxWidth: .infinity).padding(.vertical, 40)
                         }
-                    }
-                    ForEach(groups) { group in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(group.title).font(.headline)
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                                choice("全部", selected: store.selections[group.id] == nil) {
-                                    store.selections[group.id] = nil
+                        if let error = store.filtersErrorText {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(error).font(.subheadline).foregroundStyle(.secondary)
+                                HStack(spacing: 20) {
+                                    Button("重试") { Task { await store.loadFilters(for: store.type, force: true) } }
+                                    Link("在浏览器中查看", destination: store.type.browserURL)
                                 }
-                                ForEach(group.options) { option in
-                                    choice(option.title, selected: store.selections[group.id]?.id == option.id) {
-                                        store.selections[group.id] = option
-                                    }
-                                    .disabled(!includeNSFW && option.metaTags.contains("R18"))
-                                    .accessibilityIdentifier("category-option-\(group.id)-\(option.id)")
-                                }
                             }
+                            .padding(.vertical, 12)
+                        }
+                        ForEach(groups) { group in
+                            filterGroup(group)
+                            Divider()
+                        }
+                        if let tag = store.tag {
+                            HStack {
+                                Text("标签：\(tag)")
+                                Spacer()
+                                Button("移除") { store.tag = nil }
+                            }
+                            .font(.subheadline).padding(.vertical, 14)
+                        }
+                        if !searchText.isEmpty {
+                            Button("使用标签“\(searchText)”") { store.tag = searchText }
+                                .font(.subheadline).padding(.vertical, 14)
                         }
                     }
-                    if let tag = store.tag {
-                        HStack {
-                            Text("标签：\(tag)")
-                            Spacer()
-                            Button("移除") { store.tag = nil }
-                        }
-                        .font(.subheadline)
-                    }
-                    if !searchText.isEmpty {
-                        Button("使用标签“\(searchText)”") { store.tag = searchText }
-                            .font(.subheadline)
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .background(Color.bgmCanvas)
-            .navigationTitle("\(store.type.title)筛选")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .searchable(text: $search, prompt: "搜索分类、题材、平台")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("重置") {
-                        store.selections = [:]
-                        store.tag = nil
-                        search = ""
-                    }
-                    .disabled(store.selectedFilterCount == 0)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                        .accessibilityIdentifier("category-filters-done")
-                        .keyboardShortcut(.defaultAction)
-                }
-                ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Button("同步官网分类", systemImage: "arrow.clockwise") {
-                            Task { await store.loadFilters(for: store.type, force: true) }
-                        }
-                        Link(destination: store.type.browserURL) {
-                            Label("在浏览器中查看", systemImage: "safari")
-                        }
-                    } label: {
-                        Label("更多", systemImage: "ellipsis")
-                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
                 }
             }
         }
         .task(id: store.type) { await store.loadFilters(for: store.type) }
         #if os(macOS)
-        .frame(width: 660, height: 660)
+        .frame(width: 660, height: 580)
         #else
         .presentationDetents([.large])
         #endif
     }
 
+    private var catalogMenu: some View {
+        Menu {
+            Button("同步官网分类", systemImage: "arrow.clockwise") {
+                Task { await store.loadFilters(for: store.type, force: true) }
+            }
+            Link(destination: store.type.browserURL) {
+                Label("在浏览器中查看", systemImage: "safari")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("更多")
+    }
+
+    private func filterGroup(_ group: CategoryFilterGroup) -> some View {
+        #if os(macOS)
+        HStack(alignment: .top, spacing: 16) {
+            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .leading).padding(.top, 8)
+            options(group)
+        }
+        .padding(.vertical, 14)
+        #else
+        VStack(alignment: .leading, spacing: 10) {
+            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            options(group)
+        }
+        .padding(.vertical, 14)
+        #endif
+    }
+
+    private func options(_ group: CategoryFilterGroup) -> some View {
+        FlowLayout(spacing: 6, lineSpacing: 6) {
+            choice("全部", selected: store.selections[group.id] == nil) {
+                store.selections[group.id] = nil
+            }
+            .accessibilityIdentifier("category-option-\(group.id)-all")
+            ForEach(group.options) { option in
+                choice(option.title, selected: store.selections[group.id]?.id == option.id) {
+                    store.selections[group.id] = option
+                }
+                .disabled(!includeNSFW && option.metaTags.contains("R18"))
+                .accessibilityIdentifier("category-option-\(group.id)-\(option.id)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, minHeight: 36)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .font(.subheadline.weight(selected ? .semibold : .regular))
+                .fixedSize()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .foregroundStyle(selected ? Color.brandPink : Color.primary)
-                .background(selected ? Color.brandPink.opacity(0.12) : Color.bgmSurface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.brandPink.opacity(0.4) : Color.primary.opacity(0.08)))
-                .contentShape(RoundedRectangle(cornerRadius: 10))
+                .background(selected ? Color.brandPink.opacity(0.12) : Color.bgmSecondary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])

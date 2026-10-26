@@ -59,7 +59,12 @@ struct LibraryView: View {
 
     var body: some View {
         Group {
-            if app.isGuest {
+            if isFilterPreview {
+                VStack(spacing: 0) {
+                    filterControls
+                    Spacer()
+                }
+            } else if app.isGuest {
                 LoginPromptView(
                     title: "登录后查看收藏",
                     message: ""
@@ -74,8 +79,16 @@ struct LibraryView: View {
         .background(Color.bgmBackground)
         .bgmLargeNavigationTitle("收藏")
         .task {
-            await app.library.loadIfNeeded()
+            if !isFilterPreview { await app.library.loadIfNeeded() }
         }
+    }
+
+    private var isFilterPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["BGMORI_PREVIEW_LIBRARY_FILTERS"] == "1"
+        #else
+        false
+        #endif
     }
 
     private var content: some View {
@@ -127,15 +140,7 @@ struct LibraryView: View {
             .padding(.top, 8)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                LibraryTypePicker(selection: $subjectType)
-                filterBar
-            }
-                .frame(maxWidth: 460, alignment: .leading)
-                .padding(4)
-                .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .bgmFloatingControlMargins()
+            filterControls
         }
         .scrollIndicators(.hidden)
         .bgmSearchable(text: $searchText, prompt: "在收藏中搜索")
@@ -168,6 +173,24 @@ struct LibraryView: View {
         }
     }
 
+    private var filterControls: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text("类型").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+                LibraryTypePicker(selection: $subjectType)
+            }
+            HStack(spacing: 10) {
+                Text("状态").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+                filterBar
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: 560, alignment: .leading)
+        .bgmFloatingGlass(cornerRadius: 18, shadowRadius: 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bgmFloatingControlMargins()
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(subjectType.map(SubjectType.title(for:)) ?? "全部收藏") · \(typedCollections.count) 部作品 · \(typedCollections.filter { $0.type == CollectionType.doing.rawValue }.count) 部在看")
@@ -179,24 +202,22 @@ struct LibraryView: View {
     }
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(LibraryFilter.allCases) { item in
-                    Button {
-                        withAnimation(.snappy(duration: 0.2)) { filter = item }
-                    } label: {
-                        Text(item.title)
-                            .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 11)
-                            .foregroundStyle(filter == item ? Color.primary : Color.secondary)
-                            .background(filter == item ? Color.primary.opacity(0.07) : Color.clear, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(filter == item ? .isSelected : [])
+        HStack(spacing: 2) {
+            ForEach(LibraryFilter.allCases) { item in
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { filter = item }
+                } label: {
+                    Text(item.title)
+                        .font(.caption.weight(filter == item ? .semibold : .regular))
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .foregroundStyle(filter == item ? Color.primary : Color.secondary)
+                        .background(filter == item ? Color.primary.opacity(0.05) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(filter == item ? .isSelected : [])
+                .accessibilityIdentifier("library-status-\(item.rawValue)")
             }
-            .padding(.horizontal, 4)
         }
     }
 

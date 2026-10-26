@@ -91,6 +91,8 @@ struct CollectionReviewRow: View {
             Text(item.title)
                 .font(.headline)
                 .foregroundStyle(.primary)
+                .lineLimit(2, reservesSpace: true)
+                .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
             if let original = item.subject?.name, !original.isEmpty, original != item.title {
                 Text(original)

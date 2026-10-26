@@ -373,7 +373,8 @@ private struct CalendarAiringRow: View {
                 Text(item.displayTitle)
                     .font(titleFont)
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 

@@ -111,16 +111,16 @@ struct CoverCard: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)
+                .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("cover-card-title")
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(subtitle ?? "")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1, reservesSpace: true)
                 Spacer(minLength: 0)
                 if let badge, !badge.isEmpty {
                     Text(badge)
@@ -132,9 +132,11 @@ struct CoverCard: View {
             }
             .font(.caption)
 
-            if let progress, progress > 0 {
-                ProgressView(value: min(progress, 1))
+            if let progress {
+                ProgressView(value: max(0, min(progress, 1)))
                     .tint(.brandPink)
+                    .opacity(progress > 0 ? 1 : 0)
+                    .accessibilityHidden(progress <= 0)
                     .accessibilityLabel("观看进度")
             }
         }
@@ -212,7 +214,8 @@ struct SubjectRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.body.weight(.semibold))
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.tail)
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
@@ -471,6 +474,137 @@ extension View {
         #else
         navigationTitle(title)
         #endif
+    }
+}
+
+struct FilterSheet<Content: View>: View {
+    let title: String
+    var canReset: Bool
+    let reset: () -> Void
+    var accessory: AnyView?
+    let content: Content
+    @Environment(\.dismiss) private var dismiss
+
+    init(_ title: String, canReset: Bool = true, reset: @escaping () -> Void,
+         accessory: AnyView? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.canReset = canReset
+        self.reset = reset
+        self.accessory = accessory
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title).font(.title3.weight(.semibold))
+                Spacer()
+                accessory
+            }
+            .padding(20)
+            Divider()
+            content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            Divider()
+            HStack {
+                Button("重置筛选", action: reset)
+                    .disabled(!canReset)
+                    .accessibilityIdentifier("filter-reset")
+                Spacer()
+                Button("完成") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("filters-done")
+            }
+            .padding(16)
+        }
+        .background(Color.bgmCanvas)
+        #if os(macOS)
+        .onExitCommand { dismiss() }
+        #endif
+    }
+}
+
+struct YearPickerButton<Label: View>: View {
+    @Binding var selection: Int?
+    let earliestYear: Int
+    let label: Label
+    @State private var isPresented = false
+
+    init(selection: Binding<Int?>, earliestYear: Int = 1900, @ViewBuilder label: () -> Label) {
+        _selection = selection
+        self.earliestYear = earliestYear
+        self.label = label()
+    }
+
+    private var years: [Int] {
+        Array((earliestYear...Calendar.current.component(.year, from: Date())).reversed())
+    }
+
+    var body: some View {
+        Button { isPresented = true } label: { label }
+            .buttonStyle(.plain)
+            .accessibilityLabel("年份：\(selection.map(String.init) ?? "全部年份")")
+            .accessibilityIdentifier("year-picker")
+            .popover(isPresented: $isPresented, arrowEdge: .top) {
+                VStack(spacing: 4) {
+                    option(nil)
+                    Divider()
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical) {
+                            LazyVStack(spacing: 2) {
+                                ForEach(years, id: \.self) { year in
+                                    option(year).id(year)
+                                }
+                            }
+                        }
+                        .scrollIndicators(.visible)
+                        .accessibilityLabel("年份列表")
+                        .accessibilityIdentifier("year-list")
+                        .onAppear {
+                            if let selection { proxy.scrollTo(selection, anchor: .center) }
+                        }
+                    }
+                }
+                .padding(8)
+                #if os(macOS)
+                .frame(width: 180, height: 320)
+                #else
+                .frame(width: 210, height: 360)
+                #endif
+                .foregroundStyle(.primary)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("year-options")
+                .presentationCompactAdaptation(.popover)
+            }
+    }
+
+    private func option(_ year: Int?) -> some View {
+        Button {
+            selection = year
+            isPresented = false
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 16)
+                    .opacity(selection == year ? 1 : 0)
+                Text(year.map(String.init) ?? "全部年份")
+                    .font(.subheadline)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            #if os(macOS)
+            .frame(minHeight: 32)
+            #else
+            .frame(minHeight: 44)
+            #endif
+            .background(selection == year ? Color.bgmSecondary : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(year.map(String.init) ?? "全部年份")
+        .accessibilityIdentifier("year-option-\(year.map(String.init) ?? "all")")
+        .accessibilityAddTraits(selection == year ? .isSelected : [])
     }
 }
 

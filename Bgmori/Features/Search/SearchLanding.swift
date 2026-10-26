@@ -89,31 +89,8 @@ struct SearchLandingView: View {
                 LazyHStack(alignment: .top, spacing: 14) {
                     ForEach(visibleRecentSubjects) { item in
                         NavigationLink(value: Route.subject(item.id)) {
-                            VStack(alignment: .leading, spacing: 7) {
-                                CachedAsyncImage(
-                                    url: item.coverURL,
-                                    maxPixel: 280,
-                                    placeholderTint: .subjectTint(item.type)
-                                )
-                                .frame(width: 96, height: 136)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(alignment: .bottomLeading) {
-                                    Text(item.typeName)
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(Color.bgmOnArtwork)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(Color.bgmArtworkScrim.opacity(0.48), in: Capsule())
-                                        .padding(6)
-                                }
-
-                                Text(item.title)
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(width: 96, alignment: .leading)
-                            }
+                            CoverCard(title: item.title, subtitle: item.typeName, coverURL: item.coverURL,
+                                      tint: .subjectTint(item.type), width: 112)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("最近浏览：\(item.title)")

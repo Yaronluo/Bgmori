@@ -95,6 +95,8 @@ final class AppModel {
 
         switch name {
         case "subject": router.selectedSection = .home; router.homePath = [.subject(Int(value) ?? 8)]
+        case "character": router.selectedSection = .home; router.homePath = [.character(Int(value) ?? 466)]
+        case "person": router.selectedSection = .home; router.homePath = [.person(Int(value) ?? 1)]
         case "episode": router.selectedSection = .home; router.homePath = [.episode(Int(value) ?? 1027)]
         case "comments": router.selectedSection = .home; router.homePath = [.subject(Int(value) ?? 8), .comments(Int(value) ?? 8)]
         case "revisions": router.selectedSection = .home; router.homePath = [.subject(Int(value) ?? 8), .revisions(Int(value) ?? 8)]

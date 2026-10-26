@@ -41,7 +41,8 @@ struct IndexDetailView: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                                         Text(item.displayTitle)
                                             .font(.system(size: 11, weight: .medium))
-                                            .lineLimit(2)
+                                            .lineLimit(2, reservesSpace: true)
+                                            .truncationMode(.tail)
                                         if let comment = item.comment, !comment.isEmpty {
                                             Text(comment)
                                                 .font(.system(size: 9))

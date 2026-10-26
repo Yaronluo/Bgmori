@@ -249,7 +249,7 @@ struct SearchView: View {
 
     private func personRow(title: String, subtitle: String?, image: URL?, tint: Color) -> some View {
         HStack(spacing: 12) {
-            CachedAsyncImage(url: image, maxPixel: 220, placeholderTint: tint)
+            CachedAsyncImage(url: image, maxPixel: 220, contentMode: .fit, placeholderTint: tint)
                 .frame(width: 52, height: 70)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
@@ -419,43 +419,65 @@ struct SearchFilterView: View {
     @Binding var type: SubjectType?
     @Binding var year: Int?
     @Binding var sort: String
-    @Environment(\.dismiss) private var dismiss
-
-    private let years: [Int] = Array((1990...Calendar.current.component(.year, from: Date())).reversed())
-
     var body: some View {
-        NavigationStack {
-            Form {
-                Picker("类型", selection: $type) {
-                    Text("全部").tag(SubjectType?.none)
-                    ForEach(SubjectType.allCases) { value in
-                        Text(value.title).tag(Optional(value))
+        FilterSheet("搜索筛选", canReset: type != nil || year != nil || sort != "match", reset: {
+            type = nil
+            year = nil
+            sort = "match"
+        }) {
+            VStack(spacing: 0) {
+                field("类型") {
+                    Picker("类型", selection: $type) {
+                        Text("全部类型").tag(SubjectType?.none)
+                        ForEach(SubjectType.browsingTypes) { value in
+                            Text(value.title).tag(Optional(value))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("search-filter-type")
+                }
+                Divider()
+                field("年份") {
+                    YearPickerButton(selection: $year, earliestYear: 1990) {
+                        HStack(spacing: 8) {
+                            Text(year.map(String.init) ?? "全部年份")
+                            Image(systemName: "chevron.down").font(.caption)
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 32)
                     }
                 }
-                Picker("年份", selection: $year) {
-                    Text("全部年份").tag(Int?.none)
-                    ForEach(years, id: \.self) { value in
-                        Text("\(value)").tag(Optional(value))
+                Divider()
+                field("排序") {
+                    Picker("排序", selection: $sort) {
+                        Text("匹配度").tag("match")
+                        Text("热度").tag("heat")
+                        Text("排名").tag("rank")
+                        Text("评分").tag("score")
                     }
-                }
-                Picker("排序", selection: $sort) {
-                    Text("匹配度").tag("match")
-                    Text("热度").tag("heat")
-                    Text("排名").tag("rank")
-                    Text("评分").tag("score")
-                }
-                Button("重置筛选") {
-                    type = nil
-                    year = nil
-                    sort = "match"
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("search-filter-sort")
                 }
             }
-            .navigationTitle("筛选")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
         }
+        #if os(macOS)
+        .frame(width: 420, height: 300)
+        #else
+        .presentationDetents([.height(360), .large])
+        #endif
+    }
+
+    private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+                .frame(width: 56, alignment: .leading)
+            Spacer(minLength: 12)
+            content().font(.subheadline).tint(.primary)
+        }
+        .frame(minHeight: 48)
     }
 }

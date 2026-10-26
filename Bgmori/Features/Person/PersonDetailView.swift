@@ -59,7 +59,7 @@ struct PersonDetailView: View {
     private func characterBody(_ character: Character) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header(image: character.coverURL, name: character.name, subtitle: character.relation, summary: character.summary)
+                header(image: character.images?.heroURL ?? character.coverURL, name: character.name, subtitle: character.relation, summary: character.summary)
                 if !character.actors.isEmpty {
                     infoBlock(title: "声优") {
                         FlowLayout(spacing: 8, lineSpacing: 8) {
@@ -106,9 +106,14 @@ struct PersonDetailView: View {
 
     private func header(image: URL?, name: String, subtitle: String?, summary: String) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            CachedAsyncImage(url: image, maxPixel: 520, placeholderTint: .brandPink)
+            CachedAsyncImage(url: image, maxPixel: 800, contentMode: .fit, placeholderTint: .brandPink)
                 .frame(width: 128, height: 176)
+                .background(Color.bgmSecondary.opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isImage)
+                .accessibilityLabel("\(name)完整图片")
+                .accessibilityIdentifier("person-portrait")
             VStack(alignment: .leading, spacing: 8) {
                 Text(name)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -172,7 +177,8 @@ struct PersonDetailView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                                 Text(item.displayTitle)
                                     .font(.system(size: 11, weight: .medium))
-                                    .lineLimit(2)
+                                    .lineLimit(2, reservesSpace: true)
+                                    .truncationMode(.tail)
                                 Text(item.relation)
                                     .font(.system(size: 9))
                                     .foregroundStyle(.secondary)
