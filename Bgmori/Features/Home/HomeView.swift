@@ -109,18 +109,8 @@ struct HomeView: View {
     // MARK: - Header
 
     private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 16) {
-                dateLabel
-                Spacer(minLength: 12)
-                quickLinks
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                dateLabel
-                quickLinks
-            }
-        }
-        .padding(.horizontal, 20)
+        dateLabel
+            .padding(.horizontal, 20)
     }
 
     private var dateLabel: some View {
@@ -129,47 +119,6 @@ struct HomeView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("今天是 \(dateLine)")
-    }
-
-    private var quickLinks: some View {
-        HStack(spacing: 8) {
-            quickLink("每日放送", systemImage: "calendar", identifier: "home-calendar") {
-                app.router.openCalendar()
-            }
-            quickLink("浏览分类", systemImage: "square.grid.2x2", identifier: "home-categories") {
-                app.openCategories()
-            }
-        }
-    }
-
-    private func quickLink(_ title: String, systemImage: String, identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.brandPink)
-                Text(title)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 12)
-            #if os(macOS)
-            .frame(height: 30)
-            #else
-            .frame(height: 36)
-            #endif
-            .background(Color.bgmSecondary, in: Capsule())
-            .contentShape(Capsule())
-            #if os(iOS)
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-            #endif
-        }
-        .buttonStyle(.plain)
-        .fixedSize(horizontal: true, vertical: false)
-        .accessibilityIdentifier(identifier)
     }
 
     // MARK: - Sections

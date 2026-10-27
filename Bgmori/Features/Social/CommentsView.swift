@@ -10,6 +10,9 @@ struct CommentsView: View {
     @State private var hasMore = true
     @State private var errorText: String?
     @State private var blocked: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "blockedCommentUsers") ?? [])
+    @State private var stateFilter: CollectionType?
+    @State private var sort: CommentSort = .comprehensive
+    @State private var ratingFilter: CommentRatingFilter = .all
 
     var body: some View {
         ScrollView {
@@ -23,27 +26,33 @@ struct CommentsView: View {
                         Task { await load(page: 1, force: true) }
                     }
                 } else {
-                    ForEach(visibleComments) { comment in
-                        SocialCommentRow(comment: comment)
-                            .padding(.horizontal, 20)
-                            .contextMenu {
-                                Button {
-                                    blocked.insert(comment.username)
-                                    saveBlocked()
-                                } label: {
-                                    Label("屏蔽 \(comment.name)", systemImage: "person.crop.circle.badge.xmark")
-                                }
-                                Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/subject/\(subjectID)/comments")!)
-                            }
-                        Divider().padding(.leading, 62)
+                    if episodeID == nil {
+                        filterBar
                     }
 
+                    if displayedComments.isEmpty {
+                        noMatchesState
+                    } else {
+                        ForEach(displayedComments) { comment in
+                            SocialCommentRow(comment: comment, showsRatingStars: true)
+                                .padding(.horizontal, 20)
+                                .contextMenu {
+                                    Button {
+                                        blocked.insert(comment.username)
+                                        saveBlocked()
+                                    } label: {
+                                        Label("屏蔽 \(comment.name)", systemImage: "person.crop.circle.badge.xmark")
+                                    }
+                                    Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/subject/\(subjectID)/comments")!)
+                                }
+                            Divider().padding(.leading, 62)
+                        }
+                    }
                 }
                 if !comments.isEmpty && (hasMore || errorText != nil) {
                     PaginationFooter(offset: page, isLoading: isLoading, error: errorText) {
                         await load(page: page + 1)
                     }
-
                 }
             }
             .padding(.bottom, 24)
@@ -60,9 +69,220 @@ struct CommentsView: View {
         }
     }
 
-    private var visibleComments: [SocialComment] {
-        comments.filter { !blocked.contains($0.username) }
+    // MARK: - Filters
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    Button {
+                        stateFilter = nil
+                    } label: {
+                        menuOption("全部状态", selected: stateFilter == nil)
+                    }
+                    Divider()
+                    ForEach(CollectionType.allCases) { type in
+                        Button {
+                            stateFilter = type
+                        } label: {
+                            menuOption(type.title, selected: stateFilter == type)
+                        }
+                    }
+                } label: {
+                    filterChip(
+                        stateFilter?.title ?? "全部状态",
+                        systemImage: "line.3.horizontal.decrease",
+                        isActive: stateFilter != nil
+                    )
+                }
+                .menuIndicator(.hidden)
+                .accessibilityIdentifier("comments-state-filter")
+
+                Menu {
+                    ForEach(CommentSort.allCases) { option in
+                        Button {
+                            sort = option
+                        } label: {
+                            menuOption(option.title, selected: sort == option)
+                        }
+                    }
+                } label: {
+                    filterChip(sort.title, systemImage: "arrow.up.arrow.down", isActive: sort != .comprehensive)
+                }
+                .menuIndicator(.hidden)
+                .accessibilityIdentifier("comments-sort-filter")
+
+                Menu {
+                    ForEach(CommentRatingFilter.allCases) { option in
+                        Button {
+                            ratingFilter = option
+                        } label: {
+                            menuOption(option.title, selected: ratingFilter == option)
+                        }
+                    }
+                } label: {
+                    filterChip(ratingFilter.title, systemImage: "star", isActive: ratingFilter != .all)
+                }
+                .menuIndicator(.hidden)
+                .accessibilityIdentifier("comments-rating-filter")
+
+                if hasActiveFilters {
+                    Button("重置") {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            stateFilter = nil
+                            sort = .comprehensive
+                            ratingFilter = .all
+                        }
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.brandPink)
+                    .padding(.horizontal, 4)
+                    .frame(height: 32)
+                    .padding(.vertical, 5)
+                    .accessibilityIdentifier("comments-filter-reset")
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
+
+    private func filterChip(_ title: String, systemImage: String, isActive: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 7, weight: .bold))
+                .opacity(0.65)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(isActive ? Color.bgmCanvas : Color.primary.opacity(0.82))
+        .padding(.horizontal, 12)
+        .frame(height: 32)
+        .background(isActive ? Color.brandPink : Color.primary.opacity(0.055), in: Capsule())
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func menuOption(_ title: String, selected: Bool) -> some View {
+        HStack {
+            Text(title)
+            if selected {
+                Image(systemName: "checkmark")
+            }
+        }
+    }
+
+    private var noMatchesState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("没有符合条件的吐槽")
+                .font(.subheadline.weight(.medium))
+            Text("已加载的吐槽里没有匹配项，可放宽筛选条件。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if hasActiveFilters {
+                Button("清除筛选") {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        stateFilter = nil
+                        sort = .comprehensive
+                        ratingFilter = .all
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.brandPink)
+                .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 32)
+        .padding(.vertical, 42)
+    }
+
+    private var hasActiveFilters: Bool {
+        stateFilter != nil || sort != .comprehensive || ratingFilter != .all
+    }
+
+    // MARK: - Filtering
+
+    private var displayedComments: [SocialComment] {
+        var result = comments.filter { !blocked.contains($0.username) }
+
+        if let stateFilter {
+            result = result.filter { $0.state?.trimmed == stateFilter.title }
+        }
+
+        if ratingFilter != .all {
+            result = result.filter { ratingFilter.matches($0.rating) }
+        }
+
+        switch sort {
+        case .comprehensive:
+            break
+        case .newest:
+            result = sortedByDate(result, ascending: false)
+        case .oldest:
+            result = sortedByDate(result, ascending: true)
+        }
+        return result
+    }
+
+    private func sortedByDate(_ items: [SocialComment], ascending: Bool) -> [SocialComment] {
+        items.sorted { lhs, rhs in
+            guard let left = commentTimestamp(lhs) else { return false }
+            guard let right = commentTimestamp(rhs) else { return true }
+            return ascending ? left < right : left > right
+        }
+    }
+
+    /// Bangumi renders recent comments as `1d 12h ago` and older ones as
+    /// `2026-10-23 21:58`; both shapes need to sort together.
+    private func commentTimestamp(_ comment: SocialComment) -> Date? {
+        let raw = comment.time.trimmed
+        guard !raw.isEmpty else { return nil }
+
+        let lower = raw.lowercased()
+        let ns = lower as NSString
+        let matches = Self.relativeTimeRegex.matches(in: lower, range: NSRange(location: 0, length: ns.length))
+        if !matches.isEmpty {
+            var seconds: TimeInterval = 0
+            for match in matches {
+                guard match.numberOfRanges >= 3,
+                      let value = Int(ns.substring(with: match.range(at: 1))),
+                      let unit = ns.substring(with: match.range(at: 2)).first else { continue }
+                switch unit {
+                case "s": seconds += Double(value)
+                case "m": seconds += Double(value) * 60
+                case "h": seconds += Double(value) * 3_600
+                case "d": seconds += Double(value) * 86_400
+                case "w": seconds += Double(value) * 604_800
+                default: break
+                }
+            }
+            return Date().addingTimeInterval(-seconds)
+        }
+
+        return Self.absoluteDateFormatter.date(from: raw)
+    }
+
+    private static let relativeTimeRegex = try! NSRegularExpression(pattern: #"(\d+)\s*([smhdw])"#)
+
+    private static let absoluteDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
+
+    // MARK: - Loading
 
     private func load(page: Int, force: Bool = false) async {
         guard !isLoading else { return }
@@ -92,5 +312,60 @@ struct CommentsView: View {
 
     private func saveBlocked() {
         UserDefaults.standard.set(Array(blocked), forKey: "blockedCommentUsers")
+    }
+}
+
+private enum CommentSort: String, CaseIterable, Identifiable {
+    case comprehensive
+    case newest
+    case oldest
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .comprehensive: "综合"
+        case .newest: "最新"
+        case .oldest: "最早"
+        }
+    }
+}
+
+private enum CommentRatingFilter: String, CaseIterable, Identifiable {
+    case all
+    case top
+    case good
+    case average
+    case low
+    case unrated
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "全部评分"
+        case .top: "9–10 分"
+        case .good: "7–8 分"
+        case .average: "5–6 分"
+        case .low: "1–4 分"
+        case .unrated: "未评分"
+        }
+    }
+
+    func matches(_ rating: Int?) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .top:
+            return rating.map { (9...10).contains($0) } ?? false
+        case .good:
+            return rating.map { (7...8).contains($0) } ?? false
+        case .average:
+            return rating.map { (5...6).contains($0) } ?? false
+        case .low:
+            return rating.map { (1...4).contains($0) } ?? false
+        case .unrated:
+            return rating == nil
+        }
     }
 }

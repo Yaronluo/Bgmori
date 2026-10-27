@@ -11,106 +11,119 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var settings = app.settings
 
-        Form {
-            Section("账户") {
-                if let user = app.auth.user {
-                    HStack(spacing: 12) {
-                        AvatarView(url: user.avatarURL, size: 44)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(user.displayName)
-                                .font(.headline)
-                            Text("@\(user.username)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                accountHeader
+
+                settingsSection("外观") {
+                    themeRow(settings)
+                }
+
+                settingsSection("网络") {
+                    networkRow
+                }
+
+                settingsSection("内容") {
+                    settingRow(
+                        icon: "character.book.closed.fill",
+                        tint: .collectionTint(1),
+                        title: "优先显示中文名",
+                        subtitle: "标题优先使用 Bangumi 中文名"
+                    ) {
+                        Toggle("优先显示中文名", isOn: $settings.preferChineseName)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(.brandPink)
                     }
-                    Button("退出登录", role: .destructive) {
-                        app.signOut()
-                        dismiss()
+
+                    rowDivider
+
+                    settingRow(
+                        icon: "eye.slash.fill",
+                        tint: .collectionTint(4),
+                        title: "默认隐藏剧透",
+                        subtitle: "简介与吐槽先折叠敏感内容"
+                    ) {
+                        Toggle("默认隐藏剧透", isOn: $settings.hideSpoilers)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(.brandPink)
                     }
-                } else {
-                    Button("登录 Bangumi") {
-                        dismiss()
-                        Task {
-                            try? await Task.sleep(nanoseconds: 300_000_000)
-                            app.showLogin = true
-                        }
+
+                    rowDivider
+
+                    settingRow(
+                        icon: "exclamationmark.triangle.fill",
+                        tint: .collectionTint(2),
+                        title: "显示 NSFW 内容",
+                        subtitle: "搜索与条目详情中显示成人内容"
+                    ) {
+                        Toggle("显示 NSFW 内容", isOn: $settings.showNSFW)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(.brandPink)
                     }
                 }
-            }
 
-            Section("外观") {
-                Picker("主题", selection: $settings.appearance) {
-                    ForEach(AppAppearance.allCases) { appearance in
-                        Text(appearance.title).tag(appearance)
+                settingsSection("通知") {
+                    settingRow(
+                        icon: "bell.badge.fill",
+                        tint: .brandPink,
+                        title: "每日放送提醒",
+                        subtitle: "每天 20:00 提醒在看作品"
+                    ) {
+                        Toggle("每日放送提醒", isOn: Binding(
+                            get: { settings.dailyReminder },
+                            set: { newValue in
+                                Task {
+                                    if newValue {
+                                        _ = await app.enableDailyReminder()
+                                    } else {
+                                        settings.dailyReminder = false
+                                        await app.updateDailyReminder()
+                                    }
+                                }
+                            }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(.brandPink)
                     }
                 }
-                .pickerStyle(.menu)
-            }
 
-            Section("网络") {
-                Button("网络与连接", systemImage: "network") { showConnections = true }
-                    .accessibilityIdentifier("connection-settings")
-            }
-
-            Section("内容") {
-                Toggle("优先显示中文名", isOn: $settings.preferChineseName)
-                Toggle("默认隐藏剧透", isOn: $settings.hideSpoilers)
-                Toggle("显示 NSFW 内容", isOn: $settings.showNSFW)
-            }
-
-            Section("通知") {
-                Toggle("每日放送提醒", isOn: Binding(
-                    get: { settings.dailyReminder },
-                    set: { newValue in
-                        Task {
-                            if newValue {
-                                _ = await app.enableDailyReminder()
-                            } else {
-                                settings.dailyReminder = false
-                                await app.updateDailyReminder()
+                settingsSection("存储") {
+                    settingRow(
+                        icon: "internaldrive.fill",
+                        tint: Color(red: 0.50, green: 0.55, blue: 0.62),
+                        title: "本地缓存",
+                        subtitle: cacheSize
+                    ) {
+                        Button(isClearing ? "清理中…" : "清理") {
+                            Task {
+                                isClearing = true
+                                await app.clearCaches()
+                                cacheSize = await app.cacheSizeText()
+                                isClearing = false
                             }
                         }
-                    }
-                ))
-                Text("每天 20:00 提醒在看作品。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("缓存") {
-                HStack {
-                    Text("本地缓存")
-                    Spacer()
-                    Text(cacheSize)
-                        .foregroundStyle(.secondary)
-                }
-                Button(isClearing ? "清理中…" : "清理缓存") {
-                    Task {
-                        isClearing = true
-                        await app.clearCaches()
-                        cacheSize = await app.cacheSizeText()
-                        isClearing = false
+                        .font(.subheadline.weight(.medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.brandPink)
+                        .disabled(isClearing)
+                        .accessibilityIdentifier("settings-clear-cache")
                     }
                 }
-                .disabled(isClearing)
-            }
 
-            Section("关于软件") {
-                LabeledContent("版本", value: settings.appVersion)
-                Link("Bangumi", destination: URL(string: "https://bgm.tv")!)
-                Text("Bgmori 是非官方第三方客户端，与 Bangumi 官方无关联。所有条目、评分、评论版权归 Bangumi 及原作者所有。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Link("镜像服务", destination: URL(string: "https://bangumi.wiki")!)
-                Text("通过 bangumi.wiki 自动获取镜像地址，用于数据、图片和网页访问。公开浏览失败时可自动回退。登录与收藏凭证仅发送到官方或明确配置的自定义服务。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                aboutSection(settings)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 36)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
-        .formStyle(.grouped)
+        .scrollIndicators(.hidden)
+        .background(Color.bgmBackground)
         .navigationTitle("设置")
         .navigationDestination(isPresented: $showConnections) {
             ConnectionSettingsView()
@@ -126,6 +139,244 @@ struct SettingsView: View {
                     .keyboardShortcut(.cancelAction)
                     #endif
             }
+        }
+    }
+
+    // MARK: - Account
+
+    private var accountHeader: some View {
+        HStack(spacing: 14) {
+            AvatarView(url: app.auth.user?.avatarURL, size: 58)
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(app.auth.user?.displayName ?? "游客模式")
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+
+                if let username = app.auth.user?.username {
+                    Text("@\(username)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("登录后同步收藏与观看进度")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if app.auth.user != nil {
+                Button("退出登录", role: .destructive) {
+                    app.signOut()
+                    dismiss()
+                }
+                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .frame(minHeight: 36)
+            } else {
+                Button {
+                    dismiss()
+                    Task {
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        app.showLogin = true
+                    }
+                } label: {
+                    Text("登录")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.bgmCanvas)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 30)
+                        .background(Color.brandPink, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings-login")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Rows
+
+    private func themeRow(_ settings: AppSettings) -> some View {
+        settingRow(
+            icon: "circle.lefthalf.filled",
+            tint: .collectionTint(3),
+            title: "主题",
+            subtitle: nil
+        ) {
+            Menu {
+                ForEach(AppAppearance.allCases) { appearance in
+                    Button {
+                        settings.appearance = appearance
+                    } label: {
+                        HStack {
+                            Text(appearance.title)
+                            if settings.appearance == appearance {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(settings.appearance.title)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.subheadline)
+                .contentShape(Rectangle())
+            }
+            .tint(.secondary)
+            .accessibilityIdentifier("settings-appearance")
+        }
+    }
+
+    private var networkRow: some View {
+        Button {
+            showConnections = true
+        } label: {
+            settingRow(
+                icon: "network",
+                tint: .collectionTint(1),
+                title: "网络与连接",
+                subtitle: "API、图片与网页线路"
+            ) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("connection-settings")
+    }
+
+    private func settingRow<Trailing: View>(
+        icon: String,
+        tint: Color,
+        title: String,
+        subtitle: String?,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            trailing()
+        }
+        #if os(macOS)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        #else
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        #endif
+        .contentShape(Rectangle())
+    }
+
+    private var rowDivider: some View {
+        Divider()
+            .padding(.leading, 42)
+    }
+
+    @ViewBuilder
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                content()
+            }
+        }
+    }
+
+    // MARK: - About
+
+    private func aboutSection(_ settings: AppSettings) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("关于软件")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            settingRow(
+                icon: "info.circle.fill",
+                tint: .collectionTint(5),
+                title: "版本",
+                subtitle: nil
+            ) {
+                Text(settings.appVersion)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            rowDivider
+
+            Link(destination: URL(string: "https://bgm.tv")!) {
+                settingRow(
+                    icon: "link",
+                    tint: .collectionTint(1),
+                    title: "Bangumi",
+                    subtitle: nil
+                ) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            rowDivider
+
+            Link(destination: URL(string: "https://bangumi.wiki")!) {
+                settingRow(
+                    icon: "server.rack",
+                    tint: .collectionTint(2),
+                    title: "镜像服务",
+                    subtitle: "自动获取镜像地址"
+                ) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Bgmori 是非官方第三方客户端，与 Bangumi 官方无关联。所有条目、评分、评论版权归 Bangumi 及原作者所有。")
+                Text("镜像仅用于数据、图片和网页访问；登录与收藏凭证只发送到官方或明确配置的自定义服务。")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 6)
+            .padding(.horizontal, 4)
         }
     }
 }

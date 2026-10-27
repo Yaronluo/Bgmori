@@ -762,56 +762,71 @@ struct SubjectDetailView: View {
     @ViewBuilder
     private func episodeCard(_ subject: Subject) -> some View {
         if !episodes.isEmpty {
-            SectionCard(
-                subject.type == SubjectType.music.rawValue ? "曲目" : "章节",
-                accessory: AnyView(episodeProgress(subject))
-            ) {
+            VStack(alignment: .leading, spacing: 12) {
+                episodeHeader(subject)
+
                 if episodeTypeOptions.count > 1 {
-                    Picker("章节类型", selection: $selectedEpisodeType) {
-                        ForEach(episodeTypeOptions, id: \.self) { type in
-                            Text(typeTitle(type)).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 240)
+                    TextTabs(
+                        values: episodeTypeOptions,
+                        selection: $selectedEpisodeType,
+                        title: { typeTitle($0) },
+                        horizontalPadding: 0,
+                        usesUnderline: true,
+                        itemSpacing: 18
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if app.auth.isLoggedIn {
+                    episodeProgress(subject)
                 }
 
                 VStack(spacing: 0) {
                     ForEach(Array(filteredEpisodes.indices), id: \.self) { index in
                         if index > 0 {
                             Divider()
-                                .opacity(0.55)
-                                .padding(.leading, 30)
+                                .opacity(0.45)
+                                .padding(.leading, 62)
                         }
                         episodeRow(subject, episode: filteredEpisodes[index])
                     }
                 }
+                .padding(.top, -2)
+            }
+            .padding(.vertical, 2)
+            .accessibilityIdentifier("episode-section")
+        }
+    }
+
+    private func episodeHeader(_ subject: Subject) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(subject.type == SubjectType.music.rawValue ? "曲目" : "章节")
+                .font(.system(size: 17, weight: .semibold))
+
+            Text("\(filteredEpisodes.count) \(episodeUnit(subject))")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.tertiary)
+
+            Spacer(minLength: 8)
+
+            if app.auth.isLoggedIn {
+                Text("已看 \(watchedCount(subject)) / \(filteredEpisodes.count)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
     @ViewBuilder
     private func episodeProgress(_ subject: Subject) -> some View {
-        if app.auth.isLoggedIn {
-            let total = filteredEpisodes.count
-            let watched = watchedCount(subject)
-
-            HStack(spacing: 8) {
-                Text("已看 \(watched)/\(total)")
-                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-
-                Capsule()
-                    .fill(Color.primary.opacity(0.09))
-                    .frame(width: 52, height: 5)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.brandPink)
-                            .frame(width: 52 * CGFloat(min(watched, total)) / CGFloat(max(total, 1)), height: 5)
-                    }
-            }
-        }
+        let total = filteredEpisodes.count
+        let watched = watchedCount(subject)
+        ProgressView(value: Double(min(watched, total)), total: Double(max(total, 1)))
+            .progressViewStyle(.linear)
+            .controlSize(.mini)
+            .tint(.brandPink)
+            .accessibilityLabel("章节进度")
+            .accessibilityValue("已看 \(watched) / \(total)")
     }
 
     private func episodeRow(_ subject: Subject, episode: Episode) -> some View {
@@ -819,7 +834,7 @@ struct SubjectDetailView: View {
         let counted = (app.library.collection(for: subject.id)?.epStatus ?? 0) >= Int(episode.ep ?? 0)
         let watched = marked || counted
 
-        return HStack(spacing: 10) {
+        return HStack(spacing: 8) {
             Button {
                 guard app.auth.isLoggedIn else {
                     app.showLogin = true
@@ -834,9 +849,10 @@ struct SubjectDetailView: View {
                 }
             } label: {
                 Image(systemName: watched ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 19))
-                    .foregroundStyle(watched ? Color.brandPink : Color.secondary.opacity(0.4))
-                    .frame(width: 20, height: 20)
+                    .font(.system(size: 18))
+                    .foregroundStyle(watched ? Color.brandPink : Color.secondary.opacity(0.35))
+                    .frame(width: 26, height: 30)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             #if os(macOS)
@@ -849,7 +865,11 @@ struct SubjectDetailView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        #if os(iOS)
+        .frame(minHeight: 44)
+        #else
+        .frame(minHeight: 30)
+        #endif
         .contextMenu {
             Button("标记到这话") {
                 guard app.auth.isLoggedIn else { app.showLogin = true; return }
@@ -865,65 +885,62 @@ struct SubjectDetailView: View {
         }
     }
 
-    @ViewBuilder
     private func episodeRowLabel(_ episode: Episode) -> some View {
-        #if os(macOS)
-        HStack(spacing: 12) {
-            Text(episode.numberText)
-                .font(.system(size: 11.5, weight: .medium))
+        HStack(spacing: 8) {
+            Text(compactEpisodeNumber(episode))
+                #if os(iOS)
+                .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
+                #else
+                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                #endif
                 .foregroundStyle(.secondary)
-                .frame(width: 46, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
 
             Text(episode.displayTitle)
+                #if os(iOS)
+                .font(.system(size: 15, weight: .medium))
+                #else
                 .font(.system(size: 13.5, weight: .medium))
+                #endif
                 .lineLimit(1)
+                .truncationMode(.tail)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
 
-            if let airdate = episode.airdate, !airdate.isEmpty {
-                Text(airdate)
-                    .font(.system(size: 11).monospacedDigit())
+            if let date = compactAirdate(episode.airdate) {
+                Text(date)
+                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
 
-            Text("\(episode.comment) 条吐槽")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .frame(minWidth: 62, alignment: .trailing)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.quaternary)
-        }
-        #else
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(episode.numberText)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Text(episode.displayTitle)
-                        .font(.system(size: 15, weight: .medium))
-                        .lineLimit(1)
-                }
-
-                HStack(spacing: 6) {
-                    if let airdate = episode.airdate, !airdate.isEmpty {
-                        Text(airdate)
-                    }
-                    Text("\(episode.comment) 条吐槽")
-                }
-                .font(.system(size: 11.5))
-                .foregroundStyle(.tertiary)
+            if episode.comment > 0 {
+                Label("\(episode.comment)", systemImage: "text.bubble")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(minWidth: 28, alignment: .trailing)
             }
-
-            Spacer(minLength: 6)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.quaternary)
         }
-        #endif
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func compactEpisodeNumber(_ episode: Episode) -> String {
+        if let ep = episode.ep, ep > 0 {
+            return String(format: "%02d", Int(ep))
+        }
+        if episode.sort > 0 {
+            return String(format: "%.1f", episode.sort)
+        }
+        return episode.typeName
+    }
+
+    private func compactAirdate(_ raw: String?) -> String? {
+        guard let raw, raw.count >= 10 else { return nil }
+        let currentYear = Calendar.current.component(.year, from: Date())
+        if raw.hasPrefix("\(currentYear)-") {
+            return String(raw.dropFirst(5))
+        }
+        return raw
     }
 
     private var episodeTypeOptions: [Int] {
@@ -1102,7 +1119,7 @@ struct SubjectDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(comments.prefix(3)) { comment in
-                        SocialCommentRow(comment: comment)
+                        SocialCommentRow(comment: comment, showsRatingStars: true)
                         if comment.id != comments.prefix(3).last?.id {
                             Divider().padding(.leading, 44).opacity(0.55)
                         }
@@ -1325,6 +1342,7 @@ private struct SubjectTagChip: View {
 struct SocialCommentRow: View {
     let comment: SocialComment
     var compact = false
+    var showsRatingStars = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1333,20 +1351,36 @@ struct SocialCommentRow: View {
                 HStack(spacing: 6) {
                     Text(comment.name)
                         .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+
                     if let state = comment.state {
                         Text(state)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(stateTint(state))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(stateTint(state).opacity(0.10), in: Capsule())
                     }
+
                     if let rating = comment.rating {
-                        Text("\(rating)")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.orange)
+                        HStack(spacing: 3) {
+                            Text("\(rating)")
+                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                .foregroundStyle(.orange)
+                            if showsRatingStars {
+                                RatingStars(score: Double(rating), size: 8)
+                            }
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("评分 \(rating) 分")
                     }
-                    Spacer()
+
+                    Spacer(minLength: 4)
                     Text(comment.time)
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
                 Text(comment.text)
                     .accessibilityIdentifier("comment-text-\(comment.id)")
@@ -1357,5 +1391,12 @@ struct SocialCommentRow: View {
             }
         }
         .padding(.vertical, 10)
+    }
+
+    private func stateTint(_ state: String) -> Color {
+        guard let type = CollectionType.allCases.first(where: { $0.title == state }) else {
+            return .secondary
+        }
+        return .collectionTint(type.rawValue)
     }
 }

@@ -7,6 +7,7 @@ struct CollectionEditorView: View {
 
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Namespace private var statusAnimation
 
     @State private var status: CollectionType
     @State private var rate: Int
@@ -35,36 +36,20 @@ struct CollectionEditorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 26) {
                     subjectHeader
-                    Divider()
                     statusSection
-
-                    #if os(macOS)
-                    HStack(alignment: .top, spacing: 32) {
-                        ratingSection
-                            .frame(maxWidth: .infinity)
-                        progressSection
-                            .frame(maxWidth: .infinity)
-                    }
-                    #else
                     ratingSection
                     progressSection
-                    #endif
 
                     Divider()
+
                     tagsSection
                     commentSection
                     privacyRow
 
                     if collection != nil {
-                        Divider()
-                        Button("移除收藏…", systemImage: "trash", role: .destructive) {
-                            showRemoval = true
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("collection-remove")
+                        removeButton
                     }
 
                     if let errorText {
@@ -75,7 +60,11 @@ struct CollectionEditorView: View {
                             .accessibilityIdentifier("collection-save-error")
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 22)
+                .padding(.top, 6)
+                .padding(.bottom, 30)
+                .frame(maxWidth: 620)
+                .frame(maxWidth: .infinity)
                 .disabled(isSaving)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -118,51 +107,109 @@ struct CollectionEditorView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         #else
-        .frame(width: 640, height: 710)
+        .frame(width: 650, height: 730)
         #endif
     }
 
+    // MARK: - Header
+
     private var subjectHeader: some View {
-        HStack(spacing: 14) {
-            CachedAsyncImage(url: subject.coverURL, maxPixel: 240, contentMode: .fit,
-                             placeholderTint: .subjectTint(subject.type))
-                .frame(width: 50, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                CachedAsyncImage(
+                    url: subject.coverURL,
+                    maxPixel: 240,
+                    contentMode: .fit,
+                    placeholderTint: .subjectTint(subject.type)
+                )
+                .frame(width: 52, height: 74)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .shadow(color: .black.opacity(0.10), radius: 6, y: 3)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(subject.displayTitle)
-                    .font(.headline)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text([subject.typeName, subject.date.map { String($0.prefix(4)) }]
-                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(subject.displayTitle)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(headerMeta)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+
+            Divider()
         }
     }
+
+    private var headerMeta: String {
+        var parts: [String] = [subject.typeName]
+        if let year = subject.date?.prefix(4), !year.isEmpty {
+            parts.append(String(year))
+        }
+        let count = subject.type == SubjectType.book.rawValue
+            ? (subject.volumes > 0 ? "\(subject.volumes) 卷" : nil)
+            : (mainEpisodes.count > 0 ? "全 \(mainEpisodes.count) 话" : nil)
+        if let count {
+            parts.append(count)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Status
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("收藏状态")
-            Picker("收藏状态", selection: $status) {
+
+            HStack(spacing: 4) {
                 ForEach(CollectionType.allCases) { type in
-                    Text(type.title).tag(type)
+                    let tint = Color.collectionTint(type.rawValue)
+                    let isSelected = status == type
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            status = type
+                        }
+                    } label: {
+                        Text(type.title)
+                            .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                            .foregroundStyle(isSelected ? tint : Color.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .background {
+                                if isSelected {
+                                    Capsule()
+                                        .fill(tint.opacity(0.14))
+                                        .matchedGeometryEffect(id: "collection-status", in: statusAnimation)
+                                }
+                            }
+                            .overlay {
+                                if isSelected {
+                                    Capsule().strokeBorder(tint.opacity(0.22), lineWidth: 0.8)
+                                }
+                            }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("collection-status-\(type.rawValue)")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityIdentifier("collection-status")
         }
     }
 
+    // MARK: - Rating
+
     private var ratingSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 sectionTitle("我的评分")
-                Spacer()
+
+                Spacer(minLength: 8)
+
                 if rate > 0 {
                     Button("清除") { rate = 0 }
                         .font(.caption)
@@ -170,28 +217,32 @@ struct CollectionEditorView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("collection-rating-clear")
                 }
+
                 Text(rate == 0 ? "未评分" : "\(rate) 分")
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(rate == 0 ? Color.secondary : Color.brandPink)
                     .accessibilityIdentifier("collection-rating-value")
             }
-            Slider(value: Binding(get: { Double(rate) }, set: { rate = Int($0) }), in: 0...10, step: 1) {
-                Text("我的评分")
-            } minimumValueLabel: {
-                Text("0").font(.caption).foregroundStyle(.tertiary)
-            } maximumValueLabel: {
-                Text("10").font(.caption).foregroundStyle(.tertiary)
+
+            HStack(spacing: 10) {
+                InteractiveStarRating(rating: $rate)
+                    .accessibilityIdentifier("collection-rating")
+                Spacer(minLength: 0)
             }
-            .labelsHidden()
-            .accessibilityValue(rate == 0 ? "未评分" : "\(rate) 分")
-            .accessibilityIdentifier("collection-rating")
+
+            Text("轻点星星的左右半边，可评 1–10 分")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 
+    // MARK: - Progress
+
     private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("阅读进度", alternative: "观看进度")
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle(subject.type == SubjectType.book.rawValue ? "阅读进度" : "观看进度")
+
             if subject.type == SubjectType.book.rawValue {
                 progressControl("话数", value: $watched, total: subject.eps, identifier: "collection-episodes")
                 progressControl("卷数", value: $volumes, total: subject.volumes, identifier: "collection-volumes")
@@ -201,49 +252,105 @@ struct CollectionEditorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("暂无可记录的章节")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.stack")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    Text("暂无可记录的章节")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
             }
         }
     }
 
     private func progressControl(_ title: String, value: Binding<Int>, total: Int, identifier: String) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
+        let upperBound = max(max(total, value.wrappedValue), 1)
+        let canDecrease = value.wrappedValue > 0
+        let canIncrease = total <= 0 || value.wrappedValue < total
+
+        return VStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(title)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Text(total > 0 ? "\(value.wrappedValue) / \(max(total, value.wrappedValue))" : "\(value.wrappedValue)")
-                    .font(.subheadline.weight(.medium))
+
+                Spacer(minLength: 8)
+
+                Text("\(value.wrappedValue)")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.primary)
                     .accessibilityIdentifier("\(identifier)-value")
-                Stepper(title, value: value, in: 0...max(1, total, value.wrappedValue))
-                    .labelsHidden()
-                    .accessibilityLabel(title)
-                    .accessibilityValue("\(value.wrappedValue)")
-                    .accessibilityIdentifier(identifier)
+
+                if total > 0 {
+                    Text("/ \(total)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
-            if total > 0 {
-                ProgressView(value: min(Double(value.wrappedValue) / Double(total), 1))
-                    .progressViewStyle(.linear)
-                    .controlSize(.mini)
-                    .accessibilityHidden(true)
+
+            HStack(spacing: 12) {
+                stepButton("minus", enabled: canDecrease) {
+                    value.wrappedValue = max(0, value.wrappedValue - 1)
+                }
+                .accessibilityLabel("减少\(title)")
+
+                Slider(
+                    value: Binding(
+                        get: { Double(value.wrappedValue) },
+                        set: { value.wrappedValue = Int($0.rounded()) }
+                    ),
+                    in: 0...Double(upperBound),
+                    step: 1
+                )
+                .tint(.brandPink)
+                .accessibilityLabel(title)
+                .accessibilityValue("\(value.wrappedValue)")
+                .accessibilityIdentifier(identifier)
+
+                stepButton("plus", enabled: canIncrease) {
+                    value.wrappedValue = min(upperBound, value.wrappedValue + 1)
+                }
+                .accessibilityLabel("增加\(title)")
             }
         }
     }
 
+    private func stepButton(_ systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(enabled ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.35))
+                .frame(width: 30, height: 30)
+                .background(Color.primary.opacity(0.055), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    // MARK: - Tags & comment
+
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("标签")
-            TextField("添加标签，用逗号分隔", text: $tagsText)
-                .font(.subheadline)
-                .textFieldStyle(.plain)
-                .padding(12)
-                .background(Color.bgmSecondary, in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("标签，用逗号分隔")
-                .accessibilityIdentifier("collection-tags")
+
+            HStack(spacing: 8) {
+                Image(systemName: "tag")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                TextField("添加标签，用逗号分隔", text: $tagsText)
+                    .font(.subheadline)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel("标签，用逗号分隔")
+                    .accessibilityIdentifier("collection-tags")
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 42)
+            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
             if !parsedTags.isEmpty {
                 FlowLayout(spacing: 6, lineSpacing: 6) {
                     ForEach(parsedTags, id: \.self) { tag in
@@ -261,13 +368,22 @@ struct CollectionEditorView: View {
 
     private var commentSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("短评")
+            HStack(alignment: .firstTextBaseline) {
+                sectionTitle("短评")
+                Spacer(minLength: 8)
+                if !comment.isEmpty {
+                    Text("\(comment.count) 字")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
             TextEditor(text: $comment)
                 .font(.subheadline)
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .frame(height: 112)
-                .background(Color.bgmSecondary, in: RoundedRectangle(cornerRadius: 10))
+                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(alignment: .topLeading) {
                     if comment.isEmpty {
                         Text("写下你的感受…")
@@ -283,21 +399,49 @@ struct CollectionEditorView: View {
     }
 
     private var privacyRow: some View {
-        HStack {
-            Label("仅自己可见", systemImage: "lock")
-                .font(.subheadline)
+        HStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Spacer()
+                .frame(width: 30, height: 30)
+                .background(Color.primary.opacity(0.055), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("仅自己可见")
+                    .font(.subheadline)
+                Text("不会出现在公开的收藏页面")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
             Toggle("仅自己可见", isOn: $isPrivate)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .tint(.brandPink)
                 .accessibilityIdentifier("collection-private")
         }
     }
 
-    private func sectionTitle(_ title: String, alternative: String? = nil) -> some View {
-        Text(subject.type == SubjectType.book.rawValue ? title : (alternative ?? title))
-            .font(.subheadline.weight(.semibold))
+    private var removeButton: some View {
+        Button(role: .destructive) {
+            showRemoval = true
+        } label: {
+            Label("移除收藏…", systemImage: "trash")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.red)
+        .accessibilityIdentifier("collection-remove")
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.primary)
     }
 
@@ -339,5 +483,70 @@ struct CollectionEditorView: View {
         } catch {
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+// MARK: - Star rating
+
+private struct InteractiveStarRating: View {
+    @Binding var rating: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let starCount = 5
+    private let starSize: CGFloat = 32
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ForEach(0..<starCount, id: \.self) { index in
+                GeometryReader { proxy in
+                    ZStack {
+                        Image(systemName: "star")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundStyle(Color.primary.opacity(0.13))
+
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundStyle(Color(red: 0.96, green: 0.70, blue: 0.16))
+                            .mask(alignment: .leading) {
+                                Rectangle()
+                                    .frame(width: proxy.size.width * fillFraction(for: index))
+                            }
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        SpatialTapGesture()
+                            .onEnded { value in
+                                let rightHalf = value.location.x >= proxy.size.width / 2
+                                let newValue = index * 2 + (rightHalf ? 2 : 1)
+                                withAnimation(reduceMotion ? nil : .snappy(duration: 0.18)) {
+                                    rating = newValue
+                                }
+                            }
+                    )
+                }
+                .frame(width: starSize, height: starSize)
+                .accessibilityHidden(true)
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: rating)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("我的评分")
+        .accessibilityValue(rating == 0 ? "未评分" : "\(rating) 分")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                rating = min(10, rating + 1)
+            case .decrement:
+                rating = max(0, rating - 1)
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func fillFraction(for index: Int) -> CGFloat {
+        let stars = Double(rating) / 2
+        return CGFloat(max(0, min(1, stars - Double(index))))
     }
 }

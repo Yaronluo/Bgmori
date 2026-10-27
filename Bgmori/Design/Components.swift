@@ -639,6 +639,7 @@ struct TextTabs<Value: Hashable>: View {
     let title: (Value) -> String
     var horizontalPadding: CGFloat = 14
     var usesUnderline = false
+    var itemSpacing: CGFloat = 2
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
@@ -658,7 +659,7 @@ struct TextTabs<Value: Hashable>: View {
     }
 
     private var tabs: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: itemSpacing) {
             ForEach(values, id: \.self) { value in
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {

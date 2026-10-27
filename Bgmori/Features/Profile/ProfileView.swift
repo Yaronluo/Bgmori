@@ -63,7 +63,7 @@ struct ProfileView: View {
                 Spacer(minLength: 20)
                 if isSignedIn {
                     statsGrid
-                        .frame(width: 360)
+                        .frame(width: 380)
                 }
             }
             #else
@@ -74,12 +74,9 @@ struct ProfileView: View {
             }
             #endif
         }
-        .padding(22)
-        .background { heroBackground }
-        .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06))
-        }
+        .padding(.horizontal, 4)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 
     private var identity: some View {
@@ -125,37 +122,22 @@ struct ProfileView: View {
     private var actionsRow: some View {
         HStack(spacing: 10) {
             if app.isGuest {
-                Button { app.showLogin = true } label: {
-                    Label("登录 Bangumi", systemImage: "person.crop.circle.badge.checkmark")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .frame(minHeight: 36)
+                primaryAction("登录 Bangumi", systemImage: "person.crop.circle.badge.checkmark") {
+                    app.showLogin = true
                 }
-                .buttonStyle(.glassProminent)
-                .tint(.brandPink)
-                .foregroundStyle(Color.bgmCanvas)
-                .buttonBorderShape(.capsule)
+                .accessibilityIdentifier("profile-login")
             } else {
-                Button { openLibrary() } label: {
-                    Label("我的收藏", systemImage: "books.vertical.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .frame(minHeight: 36)
+                primaryAction("我的收藏", systemImage: "books.vertical.fill") {
+                    openLibrary()
                 }
-                .buttonStyle(.glassProminent)
-                .tint(.brandPink)
-                .foregroundStyle(Color.bgmCanvas)
-                .buttonBorderShape(.capsule)
 
                 Button { app.showSettings = true } label: {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 38, height: 38)
-                        .background(Color.bgmSurface.opacity(0.8), in: Circle())
-                        .overlay {
-                            Circle().strokeBorder(Color.primary.opacity(0.06))
-                        }
+                        .frame(width: 40, height: 40)
+                        .background(Color.primary.opacity(0.055), in: Circle())
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("偏好设置")
@@ -166,51 +148,55 @@ struct ProfileView: View {
         }
     }
 
+    private func primaryAction(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(Color.bgmCanvas)
+            .padding(.horizontal, 19)
+            .frame(minHeight: 42)
+            .background(Color.brandPink, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+        HStack(spacing: 0) {
             ProfileStatTile(
                 value: statValue(app.library.collections.count),
                 title: "全部收藏",
                 tint: .brandPink
             )
+            statDivider
             ProfileStatTile(
                 value: statValue(app.library.counts[.doing] ?? 0),
                 title: "在看",
                 tint: .collectionTint(CollectionType.doing.rawValue)
             )
+            statDivider
             ProfileStatTile(
                 value: statValue(app.library.counts[.done] ?? 0),
                 title: "看过",
                 tint: .collectionTint(CollectionType.done.rawValue)
             )
+            statDivider
             ProfileStatTile(
                 value: statValue(app.library.counts[.wish] ?? 0),
                 title: "想看",
                 tint: .collectionTint(CollectionType.wish.rawValue)
             )
         }
+        .padding(.vertical, 4)
     }
 
-    private var heroBackground: some View {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.brandPink.opacity(isSignedIn ? 0.14 : 0.07),
-                        Color.bgmSurface
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(Color.brandPink.opacity(isSignedIn ? 0.10 : 0.05))
-                    .frame(width: 230, height: 230)
-                    .blur(radius: 45)
-                    .offset(x: 70, y: -110)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    private var statDivider: some View {
+        Divider()
+            .frame(height: 30)
     }
 
     private var displayName: String {

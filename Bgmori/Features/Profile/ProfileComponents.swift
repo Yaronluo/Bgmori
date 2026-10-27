@@ -79,14 +79,8 @@ struct ProfileStatTile: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgmSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.045))
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title)：\(value ?? "未加载")")
     }
