@@ -37,7 +37,7 @@
 - [x] 我的：账号概览、继续观看、最近浏览、评分分布与收藏构成、好友、角色 / 人物收藏、时光机与社区入口；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
 - [x] 我的评分：平均分、评分分布、按评分 / 更新 / 标题排序的短评列表
 - [x] 本地缓存：API JSON 缓存、图片磁盘/内存缓存、离线可读
-- [x] 自动镜像：从 bangumi.wiki 获取 API、图片与网页地址，缓存镜像目录并使用 ETag 更新；读取失败时尝试其他地址，写请求不自动重复发送
+- [x] 自动镜像：从 bangumi.wiki 获取 API、图片与网页地址，缓存镜像目录并使用 ETag 更新；匿名网页优先直连官网，吐槽和分类排序会校验页面结构后缓存，失败再尝试镜像；写请求不自动重复发送
 - [x] 本地每日放送通知（完全本地计算）
 
 ### 设计
@@ -50,9 +50,9 @@
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
 - [x] 收藏顶部改为紧凑文字分类，以短下划线标记当前类型；状态收进次级菜单，移除大块玻璃底板；[两端浅深色截图](docs/screenshots/library-compact/README.md)
 - [x] 发现快捷入口与标题对齐，分类使用紧凑文字导航，放送使用轻量周历；手机分类筛选合并为一行，年份和排序收进筛选面板；[两端浅深色截图](docs/screenshots/page-navigation/README.md)
-- [x] Liquid Glass：自定义玻璃 Tab Bar、搜索悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[早期两端浅深色截图](docs/screenshots/compact-controls/README.md)
+- [x] Liquid Glass：iPhone 系统原生 Tab Bar、搜索悬浮筛选栏、玻璃登录/收藏/进度按钮、系统导航栏/Sheet 材质；[早期两端浅深色截图](docs/screenshots/compact-controls/README.md)
 - [x] 我的页重做为个人仪表盘，新增好友、角色/人物收藏与本页评分列表；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
-- [x] iPhone 四栏导航：发现 / 分类 / 收藏 / 我的，右上角搜索，今日放送从发现页进入
+- [x] iPhone 五栏导航：发现 / 分类 / 每日放送 / 收藏 / 我的；底栏使用系统原生 Liquid Glass 与内嵌胶囊选中态，右上角搜索；[两端浅深色截图](docs/screenshots/native-tabbar/README.md)
 - [x] 封面取色英雄区、`backgroundExtensionEffect`
 - [x] 浅色 / 深色 / 跟随系统
 - [x] Dynamic Type、VoiceOver 标签、Reduce Transparency 降级
@@ -98,6 +98,8 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 分类页的官网分类解析、组合筛选、翻页、缓存和切换保护可用 `bash scripts/test-categories.sh` 验证；加上 `--live` 会读取五类官网筛选目录，并用真实 API 检查公共标签组合与翻页。官网分类目录缓存一天，也可在筛选面板的菜单中手动同步；同步失败时支持重试或在浏览器中查看。
 
 导航回归检查：`bash scripts/test-navigation.sh`，分别运行 Mac 与 iPhone 17 模拟器上的搜索、放送、日志详情和返回路径检查。
+
+界面回归检查：`bash scripts/test-shell-ui.sh`（也可指定 `ios` 或 `mac`），使用临时工程验证栏目切换、搜索历史、详情返回、后台返回和真实吐槽的浅深色显示，不改动仓库工程与签名设置；[修复说明与两端截图](docs/screenshots/navigation-comments-fix/README.md)。
 
 日志解析检查：`bash scripts/test-social.sh`；加上 `--live` 会读取真实日志列表并验证三篇仍可访问的正文，列表中已删除的日志会明确跳过。
 
@@ -149,7 +151,7 @@ Bgmori/
 - 审核/公开分发需要处理 Bangumi 商标、UGC 举报与 R18 过滤；当前是私人使用版本，默认关闭 NSFW，设置里可手动开启。
 - OAuth 未预置 Client ID/Secret，需按上面的步骤配置。
 - 系统级 Widget、App Intents、Handoff、Spotlight 尚未接入；当前版本聚焦客户端本体。
-- 当前在 iOS 27 模拟器上，系统原生 Tab Bar 的 Liquid Glass 会出现截图层面的重影，因此使用了自定义玻璃 Tab Bar；真机表现以实际为准。
+- iPhone 底栏按用户指定改为系统原生 Tab Bar。早期模拟器曾出现截图图标重影，当前以本次原生底栏截图和真机表现为准。
 - 已适配 Mac 原生窗口，但未做多窗口/Stage Manager 的专门优化。
 
 ## 截图
