@@ -11,6 +11,7 @@ private final class TestServer: @unchecked Sendable {
     private var requests = 0
     private var fail = false
     private var failNextPage = false
+    private var emptyResults = false
     private var offsets: [Int] = []
 
     var count: Int { lock.withLock { requests } }
@@ -18,6 +19,7 @@ private final class TestServer: @unchecked Sendable {
 
     func setFailure(_ value: Bool) { lock.withLock { fail = value } }
     func failOnePage() { lock.withLock { failNextPage = true } }
+    func setEmptyResults(_ value: Bool) { lock.withLock { emptyResults = value } }
 
     func response(for request: URLRequest) -> StubResponse {
         lock.withLock {
@@ -60,7 +62,7 @@ private final class TestServer: @unchecked Sendable {
                 return StubResponse(data: data, status: fail ? 503 : 200, delay: id == 701 ? 0.15 : 0.01)
             }
             if request.url?.host == "bgm.tv" {
-                precondition(request.value(forHTTPHeaderField: "User-Agent") == APIClient.safariUserAgent)
+                precondition(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix(APIClient.safariUserAgent) == true)
                 return StubResponse(data: Data(CategoryTests.catalogFixture.utf8), status: fail ? 503 : 200, delay: 0.01)
             }
             precondition(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("Bgmori/") == true)
@@ -103,6 +105,10 @@ private final class TestServer: @unchecked Sendable {
             }
             let failed = fail || (offset > 0 && failNextPage)
             if offset > 0 { failNextPage = false }
+            if emptyResults {
+                let data = try! JSONSerialization.data(withJSONObject: ["data": [], "total": 0, "limit": 24, "offset": offset])
+                return StubResponse(data: data, status: 200, delay: 0.01)
+            }
             let rows: [[String: Any]]
             if offset == 0 {
                 rows = [
@@ -119,7 +125,7 @@ private final class TestServer: @unchecked Sendable {
                 ]
             }
             let data = try! JSONSerialization.data(withJSONObject: ["data": rows, "total": 6, "limit": 24, "offset": offset])
-            return StubResponse(data: data, status: failed ? 503 : 200, delay: tag.contains("race") && type == 2 ? 0.6 : 0.01)
+            return StubResponse(data: data, status: failed ? 503 : 200, delay: (tag.contains("race") || tag.contains("slow")) && type == 2 ? 0.6 : 0.01)
         }
     }
 }
@@ -170,7 +176,7 @@ struct CategoryTests {
         CategoryProtocol.server.failOnePage()
         await store.loadMore(query)
         precondition(store.subjects.map(\.id) == [201] && store.pageErrorText != nil && store.hasMore)
-        await store.loadMore(query)
+        await store.loadMore(query, force: true)
         precondition(store.subjects.map(\.id) == [201, 204] && !store.hasMore && store.pageErrorText == nil)
         print("PASS: pagination offsets, deduplication, content filtering, failed-page retry")
 
@@ -178,9 +184,23 @@ struct CategoryTests {
         _ = try await api.categorySubjects(query: query)
         precondition(CategoryProtocol.server.count == count)
         CategoryProtocol.server.setFailure(true)
-        _ = try await api.categorySubjects(query: query, force: true)
+        do {
+            _ = try await api.categorySubjects(query: query, force: true)
+            preconditionFailure("An explicit refresh must surface network failures")
+        } catch APIError.server(let status, _) {
+            precondition(status == 503)
+        }
         CategoryProtocol.server.setFailure(false)
-        print("PASS: cached search and offline fallback")
+        let preserved = try await api.categorySubjects(query: query)
+        precondition(!preserved.data.isEmpty && CategoryProtocol.server.count == count + 1)
+        print("PASS: cached search, forced refresh errors, and preserved fallback")
+
+        let emptyQuery = CategoryQuery(type: .anime, sort: .rank, year: 2020, tag: "\(run)-empty")
+        CategoryProtocol.server.setEmptyResults(true)
+        await store.load(emptyQuery, force: true)
+        precondition(store.subjects.isEmpty && store.errorText == nil && !store.hasMore)
+        CategoryProtocol.server.setEmptyResults(false)
+        print("PASS: a successful empty page replaces cached results with the empty state")
 
         let anime = CategoryQuery(type: .anime, sort: .collects, tag: "\(run)-race")
         let book = CategoryQuery(type: .book, sort: .collects, tag: "\(run)-race")
@@ -190,6 +210,28 @@ struct CategoryTests {
         await oldLoad.value
         precondition(store.subjects.map(\.id) == [101] && !store.isLoading)
         print("PASS: late animation response cannot replace selected books")
+
+        let slowAnime = CategoryQuery(type: .anime, sort: .collects, tag: "\(run)-slow")
+        let slowBook = CategoryQuery(type: .book, sort: .collects, tag: "\(run)-slow")
+        let coldGame = CategoryQuery(type: .game, sort: .collects, tag: "\(run)-cold")
+        await store.load(slowAnime)
+        precondition(store.subjects.map(\.id) == [201])
+        await store.load(slowBook)
+        precondition(store.subjects.map(\.id) == [101])
+        let cachedSwitch = Task { await store.load(slowAnime) }
+        try await Task.sleep(for: .milliseconds(120))
+        precondition(store.subjects.map(\.id) == [201] && !store.isLoading)
+        await cachedSwitch.value
+        let sameQueryRefresh = Task { await store.load(slowAnime, force: true) }
+        try await Task.sleep(for: .milliseconds(120))
+        precondition(store.subjects.map(\.id) == [201] && !store.isLoading)
+        await sameQueryRefresh.value
+        let coldSwitch = Task { await store.load(coldGame) }
+        await Task.yield()
+        precondition(!store.subjects.contains(where: { $0.id == 201 }),
+                     "A new query must not show the previous query's list")
+        await coldSwitch.value
+        print("PASS: same-query refresh keeps results, other queries restore their own cache")
 
         let retry = CategoryQuery(type: .book, sort: .collects, tag: "\(run)-retry")
         CategoryProtocol.server.setFailure(true)

@@ -167,6 +167,13 @@ struct CategoryView: View {
             }
             if store.hasMore { pagination }
         } else {
+            if store.refreshErrorText != nil {
+                RefreshFailureNotice(message: "刷新失败，显示的是缓存结果") {
+                    Task { await store.load(query, force: true) }
+                }
+                .padding(.horizontal, 20)
+                .accessibilityIdentifier("category-refresh-error")
+            }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
                 ForEach(store.subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
@@ -182,7 +189,8 @@ struct CategoryView: View {
     }
 
     private var pagination: some View {
-        PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageErrorText) {
+        PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageErrorText,
+                         retry: { await store.loadMore(query, force: true) }) {
             await store.loadMore(query)
         }
         .id(query)

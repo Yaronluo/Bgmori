@@ -25,44 +25,160 @@ actor SocialService {
 
     func friends(username: String, force: Bool = false) async throws -> [FriendSummary] {
         let url = URL(string: "https://bgm.tv/user/\(username)/friends")!
-        let html = try await api.rawHTML(url, cacheKey: "social-friends-\(username)", ttl: force ? 0 : 1_800)
+        let html = try await api.rawHTML(url, cacheKey: "social-friends-\(username)", ttl: force ? 0 : 1_800, validate: Self.validateFriends)
         return parseFriends(html)
     }
 
     func groupHome() async throws -> GroupHome {
         let url = URL(string: "https://bgm.tv/group")!
-        let html = try await api.rawHTML(url, cacheKey: "social-groups", ttl: 1_800)
+        let html = try await api.rawHTML(url, cacheKey: "social-groups", ttl: 1_800, validate: Self.validateGroupHome)
         return parseGroupHome(html)
     }
 
     func groupDetail(name: String) async throws -> GroupDetail {
         let url = URL(string: "https://bgm.tv/group/\(name)")!
-        let html = try await api.rawHTML(url, cacheKey: "social-group-\(name)", ttl: 1_800)
+        let html = try await api.rawHTML(url, cacheKey: "social-group-\(name)", ttl: 1_800, validate: Self.validateGroupDetail)
         return parseGroupDetail(html, name: name)
     }
 
     func topic(id: Int) async throws -> TopicDetail {
         let url = URL(string: "https://bgm.tv/group/topic/\(id)")!
-        let html = try await api.rawHTML(url, cacheKey: "social-topic-\(id)", ttl: 1_800)
+        let html = try await api.rawHTML(url, cacheKey: "social-topic-\(id)", ttl: 1_800, validate: Self.validateTopic)
         return parseTopic(html, id: id)
     }
 
     func blogList() async throws -> [BlogSummary] {
         let url = URL(string: "https://bgm.tv/blog")!
-        let html = try await api.rawHTML(url, cacheKey: "social-blogs", ttl: 1_800)
+        let html = try await api.rawHTML(url, cacheKey: "social-blogs", ttl: 1_800, validate: Self.validateBlogList)
         return parseBlogList(html)
     }
 
     func blogDetail(id: Int) async throws -> BlogDetail {
         let url = URL(string: "https://bgm.tv/blog/\(id)")!
         let html = try await api.rawHTML(url, cacheKey: "social-blog-\(id)", ttl: 3_600)
-        return try parseBlogDetail(html, id: id)
+        return try Self.parseBlogDetail(html, id: id)
     }
 
     func timeline(username: String) async throws -> [TimelineItem] {
         let url = URL(string: "https://bgm.tv/user/\(username)/timeline")!
-        let html = try await api.rawHTML(url, cacheKey: "social-timeline-\(username)", ttl: 600)
+        let html = try await api.rawHTML(url, cacheKey: "social-timeline-\(username)", ttl: 600, validate: Self.validateTimeline)
         return parseTimeline(html)
+    }
+
+    // MARK: - Cache-first reads
+
+    func cachedSubjectComments(subjectID: Int, page: Int = 1) async -> CacheHit<[SocialComment]>? {
+        let url = URL(string: "https://bgm.tv/subject/\(subjectID)/comments?page=\(page)")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-comments-\(subjectID)-\(page)", ttl: 3_600,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: { _ = try Self.parseSubjectComments($0, subjectID: subjectID, page: page) }),
+              let comments = try? Self.parseSubjectComments(hit.value, subjectID: subjectID, page: page) else { return nil }
+        return CacheHit(value: comments, cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedEpisodeComments(episodeID: Int) async -> CacheHit<[SocialComment]>? {
+        let url = URL(string: "https://bgm.tv/ep/\(episodeID)")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-episode-\(episodeID)", ttl: 3_600,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: { _ = try Self.parseEpisodeComments($0, episodeID: episodeID) }),
+              let comments = try? Self.parseEpisodeComments(hit.value, episodeID: episodeID) else { return nil }
+        return CacheHit(value: comments, cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedFriends(username: String) async -> CacheHit<[FriendSummary]>? {
+        let url = URL(string: "https://bgm.tv/user/\(username)/friends")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-friends-\(username)", ttl: 1_800,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateFriends) else { return nil }
+        return CacheHit(value: parseFriends(hit.value), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedGroupHome() async -> CacheHit<GroupHome>? {
+        let url = URL(string: "https://bgm.tv/group")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-groups", ttl: 1_800,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateGroupHome) else { return nil }
+        return CacheHit(value: parseGroupHome(hit.value), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedGroupDetail(name: String) async -> CacheHit<GroupDetail>? {
+        let url = URL(string: "https://bgm.tv/group/\(name)")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-group-\(name)", ttl: 1_800,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateGroupDetail) else { return nil }
+        return CacheHit(value: parseGroupDetail(hit.value, name: name), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedTopic(id: Int) async -> CacheHit<TopicDetail>? {
+        let url = URL(string: "https://bgm.tv/group/topic/\(id)")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-topic-\(id)", ttl: 1_800,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateTopic) else { return nil }
+        return CacheHit(value: parseTopic(hit.value, id: id), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedBlogList() async -> CacheHit<[BlogSummary]>? {
+        let url = URL(string: "https://bgm.tv/blog")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-blogs", ttl: 1_800,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateBlogList) else { return nil }
+        return CacheHit(value: parseBlogList(hit.value), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedBlogDetail(id: Int) async -> CacheHit<BlogDetail>? {
+        let url = URL(string: "https://bgm.tv/blog/\(id)")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-blog-\(id)", ttl: 3_600,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: { _ = try Self.parseBlogDetail($0, id: id) }),
+              let detail = try? Self.parseBlogDetail(hit.value, id: id) else { return nil }
+        return CacheHit(value: detail, cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    func cachedTimeline(username: String) async -> CacheHit<[TimelineItem]>? {
+        let url = URL(string: "https://bgm.tv/user/\(username)/timeline")!
+        guard let hit = await api.cachedHTML(url, cacheKey: "social-timeline-\(username)", ttl: 600,
+                                            maxStale: CacheLifetime.socialHTML,
+                                            validate: Self.validateTimeline) else { return nil }
+        return CacheHit(value: parseTimeline(hit.value), cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
+    }
+
+    private static func validateFriends(_ html: String) throws {
+        guard html.contains("memberUserList") || html.contains("还没有好友")
+                || html.contains("没有好友") else {
+            throw APIError.message("好友页面暂时无法识别")
+        }
+    }
+
+    private static func validateGroupHome(_ html: String) throws {
+        guard html.contains("groupsLarge") || html.contains("group/topic/")
+                || html.contains("暂无") else {
+            throw APIError.message("小组页面暂时无法识别")
+        }
+    }
+
+    private static func validateGroupDetail(_ html: String) throws {
+        guard html.contains("grp_box") || html.contains("group/topic/")
+                || html.contains("暂无") else {
+            throw APIError.message("小组页面暂时无法识别")
+        }
+    }
+
+    private static func validateTopic(_ html: String) throws {
+        guard html.contains("post_") || html.contains("topic_content") else {
+            throw APIError.message("话题页面暂时无法识别")
+        }
+    }
+
+    private static func validateBlogList(_ html: String) throws {
+        guard html.contains("item clearit") || html.contains("暂无") else {
+            throw APIError.message("日志页面暂时无法识别")
+        }
+    }
+
+    private static func validateTimeline(_ html: String) throws {
+        guard html.contains("tml_item") || html.contains("暂无") else {
+            throw APIError.message("时光机页面暂时无法识别")
+        }
     }
 
     // MARK: - Subject comments
@@ -258,7 +374,7 @@ actor SocialService {
         }
     }
 
-    private func parseBlogDetail(_ html: String, id: Int) throws -> BlogDetail {
+    private static func parseBlogDetail(_ html: String, id: Int) throws -> BlogDetail {
         guard let content = HTMLSupport.elementContents(id: "entry_content", in: html),
               !HTMLSupport.text(content).isEmpty else {
             throw APIError.message("无法读取日志，可从右上角菜单打开网页。")

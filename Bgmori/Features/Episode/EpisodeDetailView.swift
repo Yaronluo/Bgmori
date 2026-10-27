@@ -11,12 +11,21 @@ struct EpisodeDetailView: View {
     @State private var commentsError: String?
     @State private var isLoading = true
     @State private var errorText: String?
+    @State private var refreshError: String?
+    @State private var commentsEpisodeID: Int?
+    @State private var loadedEpisodeID: Int?
 
     var body: some View {
         Group {
             if let episode {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
+                        if refreshError != nil {
+                            RefreshFailureNotice(message: "章节更新失败，显示的是缓存内容") {
+                                Task { await refreshAll() }
+                            }
+                            .padding(.horizontal, 20)
+                        }
                         header(episode)
                         if let desc = episode.desc, !desc.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
@@ -51,6 +60,11 @@ struct EpisodeDetailView: View {
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             } else {
+                                if commentsError != nil {
+                                    RefreshFailureNotice(message: "吐槽更新失败，显示的是缓存内容") {
+                                        Task { await loadComments(force: true) }
+                                    }
+                                }
                                 VStack(spacing: 0) {
                                     ForEach(comments) { comment in
                                         SocialCommentRow(comment: comment)
@@ -65,6 +79,7 @@ struct EpisodeDetailView: View {
                     .padding(.top, 8)
                 }
                 .scrollIndicators(.hidden)
+                .refreshable { await refreshAll() }
             } else if isLoading {
                 ProgressView("加载章节…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -79,7 +94,10 @@ struct EpisodeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .bgmWebFallback(URL(string: "https://bgm.tv/ep/\(episodeID)")!)
-        .task(id: episodeID) { await load() }
+        .task(id: episodeID) {
+            prepareIfNeeded()
+            await load()
+        }
         .task(id: episodeID) { await loadComments() }
     }
 
@@ -150,33 +168,129 @@ struct EpisodeDetailView: View {
         return (app.library.collection(for: subject.id)?.epStatus ?? 0) >= Int(episode.ep ?? 0)
     }
 
-    private func loadComments(force: Bool = false) async {
-        commentsLoading = true
+    private func prepareIfNeeded() {
+        guard loadedEpisodeID != episodeID else { return }
+        loadedEpisodeID = episodeID
+        episode = nil
+        subject = nil
+        comments = []
+        commentsEpisodeID = nil
         commentsError = nil
+        commentsLoading = true
+        errorText = nil
+        refreshError = nil
+        isLoading = true
+    }
+
+    private func load() async {
+        await loadBase(force: false)
+    }
+
+    private func refreshAll() async {
+        async let base: Void = loadBase(force: true)
+        async let comments: Void = loadComments(force: true)
+        _ = await (base, comments)
+    }
+
+    private func loadBase(force: Bool) async {
+        let id = episodeID
+        if !force, let hit = await app.api.cachedEpisode(id) {
+            guard !Task.isCancelled, id == episodeID else { return }
+            episode = hit.value
+            isLoading = false
+            if hit.isFresh {
+                await loadLinkedSubject(force: false)
+                return
+            }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else {
+                await loadLinkedSubject(force: false)
+                return
+            }
+        }
+        if episode == nil { isLoading = true }
+        if force { refreshError = nil }
+        do {
+            let value = try await app.api.episode(id)
+            guard !Task.isCancelled, id == episodeID else { return }
+            episode = value
+            errorText = nil
+            refreshError = nil
+            isLoading = false
+            await loadLinkedSubject(force: force)
+        } catch {
+            guard !Task.isCancelled, !Self.isCancellation(error) else { return }
+            if episode == nil {
+                errorText = Self.message(for: error)
+            } else {
+                refreshError = Self.message(for: error)
+            }
+            isLoading = false
+        }
+    }
+
+    private func loadLinkedSubject(force: Bool) async {
+        guard let subjectID = episode?.subjectId else { return }
+        var needsRefresh = force || subject?.id != subjectID
+        if !force, let hit = await app.api.cachedSubject(subjectID) {
+            guard !Task.isCancelled, episode?.subjectId == subjectID else { return }
+            subject = hit.value
+            needsRefresh = !hit.isFresh
+            if !needsRefresh {
+                if app.auth.isLoggedIn { await app.library.loadEpisodes(subjectID: subjectID) }
+                return
+            }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else {
+                if app.auth.isLoggedIn { await app.library.loadEpisodes(subjectID: subjectID) }
+                return
+            }
+        }
+        if app.auth.isLoggedIn {
+            await app.library.loadEpisodes(subjectID: subjectID)
+        }
+        guard needsRefresh else { return }
+        if let value = try? await app.api.subject(subjectID) {
+            guard !Task.isCancelled, episode?.subjectId == subjectID else { return }
+            subject = value
+        }
+    }
+
+    private func loadComments(force: Bool = false) async {
+        let id = episodeID
+        if commentsEpisodeID != id {
+            commentsEpisodeID = id
+            comments = []
+            commentsError = nil
+            commentsLoading = true
+        }
+        if !force, let hit = await app.social.cachedEpisodeComments(episodeID: id) {
+            guard !Task.isCancelled, id == episodeID else { return }
+            comments = hit.value
+            commentsError = nil
+            commentsLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { commentsError = nil }
+        if comments.isEmpty { commentsLoading = true }
         defer { commentsLoading = false }
         do {
-            comments = try await app.social.episodeComments(episodeID: episodeID, force: force)
+            let value = try await app.social.episodeComments(episodeID: id, force: force)
+            guard !Task.isCancelled, id == episodeID else { return }
+            comments = value
+            commentsError = nil
         } catch {
             guard !Task.isCancelled else { return }
             commentsError = error.localizedDescription
         }
     }
 
-    private func load() async {
-        isLoading = true
-        errorText = nil
-        defer { isLoading = false }
-        do {
-            let episode = try await app.api.episode(episodeID)
-            self.episode = episode
-            if let subjectID = episode.subjectId {
-                subject = try? await app.api.subject(subjectID)
-                if app.auth.isLoggedIn {
-                    await app.library.loadEpisodes(subjectID: subjectID)
-                }
-            }
-        } catch {
-            errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
+    private static func message(for error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let api = error as? APIError, case .cancelled = api { return true }
+        return (error as? URLError)?.code == .cancelled
     }
 }

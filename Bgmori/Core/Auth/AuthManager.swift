@@ -159,3 +159,6 @@ final class AuthManager {
         return "暂时无法完成登录，请检查网络后重试"
     }
 }
+
+
+extension AuthManager: LibraryAccountProviding {}

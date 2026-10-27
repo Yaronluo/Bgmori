@@ -18,19 +18,30 @@ final class CategoryStore {
     private(set) var subjects: [Subject] = []
     private(set) var isLoading = false
     private(set) var isLoadingMore = false
+    private(set) var isRefreshing = false
     private(set) var hasMore = false
     private(set) var errorText: String?
+    private(set) var refreshErrorText: String?
     private(set) var pageErrorText: String?
+    private(set) var nextOffset = 0
 
     private let api: APIClient
     private let pageSize = 24
-    private(set) var nextOffset = 0
     private var currentQuery: CategoryQuery?
     private var requestID = UUID()
+    private var contentKey: String?
+    private var memoryPages: [String: CachedPage] = [:]
     private var catalogs: [SubjectType: [CategoryFilterGroup]] = [:]
     private var catalogErrors: [SubjectType: String] = [:]
     private var filterLoads: [SubjectType: UUID] = [:]
     private var filterTasks: [SubjectType: Task<[CategoryFilterGroup], Error>] = [:]
+
+    private struct CachedPage: Codable, Sendable {
+        let subjects: [Subject]
+        let nextOffset: Int
+        let hasMore: Bool
+        let savedAt: Date
+    }
 
     init(api: APIClient) {
         self.api = api
@@ -51,6 +62,13 @@ final class CategoryStore {
 
     func loadFilters(for type: SubjectType, force: Bool = false) async {
         guard force || catalogs[type] == nil else { return }
+        if !force, catalogs[type] == nil,
+           let hit = await api.cachedCategoryFilters(type: type) {
+            catalogs[type] = hit.value
+            catalogErrors[type] = nil
+            if hit.isFresh { return }
+            guard await api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 300) else { return }
+        }
         if !force, let task = filterTasks[type] {
             _ = try? await task.value
             return
@@ -78,43 +96,119 @@ final class CategoryStore {
     }
 
     func load(_ query: CategoryQuery, force: Bool = false) async {
-        guard force || query != currentQuery || subjects.isEmpty else { return }
+        if !force, query == currentQuery, !subjects.isEmpty { return }
+        if query == currentQuery, isLoading || isRefreshing { return }
+
+        let queryChanged = query != currentQuery
         let id = UUID()
         requestID = id
         currentQuery = query
-        subjects = []
-        nextOffset = 0
-        hasMore = false
-        errorText = nil
+        defer {
+            if requestID == id {
+                isLoading = false
+                isRefreshing = false
+            }
+        }
+        if queryChanged {
+            // Never render the previous query's list under the new controls.
+            subjects = []
+            nextOffset = 0
+            hasMore = false
+            isLoading = true
+        }
         pageErrorText = nil
-        isLoading = true
-        isLoadingMore = false
-        defer { if requestID == id { isLoading = false } }
+        errorText = nil
+        refreshErrorText = nil
+
+        let source = await api.cacheScope()
+        guard requestID == id else { return }
+        let key = cacheKey(for: query, source: source)
+        contentKey = key
+
+        if !force {
+            if let page = await cachedPage(for: key) {
+                guard requestID == id, currentQuery == query else { return }
+                subjects = page.subjects
+                nextOffset = page.nextOffset
+                hasMore = page.hasMore
+            } else {
+                guard requestID == id, currentQuery == query else { return }
+                subjects = []
+                nextOffset = 0
+                hasMore = false
+            }
+        }
+
+        isLoading = subjects.isEmpty
+        isRefreshing = !subjects.isEmpty
 
         do {
             let page = try await api.categorySubjects(query: query, limit: pageSize, force: force)
-            guard requestID == id, !Task.isCancelled else { return }
-            append(page, query: query)
+            guard requestID == id, currentQuery == query, !Task.isCancelled else { return }
+            replace(page, query: query)
+            errorText = nil
+            refreshErrorText = nil
+            await saveSnapshot(for: key, query: query)
         } catch {
-            guard requestID == id, !Task.isCancelled else { return }
-            errorText = error.localizedDescription
+            guard requestID == id, currentQuery == query, !Task.isCancelled else { return }
+            if subjects.isEmpty {
+                errorText = error.localizedDescription
+            } else {
+                refreshErrorText = error.localizedDescription
+            }
         }
     }
 
-    func loadMore(_ query: CategoryQuery) async {
-        guard currentQuery == query, hasMore, !isLoading, !isLoadingMore else { return }
+    func loadMore(_ query: CategoryQuery, force: Bool = false) async {
+        guard currentQuery == query, hasMore, !isLoading, !isLoadingMore, !isRefreshing else { return }
         let id = requestID
         isLoadingMore = true
         pageErrorText = nil
         defer { if requestID == id { isLoadingMore = false } }
         do {
-            let page = try await api.categorySubjects(query: query, limit: pageSize, offset: nextOffset)
+            let page = try await api.categorySubjects(query: query, limit: pageSize, offset: nextOffset, force: force)
             guard requestID == id, !Task.isCancelled else { return }
             append(page, query: query)
+            if let key = contentKey {
+                await saveSnapshot(for: key, query: query)
+            }
         } catch {
             guard requestID == id, !Task.isCancelled else { return }
             pageErrorText = error.localizedDescription
         }
+    }
+
+    // MARK: - Cached result pages
+
+    private func cacheKey(for query: CategoryQuery, source: String) -> String {
+        "category-page-v1-\(source)-\(pageSize)-\(query.cacheKey)"
+    }
+
+    private func cachedPage(for key: String) async -> CachedPage? {
+        if let page = memoryPages[key] { return page }
+        guard let data = await api.cache.read(key, maxAge: CacheLifetime.publicCatalog),
+              let page = try? JSONDecoder().decode(CachedPage.self, from: data) else { return nil }
+        remember(page, for: key)
+        return page
+    }
+
+    private func saveSnapshot(for key: String, query: CategoryQuery) async {
+        let page = CachedPage(subjects: subjects, nextOffset: nextOffset, hasMore: hasMore, savedAt: Date())
+        remember(page, for: key)
+        guard let data = try? JSONEncoder().encode(page) else { return }
+        await api.cache.write(key, data: data)
+    }
+
+    private func remember(_ page: CachedPage, for key: String) {
+        if memoryPages.count >= 24, memoryPages[key] == nil { memoryPages.removeAll() }
+        memoryPages[key] = page
+    }
+
+    private func replace(_ page: Paged<Subject>, query: CategoryQuery) {
+        var ids: Set<Int> = []
+        subjects = page.data.filter { query.matches($0) && ids.insert($0.id).inserted }
+        nextOffset = page.nextOffset
+        hasMore = nextOffset > page.offset && nextOffset < page.total
     }
 
     private func append(_ page: Paged<Subject>, query: CategoryQuery) {

@@ -134,8 +134,8 @@ final class AppModel {
         async let initialContent: Void = prepareStartupContent()
 
         await auth.restore()
-        if auth.isLoggedIn, let username = auth.username {
-            await library.loadAll(username: username, force: true)
+        if auth.isLoggedIn {
+            await library.loadIfNeeded()
         }
         await initialContent
         await updateDailyReminder()
@@ -311,6 +311,13 @@ final class AppModel {
         defer {
             isLoadingCalendar = false
             hasLoadedCalendar = true
+        }
+
+        if !force, calendar.isEmpty, let hit = await api.cachedCalendar() {
+            calendar = hit.value.sorted { $0.weekday.id < $1.weekday.id }
+            hasLoadedCalendar = true
+            if hit.isFresh { return }
+            guard await api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 300) else { return }
         }
 
         do {
@@ -516,6 +523,7 @@ final class AppModel {
 
     func clearCaches() async {
         await api.clearCache()
+        await library.clearSnapshot()
         await ImageLoader.shared.clear()
         URLCache.shared.removeAllCachedResponses()
         showToast("缓存已清理")

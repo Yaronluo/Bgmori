@@ -697,6 +697,7 @@ struct PaginationFooter: View {
     let offset: Int
     let isLoading: Bool
     let error: String?
+    var retry: (() async -> Void)? = nil
     let load: () async -> Void
     @State private var isVisible = false
 
@@ -704,7 +705,7 @@ struct PaginationFooter: View {
         VStack(spacing: 8) {
             if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary)
-                Button("重试") { Task { await load() } }
+                Button("重试") { Task { await (retry ?? load)() } }
             } else if isLoading {
                 ProgressView()
             } else {
@@ -730,5 +731,33 @@ extension View {
                 }
             }
         }
+    }
+}
+
+/// A compact, non-blocking retry row shown when cached content is still on
+/// screen but a user-initiated or background refresh failed.
+struct RefreshFailureNotice: View {
+    let message: String
+    var action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button("重试", action: action)
+                .font(.system(size: 11.5, weight: .semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.brandPink)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .contain)
     }
 }

@@ -12,6 +12,7 @@ struct ProfileView: View {
     @State private var personTotal = 0
     @State private var isLoadingPeople = false
     @State private var peopleError: String?
+    @State private var loadedProfileUsername: String?
 
     private var isSignedIn: Bool { app.auth.isLoggedIn }
 
@@ -227,6 +228,15 @@ struct ProfileView: View {
         } else if app.library.collections.isEmpty {
             emptyLibraryCard
         } else {
+            if app.library.lastError != nil {
+                RefreshFailureNotice(message: "收藏同步失败，显示的是本地快照") {
+                    Task {
+                        if let username = app.auth.username {
+                            await app.library.loadAll(username: username, force: true)
+                        }
+                    }
+                }
+            }
             if !app.continueWatching.isEmpty {
                 continueSection
             }
@@ -718,9 +728,8 @@ struct ProfileView: View {
     }
 
     private var friendSubtitle: String {
-        if isLoadingFriends { return "正在读取…" }
-        if friendError != nil { return "打开好友列表" }
-        if friends.isEmpty { return "还没有好友" }
+        if isLoadingFriends && friends.isEmpty { return "正在读取…" }
+        if friends.isEmpty { return friendError == nil ? "还没有好友" : "打开好友列表" }
         return "\(friends.count) 位好友"
     }
 
@@ -732,9 +741,9 @@ struct ProfileView: View {
     }
 
     private var peopleSubtitle: String {
-        if isLoadingPeople { return "正在读取…" }
         let total = characterTotal + personTotal
-        if total == 0 { return "角色与人物" }
+        if isLoadingPeople && total == 0 { return "正在读取…" }
+        if total == 0 { return peopleError == nil ? "角色与人物" : "暂时无法读取" }
         return "\(total) 位"
     }
 
@@ -836,34 +845,59 @@ struct ProfileView: View {
     }
 
     private func load() async {
-        await app.library.loadIfNeeded()
         guard let username = app.auth.username, !app.isGuest else {
             friends = []
             characterTotal = 0
             personTotal = 0
             friendError = nil
             peopleError = nil
+            loadedProfileUsername = nil
+            await app.library.loadIfNeeded()
             return
         }
-        await loadFriends(username: username)
-        await loadPeople(username: username)
+        if loadedProfileUsername != username {
+            loadedProfileUsername = username
+            friends = []
+            characterTotal = 0
+            personTotal = 0
+            friendError = nil
+            peopleError = nil
+            isLoadingFriends = false
+            isLoadingPeople = false
+        }
+        async let library: Void = app.library.loadIfNeeded()
+        async let friends: Void = loadFriends(username: username)
+        async let people: Void = loadPeople(username: username)
+        _ = await (library, friends, people)
     }
 
     private func refresh() async {
         guard let username = app.auth.username, !app.isGuest else { return }
-        await app.library.loadAll(username: username, force: true)
-        await loadFriends(username: username, force: true)
-        await loadPeople(username: username, force: true)
+        async let library: Bool = app.library.loadAll(username: username, force: true)
+        async let friends: Void = loadFriends(username: username, force: true)
+        async let people: Void = loadPeople(username: username, force: true)
+        _ = await (library, friends, people)
     }
 
     private func loadFriends(username: String, force: Bool = false) async {
+        if !force, let hit = await app.social.cachedFriends(username: username) {
+            guard !Task.isCancelled else { return }
+            friends = hit.value
+            friendError = nil
+            isLoadingFriends = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
         guard !isLoadingFriends else { return }
         isLoadingFriends = true
         friendError = nil
         defer { isLoadingFriends = false }
         do {
-            friends = try await app.social.friends(username: username, force: force)
+            let value = try await app.social.friends(username: username, force: force)
+            guard !Task.isCancelled else { return }
+            friends = value
         } catch {
+            guard !Task.isCancelled else { return }
             friendError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -873,24 +907,52 @@ struct ProfileView: View {
         isLoadingPeople = true
         peopleError = nil
         defer { isLoadingPeople = false }
-
         let auth = app.auth.isLoggedIn
-        var failure: String?
+        async let characters: String? = loadCharacterTotal(username: username, auth: auth, force: force)
+        async let persons: String? = loadPersonTotal(username: username, auth: auth, force: force)
+        let failures = await [characters, persons].compactMap { $0 }
+        guard !Task.isCancelled else { return }
+        peopleError = failures.first
+    }
+
+    private func loadCharacterTotal(username: String, auth: Bool, force: Bool) async -> String? {
+        if !force, let hit = await app.api.cachedUserCharacterCollections(username, limit: 1) {
+            guard !Task.isCancelled else { return nil }
+            characterTotal = hit.value.total
+            if hit.isFresh { return nil }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return nil }
+        }
         do {
-            characterTotal = try await app.api
+            let total = try await app.api
                 .userCharacterCollections(username, limit: 1, auth: auth, force: force)
                 .total
+            guard !Task.isCancelled else { return nil }
+            characterTotal = total
+            return nil
         } catch {
-            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            guard !Task.isCancelled else { return nil }
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func loadPersonTotal(username: String, auth: Bool, force: Bool) async -> String? {
+        if !force, let hit = await app.api.cachedUserPersonCollections(username, limit: 1) {
+            guard !Task.isCancelled else { return nil }
+            personTotal = hit.value.total
+            if hit.isFresh { return nil }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return nil }
         }
         do {
-            personTotal = try await app.api
+            let total = try await app.api
                 .userPersonCollections(username, limit: 1, auth: auth, force: force)
                 .total
+            guard !Task.isCancelled else { return nil }
+            personTotal = total
+            return nil
         } catch {
-            failure = failure ?? ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            guard !Task.isCancelled else { return nil }
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
-        peopleError = failure
     }
 }
 
@@ -952,10 +1014,19 @@ struct UserProfileView: View {
     @State private var collections: [UserSubjectCollection] = []
     @State private var isLoading = false
     @State private var errorText: String?
+    @State private var refreshError: String?
+    @State private var loadedUsernameKey: String?
+    @State private var loadedAt: Date?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
+                if refreshError != nil, user != nil || !collections.isEmpty {
+                    RefreshFailureNotice(message: "用户页面更新失败，显示的是缓存内容") {
+                        Task { await load(force: true) }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if let user {
                     HStack(spacing: 14) {
                         AvatarView(url: user.avatarURL, size: 70)
@@ -1022,17 +1093,52 @@ struct UserProfileView: View {
         }
     }
 
-    private func load() async {
-        guard !isLoading else { return }
-        isLoading = true
+    private func load(force: Bool = false) async {
+        let requested = username
+        if loadedUsernameKey != requested {
+            loadedUsernameKey = requested
+            user = nil
+            collections = []
+            errorText = nil
+            refreshError = nil
+            isLoading = true
+            loadedAt = nil
+        }
+        if !force, let loadedAt, Date().timeIntervalSince(loadedAt) < 120 { return }
+        guard !isLoading || force || user == nil else { return }
+        loadedAt = Date()
+        if !force {
+            if let hit = await app.api.cachedUser(requested) {
+                guard !Task.isCancelled, requested == username, loadedUsernameKey == requested else { return }
+                user = hit.value
+                isLoading = false
+            }
+            if let hit = await app.api.cachedUserCollections(requested) {
+                guard !Task.isCancelled, requested == username, loadedUsernameKey == requested else { return }
+                collections = hit.value.data
+                isLoading = false
+            }
+        }
+        isLoading = user == nil
+        if force { refreshError = nil }
         defer { isLoading = false }
         do {
-            user = try await app.api.user(username)
-            let page = try await app.api.userCollections(username, limit: 50, auth: app.auth.isLoggedIn)
+            async let userValue = app.api.user(requested)
+            async let pageValue = app.api.userCollections(requested, limit: 50, auth: app.auth.isLoggedIn)
+            let (value, page) = try await (userValue, pageValue)
+            guard !Task.isCancelled, requested == username, loadedUsernameKey == requested else { return }
+            user = value
             collections = page.data
             errorText = nil
+            refreshError = nil
         } catch {
-            errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            guard !Task.isCancelled, requested == username, loadedUsernameKey == requested else { return }
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            if user == nil && collections.isEmpty {
+                errorText = message
+            } else {
+                refreshError = message
+            }
         }
     }
 }

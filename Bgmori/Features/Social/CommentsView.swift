@@ -290,6 +290,25 @@ struct CommentsView: View {
 
     private func load(page: Int, force: Bool = false) async {
         guard !isLoading else { return }
+
+        if page == 1, !force {
+            let hit: CacheHit<[SocialComment]>?
+            if let episodeID {
+                hit = await app.social.cachedEpisodeComments(episodeID: episodeID)
+            } else {
+                hit = await app.social.cachedSubjectComments(subjectID: subjectID, page: 1)
+            }
+            if let hit {
+                guard !Task.isCancelled else { return }
+                comments = hit.value
+                self.page = 1
+                hasMore = episodeID == nil && hit.value.count >= 20
+                errorText = nil
+                if hit.isFresh { return }
+                guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+            }
+        }
+
         isLoading = true
         errorText = nil
         defer { isLoading = false }
@@ -300,6 +319,7 @@ struct CommentsView: View {
             } else {
                 fetched = try await app.social.subjectComments(subjectID: subjectID, page: page, force: force)
             }
+            guard !Task.isCancelled else { return }
             if page == 1 {
                 comments = fetched
             } else {
@@ -308,7 +328,9 @@ struct CommentsView: View {
             }
             self.page = page
             hasMore = episodeID == nil && fetched.count >= 20
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             hasMore = false
         }

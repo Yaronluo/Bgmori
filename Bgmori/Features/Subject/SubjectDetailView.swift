@@ -6,6 +6,13 @@ import UIKit
 import AppKit
 #endif
 
+private enum DetailSection: Hashable {
+    case episodes
+    case characters
+    case persons
+    case relations
+}
+
 struct SubjectDetailView: View {
     @Environment(AppModel.self) private var app
     let subjectID: Int
@@ -25,6 +32,12 @@ struct SubjectDetailView: View {
     @State private var commentsLoading = true
     @State private var commentsError: String?
     @State private var contentWidth: CGFloat = 0
+    @State private var sectionErrors: [DetailSection: String] = [:]
+    @State private var loadingSections: Set<DetailSection> = []
+    @State private var subjectRefreshError: String?
+    @State private var isRefreshing = false
+    @State private var loadedSubjectID: Int?
+    @State private var commentsSubjectID: Int?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var isWideLayout: Bool {
@@ -117,6 +130,7 @@ struct SubjectDetailView: View {
             }
         }
         .task(id: subjectID) {
+            prepareForSubjectIfNeeded()
             await load()
         }
         .task(id: subjectID) { await loadComments() }
@@ -165,6 +179,7 @@ struct SubjectDetailView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .refreshable { await refreshAll() }
         #if os(iOS)
         .background(Color.bgmBackground)
         .ignoresSafeArea(.container, edges: .top)
@@ -197,33 +212,41 @@ struct SubjectDetailView: View {
 
     @ViewBuilder
     private func cards(_ subject: Subject) -> some View {
-        if isWideLayout {
-            HStack(alignment: .top, spacing: 20) {
+        VStack(spacing: 16) {
+            if let refreshFailureMessage {
+                RefreshFailureNotice(message: refreshFailureMessage) {
+                    Task { await refreshAll(force: true) }
+                }
+            }
+
+            if isWideLayout {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(spacing: 16) {
+                        synopsisCard(subject)
+                        episodeCard(subject)
+                        characterCard
+                        staffCard
+                        relatedCard
+                        commentCard
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(spacing: 16) {
+                        infoCard(subject)
+                    }
+                    .frame(width: 320)
+                }
+            } else {
                 VStack(spacing: 16) {
                     synopsisCard(subject)
+                    infoCard(subject)
+                    ratingCard(subject)
                     episodeCard(subject)
                     characterCard
                     staffCard
                     relatedCard
                     commentCard
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(spacing: 16) {
-                    infoCard(subject)
-                }
-                .frame(width: 320)
-            }
-        } else {
-            VStack(spacing: 16) {
-                synopsisCard(subject)
-                infoCard(subject)
-                ratingCard(subject)
-                episodeCard(subject)
-                characterCard
-                staffCard
-                relatedCard
-                commentCard
             }
         }
     }
@@ -785,6 +808,12 @@ struct SubjectDetailView: View {
             }
             .padding(.vertical, 2)
             .accessibilityIdentifier("episode-section")
+        } else if let error = sectionErrors[.episodes] {
+            sectionErrorCard("章节", message: error) {
+                Task { await loadEpisodesSection(force: true) }
+            }
+        } else if loadingSections.contains(.episodes) {
+            sectionLoadingCard("章节")
         }
     }
 
@@ -1006,6 +1035,12 @@ struct SubjectDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        } else if let error = sectionErrors[.characters] {
+            sectionErrorCard("角色", message: error) {
+                Task { await loadCharactersSection(force: true) }
+            }
+        } else if loadingSections.contains(.characters) {
+            sectionLoadingCard("角色")
         }
     }
 
@@ -1045,6 +1080,12 @@ struct SubjectDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        } else if let error = sectionErrors[.persons] {
+            sectionErrorCard("制作人员", message: error) {
+                Task { await loadPersonsSection(force: true) }
+            }
+        } else if loadingSections.contains(.persons) {
+            sectionLoadingCard("制作人员")
         }
     }
 
@@ -1079,6 +1120,12 @@ struct SubjectDetailView: View {
                     }
                 }
             }
+        } else if let error = sectionErrors[.relations] {
+            sectionErrorCard("关联条目", message: error) {
+                Task { await loadRelationsSection(force: true) }
+            }
+        } else if loadingSections.contains(.relations) {
+            sectionLoadingCard("关联条目")
         }
     }
 
@@ -1107,6 +1154,11 @@ struct SubjectDetailView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             } else {
+                if commentsError != nil {
+                    RefreshFailureNotice(message: "吐槽更新失败，显示的是缓存内容") {
+                        Task { await loadComments(force: true) }
+                    }
+                }
                 VStack(spacing: 0) {
                     ForEach(comments.prefix(3)) { comment in
                         SocialCommentRow(comment: comment, showsRatingStars: true)
@@ -1241,51 +1293,278 @@ struct SubjectDetailView: View {
 
     // MARK: - Load
 
-    private func loadComments(force: Bool = false) async {
-        commentsLoading = true
+    private func prepareForSubjectIfNeeded() {
+        guard loadedSubjectID != subjectID else { return }
+        loadedSubjectID = subjectID
+        subject = nil
+        episodes = []
+        characters = []
+        persons = []
+        relations = []
+        comments = []
+        commentsSubjectID = nil
         commentsError = nil
-        defer { commentsLoading = false }
-        do {
-            comments = try await app.social.subjectComments(subjectID: subjectID, force: force)
-        } catch {
-            guard !Task.isCancelled else { return }
-            commentsError = error.localizedDescription
-        }
+        commentsLoading = true
+        errorText = nil
+        subjectRefreshError = nil
+        sectionErrors = [:]
+        loadingSections = []
+        isLoading = true
+        selectedEpisodeType = 0
+        showCollectionEditor = false
+        synopsisExpanded = false
     }
 
     private func load() async {
-        isLoading = true
+        isLoading = subject == nil
         errorText = nil
-        defer { isLoading = false }
-
-        do {
-            let subject = try await app.api.subject(subjectID)
-            self.subject = subject
-            if !subject.nsfw || app.settings.showNSFW {
-                app.recentSubjects.record(subject)
-            }
-            if selectedEpisodeType == 0, !episodes.contains(where: { $0.type == 0 }) {
-                selectedEpisodeType = 0
-            }
-
-            async let episodesTask = app.api.allEpisodes(subjectID: subjectID)
-            async let charactersTask = app.api.subjectCharacters(subjectID)
-            async let personsTask = app.api.subjectPersons(subjectID)
-            async let relationsTask = app.api.subjectRelations(subjectID)
-
-            let (eps, chars, staff, rels) = try await (episodesTask, charactersTask, personsTask, relationsTask)
-            episodes = eps
-            characters = chars
-            persons = staff
-            relations = rels
-
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await loadSubject(force: false) }
+            group.addTask { await loadEpisodesSection(force: false) }
+            group.addTask { await loadCharactersSection(force: false) }
+            group.addTask { await loadPersonsSection(force: false) }
+            group.addTask { await loadRelationsSection(force: false) }
             if app.auth.isLoggedIn {
-                await app.library.loadEpisodes(subjectID: subjectID)
+                group.addTask { await app.library.loadEpisodes(subjectID: subjectID) }
             }
-
-        } catch {
-            errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+        guard !Task.isCancelled else { return }
+        isLoading = false
+    }
+
+    private func refreshAll(force: Bool = true) async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await loadSubject(force: force) }
+            group.addTask { await loadEpisodesSection(force: force) }
+            group.addTask { await loadCharactersSection(force: force) }
+            group.addTask { await loadPersonsSection(force: force) }
+            group.addTask { await loadRelationsSection(force: force) }
+            group.addTask { await loadComments(force: force) }
+            if app.auth.isLoggedIn {
+                group.addTask { await app.library.loadEpisodes(subjectID: subjectID) }
+            }
+        }
+    }
+
+    private func loadSubject(force: Bool) async {
+        let id = subjectID
+        if !force, let hit = await app.api.cachedSubject(id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            applySubject(hit.value)
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if subject == nil {
+            isLoading = true
+            errorText = nil
+        }
+        do {
+            let value = try await app.api.subject(id)
+            guard !Task.isCancelled, id == subjectID else { return }
+            applySubject(value)
+            errorText = nil
+            subjectRefreshError = nil
+            isLoading = false
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            switch subject {
+            case nil:
+                errorText = Self.message(for: error)
+                isLoading = false
+            case .some:
+                subjectRefreshError = Self.message(for: error)
+            }
+        }
+    }
+
+    private func applySubject(_ value: Subject) {
+        subject = value
+        if !value.nsfw || app.settings.showNSFW {
+            app.recentSubjects.record(value)
+        }
+        if selectedEpisodeType == 0, !episodes.contains(where: { $0.type == 0 }) {
+            selectedEpisodeType = 0
+        }
+    }
+
+    private func loadEpisodesSection(force: Bool) async {
+        let id = subjectID
+        if !force, let hit = await app.api.cachedAllEpisodes(subjectID: id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            episodes = hit.value
+            sectionErrors[.episodes] = nil
+            loadingSections.remove(.episodes)
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { sectionErrors[.episodes] = nil }
+        if episodes.isEmpty { loadingSections.insert(.episodes) }
+        defer { loadingSections.remove(.episodes) }
+        do {
+            let values = try await app.api.allEpisodes(subjectID: id)
+            guard !Task.isCancelled, id == subjectID else { return }
+            episodes = values
+            sectionErrors[.episodes] = nil
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            sectionErrors[.episodes] = Self.message(for: error)
+        }
+    }
+
+    private func loadCharactersSection(force: Bool) async {
+        let id = subjectID
+        if !force, let hit = await app.api.cachedSubjectCharacters(id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            characters = hit.value
+            sectionErrors[.characters] = nil
+            loadingSections.remove(.characters)
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { sectionErrors[.characters] = nil }
+        if characters.isEmpty { loadingSections.insert(.characters) }
+        defer { loadingSections.remove(.characters) }
+        do {
+            let values = try await app.api.subjectCharacters(id)
+            guard !Task.isCancelled, id == subjectID else { return }
+            characters = values
+            sectionErrors[.characters] = nil
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            sectionErrors[.characters] = Self.message(for: error)
+        }
+    }
+
+    private func loadPersonsSection(force: Bool) async {
+        let id = subjectID
+        if !force, let hit = await app.api.cachedSubjectPersons(id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            persons = hit.value
+            sectionErrors[.persons] = nil
+            loadingSections.remove(.persons)
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { sectionErrors[.persons] = nil }
+        if persons.isEmpty { loadingSections.insert(.persons) }
+        defer { loadingSections.remove(.persons) }
+        do {
+            let values = try await app.api.subjectPersons(id)
+            guard !Task.isCancelled, id == subjectID else { return }
+            persons = values
+            sectionErrors[.persons] = nil
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            sectionErrors[.persons] = Self.message(for: error)
+        }
+    }
+
+    private func loadRelationsSection(force: Bool) async {
+        let id = subjectID
+        if !force, let hit = await app.api.cachedSubjectRelations(id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            relations = hit.value
+            sectionErrors[.relations] = nil
+            loadingSections.remove(.relations)
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { sectionErrors[.relations] = nil }
+        if relations.isEmpty { loadingSections.insert(.relations) }
+        defer { loadingSections.remove(.relations) }
+        do {
+            let values = try await app.api.subjectRelations(id)
+            guard !Task.isCancelled, id == subjectID else { return }
+            relations = values
+            sectionErrors[.relations] = nil
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            sectionErrors[.relations] = Self.message(for: error)
+        }
+    }
+
+    private func loadComments(force: Bool = false) async {
+        let id = subjectID
+        if commentsSubjectID != id {
+            commentsSubjectID = id
+            comments = []
+            commentsError = nil
+            commentsLoading = true
+        }
+        if !force, let hit = await app.social.cachedSubjectComments(subjectID: id) {
+            guard !Task.isCancelled, id == subjectID else { return }
+            comments = hit.value
+            commentsError = nil
+            commentsLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        if force { commentsError = nil }
+        if comments.isEmpty { commentsLoading = true }
+        defer { commentsLoading = false }
+        do {
+            let values = try await app.social.subjectComments(subjectID: id, force: force)
+            guard !Task.isCancelled, id == subjectID else { return }
+            comments = values
+            commentsError = nil
+        } catch {
+            guard !Task.isCancelled, id == subjectID, !Self.isCancellation(error) else { return }
+            commentsError = Self.message(for: error)
+        }
+    }
+
+    private var refreshFailureMessage: String? {
+        var names: [String] = []
+        if subjectRefreshError != nil { names.append("条目") }
+        if sectionErrors[.episodes] != nil, !episodes.isEmpty { names.append("章节") }
+        if sectionErrors[.characters] != nil, !characters.isEmpty { names.append("角色") }
+        if sectionErrors[.persons] != nil, !persons.isEmpty { names.append("制作人员") }
+        if sectionErrors[.relations] != nil, !relations.isEmpty { names.append("关联条目") }
+        guard !names.isEmpty else { return nil }
+        return "\(names.joined(separator: "、"))更新失败，显示的是缓存内容"
+    }
+
+    private func sectionErrorCard(_ title: String, message: String,
+                                  retry: @escaping () -> Void) -> some View {
+        SectionCard(title) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                Button("重试", action: retry)
+                    .font(.system(size: 12, weight: .semibold))
+                    .buttonStyle(.glass)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func sectionLoadingCard(_ title: String) -> some View {
+        SectionCard(title) {
+            HStack(spacing: 9) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("加载中…")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let api = error as? APIError, case .cancelled = api { return true }
+        return (error as? URLError)?.code == .cancelled
     }
 }
 

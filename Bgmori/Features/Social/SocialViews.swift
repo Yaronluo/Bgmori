@@ -11,6 +11,12 @@ struct GroupListView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
+                if errorText != nil, home != nil {
+                    RefreshFailureNotice(message: "小组更新失败，显示的是缓存内容") {
+                        Task { await load(force: true) }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if let home {
                     if !home.groups.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
@@ -89,7 +95,7 @@ struct GroupListView: View {
                         .padding(.vertical, 60)
                 } else {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "加载失败", message: errorText ?? "请稍后再试", actionTitle: "重试") {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                 }
 
@@ -107,13 +113,22 @@ struct GroupListView: View {
         .task { await load() }
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedGroupHome() {
+            guard !Task.isCancelled else { return }
+            home = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = home == nil
         errorText = nil
         defer { isLoading = false }
         do {
             home = try await app.social.groupHome()
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -129,6 +144,12 @@ struct GroupDetailView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
+                if errorText != nil, detail != nil {
+                    RefreshFailureNotice(message: "小组更新失败，显示的是缓存内容") {
+                        Task { await load(force: true) }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if let detail {
                     HStack(spacing: 12) {
                         CachedAsyncImage(url: detail.iconURL, maxPixel: 160, placeholderTint: .brandPink)
@@ -182,7 +203,7 @@ struct GroupDetailView: View {
                         .padding(.vertical, 60)
                 } else {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "加载失败", message: errorText ?? "请稍后再试", actionTitle: "重试") {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                 }
             }
@@ -199,13 +220,22 @@ struct GroupDetailView: View {
         .task { await load() }
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedGroupDetail(name: groupName) {
+            guard !Task.isCancelled else { return }
+            detail = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = detail == nil
         errorText = nil
         defer { isLoading = false }
         do {
             detail = try await app.social.groupDetail(name: groupName)
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -221,6 +251,12 @@ struct TopicDetailView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
+                if errorText != nil, detail != nil {
+                    RefreshFailureNotice(message: "话题更新失败，显示的是缓存内容") {
+                        Task { await load(force: true) }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if let detail {
                     if let group = detail.groupName {
                         Text(group)
@@ -266,7 +302,7 @@ struct TopicDetailView: View {
                         .padding(.vertical, 60)
                 } else {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "加载失败", message: errorText ?? "请稍后再试", actionTitle: "重试") {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                 }
             }
@@ -283,13 +319,22 @@ struct TopicDetailView: View {
         .task { await load() }
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedTopic(id: topicID) {
+            guard !Task.isCancelled else { return }
+            detail = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = detail == nil
         errorText = nil
         defer { isLoading = false }
         do {
             detail = try await app.social.topic(id: topicID)
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -312,9 +357,15 @@ struct BlogListView: View {
                         .padding(.vertical, 60)
                 } else if blogs.isEmpty {
                     EmptyStateView(icon: "text.book.closed", title: "暂无日志", message: errorText ?? "", actionTitle: "重试") {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                 } else {
+                    if errorText != nil {
+                        RefreshFailureNotice(message: "日志更新失败，显示的是缓存内容") {
+                            Task { await load(force: true) }
+                        }
+                        .padding(.horizontal, 20)
+                    }
                     ForEach(blogs) { blog in
                         NavigationLink(value: Route.blog(blog.id)) {
                             HStack(alignment: .top, spacing: 12) {
@@ -363,13 +414,22 @@ struct BlogListView: View {
         .task { await load() }
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedBlogList() {
+            guard !Task.isCancelled else { return }
+            blogs = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = blogs.isEmpty
         errorText = nil
         defer { isLoading = false }
         do {
             blogs = try await app.social.blogList()
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -385,6 +445,12 @@ struct BlogDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                if errorText != nil, detail != nil {
+                    RefreshFailureNotice(message: "日志更新失败，显示的是缓存内容") {
+                        Task { await load(force: true) }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 if let detail {
                     if let cover = detail.coverURL {
                         CachedAsyncImage(url: cover, maxPixel: 900, placeholderTint: .brandPink)
@@ -419,7 +485,7 @@ struct BlogDetailView: View {
                         .padding(.vertical, 60)
                 } else {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "加载失败", message: errorText ?? "请稍后再试", actionTitle: "重试") {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                 }
             }
@@ -436,13 +502,22 @@ struct BlogDetailView: View {
         .task { await load() }
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedBlogDetail(id: blogID) {
+            guard !Task.isCancelled else { return }
+            detail = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = detail == nil
         errorText = nil
         defer { isLoading = false }
         do {
             detail = try await app.social.blogDetail(id: blogID)
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -467,6 +542,12 @@ struct TimelineView: View {
                 } else if items.isEmpty {
                     EmptyStateView(icon: "clock.arrow.circlepath", title: "暂无动态", message: errorText ?? "")
                 } else {
+                    if errorText != nil {
+                        RefreshFailureNotice(message: "时光机更新失败，显示的是缓存内容") {
+                            Task { await load(force: true) }
+                        }
+                        .padding(.horizontal, 20)
+                    }
                     ForEach(items) { item in
                         Group {
                             if let subjectID = item.subjectID {
@@ -532,13 +613,22 @@ struct TimelineView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func load() async {
-        isLoading = true
+    private func load(force: Bool = false) async {
+        if !force, let hit = await app.social.cachedTimeline(username: username) {
+            guard !Task.isCancelled else { return }
+            items = hit.value
+            isLoading = false
+            if hit.isFresh { return }
+            guard await app.api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 120) else { return }
+        }
+        isLoading = items.isEmpty
         errorText = nil
         defer { isLoading = false }
         do {
             items = try await app.social.timeline(username: username)
+            errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }

@@ -2,6 +2,12 @@ import CryptoKit
 import Foundation
 
 actor DiskCache {
+    struct Entry: Sendable {
+        let data: Data
+        let age: TimeInterval
+        let isFresh: Bool
+    }
+
     private let directory: URL
     private let fileManager = FileManager.default
 
@@ -12,22 +18,41 @@ actor DiskCache {
     }
 
     func read(_ key: String, maxAge: TimeInterval) -> Data? {
+        guard let entry = readEntry(key, maxAge: maxAge, maxStaleAge: maxAge) else { return nil }
+        return entry.data
+    }
+
+    /// Reads a cache entry that may already be past its refresh TTL, as long as it
+    /// is still inside the caller's explicit display window.
+    func readEntry(_ key: String, maxAge: TimeInterval, maxStaleAge: TimeInterval) -> Entry? {
         guard let url = fileURL(for: key),
               let attributes = try? fileManager.attributesOfItem(atPath: url.path),
-              let modified = attributes[.modificationDate] as? Date,
-              Date().timeIntervalSince(modified) <= maxAge,
+              let modified = attributes[.modificationDate] as? Date else {
+            return nil
+        }
+        let age = Date().timeIntervalSince(modified)
+        guard age >= 0, age <= max(maxAge, maxStaleAge),
               let data = try? Data(contentsOf: url),
               !data.isEmpty else {
             return nil
         }
+        return Entry(data: data, age: age, isFresh: age <= maxAge)
+    }
+
+    func readStale(_ key: String, maxAge: TimeInterval? = nil) -> Data? {
+        guard let url = fileURL(for: key),
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let modified = attributes[.modificationDate] as? Date else {
+            return nil
+        }
+        if let maxAge, Date().timeIntervalSince(modified) > maxAge { return nil }
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
         return data
     }
 
-    func readStale(_ key: String) -> Data? {
-        guard let url = fileURL(for: key),
-              let data = try? Data(contentsOf: url),
-              !data.isEmpty else { return nil }
-        return data
+    func remove(_ key: String) {
+        guard let url = fileURL(for: key) else { return }
+        try? fileManager.removeItem(at: url)
     }
 
     func write(_ key: String, data: Data) {

@@ -51,6 +51,15 @@ struct CategoryQuery: Hashable, Sendable {
         return components.url!
     }
 
+    /// Stable, source-independent key for the complete query. Account data is
+    /// not part of this key because category results are public.
+    var cacheKey: String {
+        let fields = [String(type.rawValue), sort.rawValue, year.map(String.init) ?? "-",
+                      tag ?? "-", includeNSFW ? "1" : "0",
+                      metaTags.sorted().joined(separator: "\u{1f}"), platform ?? "-"]
+        return fields.map { "\($0.utf8.count):\($0)" }.joined(separator: "|")
+    }
+
     func matches(_ subject: Subject) -> Bool {
         guard subject.type == type.rawValue, includeNSFW || !subject.nsfw,
               platform == nil || subject.platform == platform else { return false }

@@ -30,7 +30,7 @@ extension APIClient {
     }
 
     func user(_ username: String) async throws -> User {
-        try await get("/v0/users/\(username)", as: User.self, cacheKey: "user-\(username)", ttl: 86_400)
+        try await get("/v0/users/\(username)", as: User.self, cacheKey: "user-\(username)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func userCollections(_ username: String, subjectType: Int? = nil, type: Int? = nil, limit: Int = 50, offset: Int = 0, auth: Bool = true, force: Bool = false) async throws -> Paged<UserSubjectCollection> {
@@ -41,11 +41,13 @@ extension APIClient {
         if let subjectType { query.append(.init(name: "subject_type", value: String(subjectType))) }
         if let type { query.append(.init(name: "type", value: String(type))) }
         let key = "collections-\(username)-\(subjectType ?? 0)-\(type ?? 0)-\(offset)"
-        return try await get("/v0/users/\(username)/collections", query: query, as: Paged<UserSubjectCollection>.self, cacheKey: key, ttl: 600, auth: auth, force: force)
+        return try await get("/v0/users/\(username)/collections", query: query, as: Paged<UserSubjectCollection>.self, cacheKey: key, ttl: 600, maxStale: CacheLifetime.personal, auth: auth, force: force)
     }
 
-    func userCollection(_ username: String, subjectID: Int, force: Bool = false) async throws -> UserSubjectCollection {
-        try await get("/v0/users/\(username)/collections/\(subjectID)", as: UserSubjectCollection.self, cacheKey: "collection-\(username)-\(subjectID)", ttl: 60, auth: true, force: force)
+    func userCollection(_ username: String, subjectID: Int, force: Bool = false, storeInCache: Bool = true) async throws -> UserSubjectCollection {
+        try await get("/v0/users/\(username)/collections/\(subjectID)", as: UserSubjectCollection.self,
+                     cacheKey: storeInCache ? "collection-\(username)-\(subjectID)" : nil,
+                     ttl: storeInCache ? 60 : 0, maxStale: CacheLifetime.personal, auth: true, force: force)
     }
 
     func userCharacterCollections(_ username: String, limit: Int = 100, offset: Int = 0, auth: Bool = false, force: Bool = false) async throws -> Paged<UserCharacterCollection> {
@@ -58,6 +60,7 @@ extension APIClient {
             as: Paged<UserCharacterCollection>.self,
             cacheKey: "character-collections-\(username)-\(offset)-\(limit)",
             ttl: force ? 0 : 600,
+            maxStale: CacheLifetime.personal,
             auth: auth
         )
     }
@@ -72,14 +75,16 @@ extension APIClient {
             as: Paged<UserPersonCollection>.self,
             cacheKey: "person-collections-\(username)-\(offset)-\(limit)",
             ttl: force ? 0 : 600,
+            maxStale: CacheLifetime.personal,
             auth: auth
         )
     }
 
     // MARK: - Subjects
 
-    func subject(_ id: Int) async throws -> Subject {
-        try await get("/v0/subjects/\(id)", as: Subject.self, cacheKey: "subject-\(id)", ttl: 86_400)
+    func subject(_ id: Int, force: Bool = false) async throws -> Subject {
+        try await get("/v0/subjects/\(id)", as: Subject.self, cacheKey: "subject-\(id)",
+                     ttl: 86_400, maxStale: CacheLifetime.staticReference, force: force)
     }
 
     func browseSubjects(type: Int, sort: String, year: Int? = nil, month: Int? = nil, limit: Int = 12, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
@@ -148,7 +153,8 @@ extension APIClient {
             as: Paged<Subject>.self,
             auth: false,
             cacheKey: cacheKey,
-            ttl: force ? 0 : 1_800
+            ttl: force ? 0 : 1_800,
+            force: force
         )
     }
 
@@ -187,7 +193,8 @@ extension APIClient {
             let page = try await post("/v0/search/subjects", body: body,
                                       query: [.init(name: "limit", value: "50"), .init(name: "offset", value: String(offset))],
                                       as: Paged<Subject>.self, auth: false,
-                                      cacheKey: "category-tag-\(key)-\(offset)", ttl: force ? 0 : 1_800)
+                                      cacheKey: "category-tag-\(key)-\(offset)", ttl: force ? 0 : 1_800,
+                                      force: force)
             if page.data.contains(where: { $0.id == subject.id }) { return true }
             if page.data.isEmpty || page.nextOffset >= page.total { return false }
             offset = page.nextOffset
@@ -270,15 +277,15 @@ extension APIClient {
     }
 
     func subjectCharacters(_ id: Int) async throws -> [Character] {
-        try await get("/v0/subjects/\(id)/characters", as: [Character].self, cacheKey: "chars-\(id)", ttl: 86_400)
+        try await get("/v0/subjects/\(id)/characters", as: [Character].self, cacheKey: "chars-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func subjectPersons(_ id: Int) async throws -> [Person] {
-        try await get("/v0/subjects/\(id)/persons", as: [Person].self, cacheKey: "persons-\(id)", ttl: 86_400)
+        try await get("/v0/subjects/\(id)/persons", as: [Person].self, cacheKey: "persons-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func subjectRelations(_ id: Int) async throws -> [RelatedSubject] {
-        try await get("/v0/subjects/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "relations-\(id)", ttl: 86_400)
+        try await get("/v0/subjects/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "relations-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     // MARK: - Episodes
@@ -292,8 +299,9 @@ extension APIClient {
                 .init(name: "offset", value: String(offset))
             ],
             as: Paged<Episode>.self,
-            cacheKey: "episodes-\(subjectID)-\(offset)",
-            ttl: 86_400
+            cacheKey: "episodes-\(subjectID)-\(offset)-\(limit)",
+            ttl: 86_400,
+            maxStale: CacheLifetime.staticReference
         )
     }
 
@@ -314,16 +322,17 @@ extension APIClient {
     }
 
     func episode(_ id: Int) async throws -> Episode {
-        try await get("/v0/episodes/\(id)", as: Episode.self, cacheKey: "episode-\(id)", ttl: 86_400)
+        try await get("/v0/episodes/\(id)", as: Episode.self, cacheKey: "episode-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
-    func episodeCollections(subjectID: Int, force: Bool = false) async throws -> Paged<EpisodeCollection> {
+    func episodeCollections(subjectID: Int, username: String, force: Bool = false) async throws -> Paged<EpisodeCollection> {
         try await get(
             "/v0/users/-/collections/\(subjectID)/episodes",
             query: [.init(name: "limit", value: "1000")],
             as: Paged<EpisodeCollection>.self,
-            cacheKey: "epcol-\(subjectID)",
+            cacheKey: "epcol-\(username)-\(subjectID)",
             ttl: 300,
+            maxStale: CacheLifetime.personal,
             auth: true,
             force: force
         )
@@ -332,7 +341,7 @@ extension APIClient {
     // MARK: - Calendar
 
     func calendar(force: Bool = false) async throws -> [CalendarDay] {
-        try await get("/calendar", as: [CalendarDay].self, cacheKey: "calendar", ttl: 21_600, force: force)
+        try await get("/calendar", as: [CalendarDay].self, cacheKey: "calendar", ttl: 21_600, maxStale: CacheLifetime.publicCatalog, force: force)
     }
 
     // MARK: - Collection mutations
@@ -357,7 +366,7 @@ extension APIClient {
 
     private func confirmCollectionWrite(subjectID: Int, patch: CollectionPatch, after error: Error) async -> Bool {
         guard !Task.isCancelled, let failure = error as? APIError, failure.isUncertainWrite else { return false }
-        guard let collection = try? await userCollection("-", subjectID: subjectID, force: true) else { return false }
+        guard let collection = try? await userCollection("-", subjectID: subjectID, force: true, storeInCache: false) else { return false }
         return patch.isApplied(to: collection)
     }
 
@@ -373,19 +382,19 @@ extension APIClient {
     // MARK: - Character / person
 
     func character(_ id: Int) async throws -> Character {
-        try await get("/v0/characters/\(id)", as: Character.self, cacheKey: "character-\(id)", ttl: 86_400)
+        try await get("/v0/characters/\(id)", as: Character.self, cacheKey: "character-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func person(_ id: Int) async throws -> PersonDetail {
-        try await get("/v0/persons/\(id)", as: PersonDetail.self, cacheKey: "person-\(id)", ttl: 86_400)
+        try await get("/v0/persons/\(id)", as: PersonDetail.self, cacheKey: "person-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func characterSubjects(_ id: Int) async throws -> [RelatedSubject] {
-        try await get("/v0/characters/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "character-subjects-\(id)", ttl: 86_400)
+        try await get("/v0/characters/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "character-subjects-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func personSubjects(_ id: Int) async throws -> [RelatedSubject] {
-        try await get("/v0/persons/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "person-subjects-\(id)", ttl: 86_400)
+        try await get("/v0/persons/\(id)/subjects", as: [RelatedSubject].self, cacheKey: "person-subjects-\(id)", ttl: 86_400, maxStale: CacheLifetime.staticReference)
     }
 
     func collectCharacter(_ id: Int, collected: Bool) async throws {
@@ -425,6 +434,124 @@ extension APIClient {
             cacheKey: "revisions-\(id)",
             ttl: 3_600
         )
+    }
+
+    // MARK: - Cache-first reads
+
+    func cachedUser(_ username: String) async -> CacheHit<User>? {
+        await cachedValue(cacheKey: "user-\(username)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: User.self)
+    }
+
+    func cachedUserCollections(_ username: String, limit: Int = 50, offset: Int = 0) async -> CacheHit<Paged<UserSubjectCollection>>? {
+        await cachedValue(cacheKey: "collections-\(username)-0-0-\(offset)", ttl: 600,
+                          maxStale: CacheLifetime.personal, as: Paged<UserSubjectCollection>.self)
+    }
+
+    func cachedSubject(_ id: Int) async -> CacheHit<Subject>? {
+        await cachedValue(cacheKey: "subject-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: Subject.self)
+    }
+
+    func cachedEpisodes(subjectID: Int, offset: Int = 0, limit: Int = 200) async -> CacheHit<Paged<Episode>>? {
+        await cachedValue(cacheKey: "episodes-\(subjectID)-\(offset)-\(limit)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: Paged<Episode>.self)
+    }
+
+    func cachedAllEpisodes(subjectID: Int) async -> CacheHit<[Episode]>? {
+        var result: [Episode] = []
+        var offset = 0
+        var age: TimeInterval = 0
+        var isFresh = true
+        var found = false
+        for _ in 0..<10 {
+            guard let hit = await cachedEpisodes(subjectID: subjectID, offset: offset) else { break }
+            found = true
+            age = max(age, hit.age)
+            isFresh = isFresh && hit.isFresh
+            result.append(contentsOf: hit.value.data)
+            if hit.value.data.count < 200 { break }
+            offset += 200
+        }
+        guard found else { return nil }
+        let sorted = result.sorted { lhs, rhs in
+            if lhs.type != rhs.type { return lhs.type < rhs.type }
+            return lhs.sort < rhs.sort
+        }
+        return CacheHit(value: sorted, cacheKey: "episodes-\(subjectID)-0", age: age, isFresh: isFresh)
+    }
+
+    func cachedSubjectCharacters(_ id: Int) async -> CacheHit<[Character]>? {
+        await cachedValue(cacheKey: "chars-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: [Character].self)
+    }
+
+    func cachedSubjectPersons(_ id: Int) async -> CacheHit<[Person]>? {
+        await cachedValue(cacheKey: "persons-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: [Person].self)
+    }
+
+    func cachedSubjectRelations(_ id: Int) async -> CacheHit<[RelatedSubject]>? {
+        await cachedValue(cacheKey: "relations-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: [RelatedSubject].self)
+    }
+
+    func cachedEpisode(_ id: Int) async -> CacheHit<Episode>? {
+        await cachedValue(cacheKey: "episode-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: Episode.self)
+    }
+
+    func cachedCharacter(_ id: Int) async -> CacheHit<Character>? {
+        await cachedValue(cacheKey: "character-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: Character.self)
+    }
+
+    func cachedPerson(_ id: Int) async -> CacheHit<PersonDetail>? {
+        await cachedValue(cacheKey: "person-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: PersonDetail.self)
+    }
+
+    func cachedCharacterSubjects(_ id: Int) async -> CacheHit<[RelatedSubject]>? {
+        await cachedValue(cacheKey: "character-subjects-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: [RelatedSubject].self)
+    }
+
+    func cachedPersonSubjects(_ id: Int) async -> CacheHit<[RelatedSubject]>? {
+        await cachedValue(cacheKey: "person-subjects-\(id)", ttl: 86_400,
+                          maxStale: CacheLifetime.staticReference, as: [RelatedSubject].self)
+    }
+
+    func cachedCalendar() async -> CacheHit<[CalendarDay]>? {
+        await cachedValue(cacheKey: "calendar", ttl: 21_600,
+                          maxStale: CacheLifetime.publicCatalog, as: [CalendarDay].self)
+    }
+
+    func cachedUserCharacterCollections(_ username: String, limit: Int = 100, offset: Int = 0) async -> CacheHit<Paged<UserCharacterCollection>>? {
+        await cachedValue(cacheKey: "character-collections-\(username)-\(offset)-\(limit)", ttl: 600,
+                          maxStale: CacheLifetime.personal, as: Paged<UserCharacterCollection>.self)
+    }
+
+    func cachedUserPersonCollections(_ username: String, limit: Int = 100, offset: Int = 0) async -> CacheHit<Paged<UserPersonCollection>>? {
+        await cachedValue(cacheKey: "person-collections-\(username)-\(offset)-\(limit)", ttl: 600,
+                          maxStale: CacheLifetime.personal, as: Paged<UserPersonCollection>.self)
+    }
+
+    func cachedUserCollection(_ username: String, subjectID: Int) async -> CacheHit<UserSubjectCollection>? {
+        await cachedValue(cacheKey: "collection-\(username)-\(subjectID)", ttl: 60,
+                          maxStale: CacheLifetime.personal, as: UserSubjectCollection.self)
+    }
+
+    func cachedEpisodeCollections(subjectID: Int, username: String) async -> CacheHit<Paged<EpisodeCollection>>? {
+        await cachedValue(cacheKey: "epcol-\(username)-\(subjectID)", ttl: 300,
+                          maxStale: CacheLifetime.personal, as: Paged<EpisodeCollection>.self)
+    }
+
+    func cachedCategoryFilters(type: SubjectType) async -> CacheHit<[CategoryFilterGroup]>? {
+        guard let hit = await cachedHTML(type.browserURL, cacheKey: "category-filters-\(type.rawValue)",
+                                        ttl: 86_400, maxStale: CacheLifetime.staticReference,
+                                        validate: { _ = try CategoryCatalog.parse($0, type: type) }) else { return nil }
+        guard let groups = try? CategoryCatalog.parse(hit.value, type: type) else { return nil }
+        return CacheHit(value: groups, cacheKey: hit.cacheKey, age: hit.age, isFresh: hit.isFresh)
     }
 
     // MARK: - Cache

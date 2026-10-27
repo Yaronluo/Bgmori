@@ -17,6 +17,11 @@ struct CalendarView: View {
             ScrollViewReader { scrollProxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        if app.calendarError != nil, !app.calendar.isEmpty {
+                            RefreshFailureNotice(message: "放送表更新失败，显示的是缓存内容") {
+                                Task { await app.loadCalendar(force: true) }
+                            }
+                        }
                         scheduleHeader
                             .id("calendar-top")
                         scheduleContent

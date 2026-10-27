@@ -219,6 +219,18 @@ final class MirrorRouting: @unchecked Sendable {
         Self.applyEncryptedDNS(value.encryptedDNS)
     }
 
+    /// Explicit user refreshes and retries should not be silently swallowed by
+    /// a recent automatic-failure cooldown.
+    func resetBackoff(for url: URL) {
+        lock.withLock {
+            guard url.host != nil,
+                  let canonicalHost = canonicalURL(for: url, snapshot: snapshot).host,
+                  let service = Self.service(for: canonicalHost) else { return }
+            let prefix = "\(Self.channel(for: service).rawValue)|"
+            health = health.filter { !$0.key.hasPrefix(prefix) }
+        }
+    }
+
     func resetHealth() {
         lock.withLock {
             health.removeAll()

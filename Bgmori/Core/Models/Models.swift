@@ -307,7 +307,7 @@ struct Subject: Codable, Identifiable, Hashable, Sendable {
     var url: URL? { URL(string: "https://bgm.tv/subject/\(id)") }
 }
 
-struct SubjectSummary: Decodable, Identifiable, Hashable, Sendable {
+struct SubjectSummary: Codable, Identifiable, Hashable, Sendable {
     let id: Int
     let type: Int
     let name: String
@@ -371,6 +371,22 @@ struct SubjectSummary: Decodable, Identifiable, Hashable, Sendable {
         self.volumes = volumes
         self.collectionTotal = collectionTotal
         self.tags = tags
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(type, forKey: .type)
+        try c.encode(name, forKey: .name)
+        try c.encode(nameCn, forKey: .nameCn)
+        try c.encodeIfPresent(date, forKey: .date)
+        try c.encodeIfPresent(images, forKey: .images)
+        try c.encodeIfPresent(score, forKey: .score)
+        try c.encodeIfPresent(rank, forKey: .rank)
+        try c.encode(eps, forKey: .eps)
+        try c.encode(volumes, forKey: .volumes)
+        try c.encode(collectionTotal, forKey: .collectionTotal)
+        try c.encode(tags, forKey: .tags)
     }
 
     static func == (lhs: SubjectSummary, rhs: SubjectSummary) -> Bool { lhs.id == rhs.id }
@@ -491,7 +507,7 @@ struct User: Decodable, Identifiable, Hashable, Sendable {
     var profileURL: URL? { URL(string: "https://bgm.tv/user/\(username)") }
 }
 
-struct UserSubjectCollection: Decodable, Identifiable, Sendable {
+struct UserSubjectCollection: Codable, Identifiable, Sendable {
     let subjectId: Int
     let subjectType: Int
     let rate: Int
@@ -543,6 +559,21 @@ struct UserSubjectCollection: Decodable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.isPrivate = isPrivate
         self.subject = subject
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(subjectId, forKey: .subjectId)
+        try c.encode(subjectType, forKey: .subjectType)
+        try c.encode(rate, forKey: .rate)
+        try c.encode(type, forKey: .type)
+        try c.encodeIfPresent(comment, forKey: .comment)
+        try c.encode(tags, forKey: .tags)
+        try c.encode(epStatus, forKey: .epStatus)
+        try c.encode(volStatus, forKey: .volStatus)
+        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try c.encode(isPrivate, forKey: .isPrivate)
+        try c.encodeIfPresent(subject, forKey: .subject)
     }
 
     func applying(_ patch: CollectionPatch) -> UserSubjectCollection {

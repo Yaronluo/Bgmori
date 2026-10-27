@@ -1,5 +1,70 @@
 import Foundation
 
+/// A decoded cache hit. `isFresh` is false when the TTL has expired but the
+/// entry is still inside the endpoint's display window; callers can show it
+/// immediately and refresh in the background.
+struct CacheHit<Value: Sendable>: Sendable {
+    let value: Value
+    let cacheKey: String
+    let age: TimeInterval
+    let isFresh: Bool
+}
+
+/// Refresh windows are deliberately finite: an expired entry can be shown
+/// while it is being revalidated, but it is never shown forever.
+enum CacheLifetime {
+    static let staticReference: TimeInterval = 30 * 86_400
+    static let publicCatalog: TimeInterval = 7 * 86_400
+    static let personal: TimeInterval = 7 * 86_400
+    static let socialHTML: TimeInterval = 7 * 86_400
+}
+
+private actor BackgroundRefreshGate {
+    private var lastAttempt: [String: Date] = [:]
+
+    func allow(_ key: String, minimumInterval: TimeInterval) -> Bool {
+        let now = Date()
+        if let last = lastAttempt[key], now.timeIntervalSince(last) < minimumInterval {
+            return false
+        }
+        lastAttempt[key] = now
+        if lastAttempt.count > 500 {
+            lastAttempt = lastAttempt.filter { now.timeIntervalSince($0.value) < 86_400 }
+        }
+        return true
+    }
+}
+
+/// Coalesces identical read-only network requests. The shared Task is owned by
+/// this actor, not by a view, so cancelling one waiter does not cancel a request
+/// that another caller is still using.
+private actor RequestCoalescer {
+    private struct Entry {
+        let id: UUID
+        let task: Task<Data, Error>
+    }
+
+    private var tasks: [String: Entry] = [:]
+
+    func data(for key: String, operation: @escaping @Sendable () async throws -> Data) async throws -> Data {
+        let entry: Entry
+        if let existing = tasks[key] {
+            entry = existing
+        } else {
+            entry = Entry(id: UUID(), task: Task { try await operation() })
+            tasks[key] = entry
+        }
+        do {
+            let data = try await entry.task.value
+            if tasks[key]?.id == entry.id { tasks[key] = nil }
+            return data
+        } catch {
+            if tasks[key]?.id == entry.id { tasks[key] = nil }
+            throw error
+        }
+    }
+}
+
 actor APIClient {
     static let shared = APIClient()
 
@@ -12,6 +77,9 @@ actor APIClient {
     private let limiter = RateLimiter(interval: 0.22)
     private let htmlLimiter = RateLimiter(interval: 2.0)
     private var token: String?
+    private var sessionID = UUID()
+    private let refreshGate = BackgroundRefreshGate()
+    private let coalescer = RequestCoalescer()
     private let routing: MirrorRouting
     private let discoverMirrors: Bool
     private var mirrorRefresh: Task<Void, Never>?
@@ -41,10 +109,49 @@ actor APIClient {
     }
 
     func setToken(_ token: String?) {
+        if token != self.token { sessionID = UUID() }
         self.token = token
     }
 
     func hasToken() -> Bool { token != nil }
+
+    /// Non-secret data-source marker used to keep account snapshots from
+    /// crossing between the official service and a configured custom root.
+    func cacheScope() -> String {
+        let settings = routing.settings
+        switch settings.mode {
+        case .custom:
+            return "custom:\(settings.customRoot)"
+        case .encrypted:
+            return "encrypted"
+        case .official:
+            return "official"
+        case .automatic:
+            return "automatic"
+        }
+    }
+
+    // MARK: - Cache-first reads
+
+    /// Reads fresh or still-displayable stale data without touching the network.
+    /// Callers render the hit immediately, then refresh only when `isFresh` is false.
+    func cachedValue<T: Decodable & Sendable>(
+        cacheKey: String,
+        ttl: TimeInterval,
+        maxStale: TimeInterval,
+        as type: T.Type
+    ) async -> CacheHit<T>? {
+        guard !Task.isCancelled,
+              let entry = await cache.readEntry(cacheKey, maxAge: ttl, maxStaleAge: maxStale),
+              let value = try? decoder.decode(T.self, from: entry.data) else { return nil }
+        return CacheHit(value: value, cacheKey: cacheKey, age: entry.age, isFresh: entry.isFresh)
+    }
+
+    /// Throttles automatic background refresh for a cache key. Explicit user
+    /// refreshes must call `get(..., force: true)` and bypass this gate.
+    func beginBackgroundRefresh(_ cacheKey: String, minimumInterval: TimeInterval = 60) async -> Bool {
+        await refreshGate.allow(cacheKey, minimumInterval: minimumInterval)
+    }
 
     // MARK: - Mirror discovery
 
@@ -202,20 +309,25 @@ actor APIClient {
         as type: T.Type,
         cacheKey: String? = nil,
         ttl: TimeInterval = 0,
+        maxStale: TimeInterval = CacheLifetime.publicCatalog,
         auth: Bool = false,
         force: Bool = false
     ) async throws -> T {
+        if Task.isCancelled { throw APIError.cancelled }
         if !force, let cacheKey, ttl > 0, let data = await cache.read(cacheKey, maxAge: ttl) {
             if let value = try? decoder.decode(T.self, from: data) { return value }
         }
 
         do {
-            let data = try await requestData(path: path, method: "GET", query: query, body: nil, auth: auth)
+            let data = try await requestData(path: path, method: "GET", query: query, body: nil, auth: auth, coalesce: !force, resetBackoff: force)
+            if Task.isCancelled { throw APIError.cancelled }
             if let cacheKey { await cache.write(cacheKey, data: data) }
             return try decode(T.self, from: data)
         } catch {
-            if Self.isCancellation(error) { throw APIError.cancelled }
-            if !force, let cacheKey, let data = await cache.readStale(cacheKey), let value = try? decoder.decode(T.self, from: data) {
+            if Task.isCancelled || Self.isCancellation(error) { throw APIError.cancelled }
+            if !force, let cacheKey,
+               let data = await cache.readStale(cacheKey, maxAge: max(maxStale, ttl)),
+               let value = try? decoder.decode(T.self, from: data) {
                 return value
             }
             throw error
@@ -232,8 +344,10 @@ actor APIClient {
         auth: Bool = true,
         cacheKey: String? = nil,
         ttl: TimeInterval = 0,
+        maxStale: TimeInterval = CacheLifetime.publicCatalog,
         force: Bool = false
     ) async throws -> T {
+        if Task.isCancelled { throw APIError.cancelled }
         // Only read-only search POSTs opt into caching.
         if !force, let cacheKey, ttl > 0, let data = await cache.read(cacheKey, maxAge: ttl),
            let value = try? decoder.decode(T.self, from: data) {
@@ -241,13 +355,14 @@ actor APIClient {
         }
         let data = try encoder.encode(body)
         do {
-            let response = try await requestData(path: path, method: "POST", query: query, body: data, auth: auth)
+            let response = try await requestData(path: path, method: "POST", query: query, body: data, auth: auth, coalesce: !force, resetBackoff: force)
+            if Task.isCancelled { throw APIError.cancelled }
             let value = try decode(T.self, from: response)
             if let cacheKey { await cache.write(cacheKey, data: response) }
             return value
         } catch {
-            if Self.isCancellation(error) { throw APIError.cancelled }
-            if !force, let cacheKey, let cached = await cache.readStale(cacheKey),
+            if Task.isCancelled || Self.isCancellation(error) { throw APIError.cancelled }
+            if !force, let cacheKey, let cached = await cache.readStale(cacheKey, maxAge: max(maxStale, ttl)),
                let value = try? decoder.decode(T.self, from: cached) {
                 return value
             }
@@ -277,7 +392,9 @@ actor APIClient {
     // MARK: - HTML
 
     func rawHTML(_ url: URL, cacheKey: String, ttl: TimeInterval = 3600,
+                 maxStale: TimeInterval = CacheLifetime.socialHTML,
                  validate: (@Sendable (String) throws -> Void)? = nil, force: Bool = false) async throws -> String {
+        if Task.isCancelled { throw APIError.cancelled }
         if !force, let data = await cache.read(cacheKey, maxAge: ttl),
            !MirrorRouting.isVerificationPage(data),
            let html = String(data: data, encoding: .utf8),
@@ -286,6 +403,7 @@ actor APIClient {
         }
 
         do {
+            if force { routing.resetBackoff(for: url) }
             Task { await prepareMirrors() }
             var lastError: Error = APIError.network("页面加载失败")
             let started = Date()
@@ -331,17 +449,26 @@ actor APIClient {
                         try validate?(html)
                         routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
                                        result: "连接成功", succeeded: true, revision: revision)
+                        if Task.isCancelled { throw APIError.cancelled }
                         await cache.write(cacheKey, data: data)
                         return html
                     } catch {
                         if Self.isCancellation(error) { throw APIError.cancelled }
                         if case APIError.notFound = error { throw error }
                         if case APIError.rateLimited = error { throw error }
+                        let penalize: Bool = {
+                            if let failure = error as? APIError {
+                                if case .server = failure { return false }
+                                if case .verificationRequired = failure { return false }
+                            }
+                            return true
+                        }()
                         routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
                                        result: (error as? APIError).map { failure in
                                            if case .verificationRequired = failure { return "需要网页验证" }
                                            return ConnectionTransport.failureDescription(error)
-                                       } ?? ConnectionTransport.failureDescription(error), succeeded: false, revision: revision)
+                                       } ?? ConnectionTransport.failureDescription(error), succeeded: false,
+                                       revision: revision, penalize: penalize)
                         lastError = error
                         if routing.offline { throw error }
                     }
@@ -349,14 +476,28 @@ actor APIClient {
             }
             throw lastError
         } catch {
-            if Self.isCancellation(error) { throw APIError.cancelled }
-            if !force, let data = await cache.readStale(cacheKey), !MirrorRouting.isVerificationPage(data),
+            if Task.isCancelled || Self.isCancellation(error) { throw APIError.cancelled }
+            if !force, let data = await cache.readStale(cacheKey, maxAge: max(maxStale, ttl)),
+               !MirrorRouting.isVerificationPage(data),
                let html = String(data: data, encoding: .utf8),
                (try? validate?(html)) != nil || validate == nil {
                 return html
             }
             throw error
         }
+    }
+
+    /// Returns a structurally valid cached HTML page without waiting for the
+    /// network. The caller should render it and then refresh in the background.
+    func cachedHTML(_ url: URL, cacheKey: String, ttl: TimeInterval = 3600,
+                    maxStale: TimeInterval = CacheLifetime.socialHTML,
+                    validate: (@Sendable (String) throws -> Void)? = nil) async -> CacheHit<String>? {
+        guard !Task.isCancelled,
+              let entry = await cache.readEntry(cacheKey, maxAge: ttl, maxStaleAge: maxStale),
+              !MirrorRouting.isVerificationPage(entry.data),
+              let html = String(data: entry.data, encoding: .utf8),
+              (try? validate?(html)) != nil || validate == nil else { return nil }
+        return CacheHit(value: html, cacheKey: cacheKey, age: entry.age, isFresh: entry.isFresh)
     }
 
     // MARK: - Core request
@@ -367,6 +508,37 @@ actor APIClient {
         query: [URLQueryItem],
         body: Data?,
         auth: Bool,
+        coalesce: Bool = true,
+        resetBackoff: Bool = false,
+        base: URL? = nil,
+        contentType: String = "application/json",
+        accept: String = "application/json"
+    ) async throws -> Data {
+        let readOnly = method == "GET" || (method == "POST" && path.hasPrefix("/v0/search/"))
+        guard coalesce, readOnly else {
+            return try await performRequestData(path: path, method: method, query: query, body: body,
+                                                auth: auth, resetBackoff: resetBackoff,
+                                                base: base, contentType: contentType, accept: accept)
+        }
+        var key = "\(method)|\(path)|\(auth ? sessionID.uuidString : "public")"
+        for item in query.sorted(by: { $0.name < $1.name }) {
+            key += "|\(item.name)=\(item.value ?? "")"
+        }
+        if let body, let text = String(data: body, encoding: .utf8) { key += "|body=\(text)" }
+        return try await coalescer.data(for: key) { [self] in
+            try await performRequestData(path: path, method: method, query: query, body: body,
+                                         auth: auth, resetBackoff: resetBackoff,
+                                         base: base, contentType: contentType, accept: accept)
+        }
+    }
+
+    private func performRequestData(
+        path: String,
+        method: String,
+        query: [URLQueryItem],
+        body: Data?,
+        auth: Bool,
+        resetBackoff: Bool,
         base: URL? = nil,
         contentType: String = "application/json",
         accept: String = "application/json"
@@ -376,6 +548,7 @@ actor APIClient {
         }
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw APIError.invalidURL }
+        if resetBackoff { routing.resetBackoff(for: url) }
 
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -455,6 +628,14 @@ actor APIClient {
                         if case .rateLimited = failure { return false }
                         return true
                     }()
+                    // An HTTP error means the route itself worked. Cooling the host
+                    // down would make an unrelated immediate retry look like a
+                    // network outage, so only transport failures penalize routes.
+                    let penalize = retryable && {
+                        if case .server = failure { return false }
+                        if case .verificationRequired = failure { return false }
+                        return true
+                    }()
                     let result: String
                     switch failure {
                     case .unauthorized: result = "需要登录（401）"
@@ -466,7 +647,7 @@ actor APIClient {
                     default: result = ConnectionTransport.failureDescription(error)
                     }
                     routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
-                                   result: result, succeeded: false, revision: revision, penalize: retryable)
+                                   result: result, succeeded: false, revision: revision, penalize: penalize)
                     guard retryable, canReplay, !routing.offline else { throw failure }
                     lastError = failure
                 }
