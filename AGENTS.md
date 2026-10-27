@@ -8,7 +8,7 @@
 
 - 部署目标：iOS 27 / macOS 27（不要擅自下探）
 - 构建工具：Xcode 27.1 / Swift 6
-- 第三方依赖：**0**。网络、图片缓存、HTML 解析均为原生实现
+- UI、缓存和 HTML 解析保持原生实现；为实现用户要求的国内 ECH 直连，增加 **Go 标准库静态连接层**（2026-10-27）。无外部 Go 模块、不需要额外服务器；构建需要 Go 1.27+，Xcode 会执行 `scripts/build-ech-library.sh`。不要再将项目描述为零运行时依赖。
 - 工程文件由 **XcodeGen** 生成：改工程设置请改 `project.yml`，然后运行 `xcodegen generate`，不要手改 `project.pbxproj`
 - 设计基调：Apple 风格 + Liquid Glass，优先使用系统导航栏/Sheet/工具栏材质
 
@@ -93,6 +93,10 @@ docs/                方案与截图
 
 ## 已知坑
 
+- ECH 线路使用 Go TLS 1.3，必须确认 `ECHAccepted`，并通过真实域名证书验证；禁止降级为明文 SNI 冒充 ECH。
+- `.ech.invalid` 域名是应用内部线路标记，绝不能交给系统 DNS 或外部浏览器。严格 ECH 模式禁止退回普通连接或镜像。
+- 国内直连验收使用 `bash scripts/test-ech.sh --live`，需要 Cloudflare `sni=encrypted`、连接库确认及物理网卡绑定三项证据。不要把 HTTP 成功或经过代理的连接当作国内直连证据。
+
 - 用户于 2026-10-27 明确要求使用 iOS 系统原生底栏和内嵌横向胶囊选中态；当前采用原生 `TabView`，保留五个栏目。早期模拟器出现过图标重影，需检查当前浅深色截图；不要因此擅自改回自绘底栏、凸起圆泡或放大透镜。
 - 部分网络环境下 `bgm.tv` 会走 QUIC/HTTP3 卡住；`URLRequest.assumesHTTP3Capable = false` 是刻意保留的。
 - legacy `/calendar` 返回的图片是 `http://`，必须升级 https。
@@ -115,6 +119,6 @@ docs/                方案与截图
 - **除非用户明确说“提交/推送”，否则不要 `git commit`、`git push`、开 PR。**
 - 改完必须实际跑构建（iPhone 17 / iOS 27.0 模拟器 + 当前这台 Mac），并在回复里写清楚构建结果；UI 改动要附模拟器截图。
 - OAuth 没有配置时，不要伪造 token、不要把测试 token 写进代码；使用游客模式，或让用户自己在 App 设置里填。
-- 不要擅自升级 deployment target、引入第三方依赖、改 Bundle ID / Team / URL Scheme。
+- 不要擅自升级 deployment target、引入 ECH 连接层之外的第三方依赖、改 Bundle ID / Team / URL Scheme。
 - 不要为了“让编译过”而删掉功能、吞掉错误或把测试改成永远通过；要修根因。
 - 若 HTML 解析失效，保留 Safari 回退，不要静默返回空列表。

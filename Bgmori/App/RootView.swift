@@ -3,21 +3,32 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         @Bindable var model = app
 
-        Group {
-            #if os(macOS)
-            MacShell()
-            #else
-            PhoneShell()
-            #endif
+        ZStack {
+            Color.bgmCanvas.ignoresSafeArea()
+            if app.hasFinishedStartup {
+                Group {
+                    #if os(macOS)
+                    MacShell()
+                    #else
+                    PhoneShell()
+                    #endif
+                }
+                .transition(.opacity)
+            } else {
+                StartupView()
+                    .transition(.opacity)
+            }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: app.hasFinishedStartup)
         .tint(.brandPink)
         .preferredColorScheme(app.settings.appearance.colorScheme)
         .overlay(alignment: .top) {
-            if let toast = app.toast {
+            if app.hasFinishedStartup, let toast = app.toast {
                 ToastView(message: toast)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -46,6 +57,74 @@ struct RootView: View {
             if app.settings.dailyReminder {
                 Task { await app.updateDailyReminder() }
             }
+        }
+    }
+}
+
+private struct StartupView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathing = false
+    @State private var isTakingLonger = false
+
+    var body: some View {
+        VStack(spacing: 30) {
+            VStack(spacing: 18) {
+                Image("BrandIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 104, height: 104)
+                    .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                    .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.025 : 0.975))
+                    .accessibilityHidden(true)
+                Text("Bgmori")
+                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.bgmInk)
+            }
+
+            VStack(spacing: 16) {
+                if let error = app.startupError {
+                    Text(error)
+                        .foregroundStyle(Color.bgmMuted)
+                        .multilineTextAlignment(.center)
+                    Button("重试", systemImage: "arrow.clockwise") {
+                        Task { await app.prepareStartupContent(force: true) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("startup-retry")
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel(app.startupMessage)
+                    Text(isTakingLonger ? "网络有些慢，仍在加载…" : app.startupMessage)
+                        .foregroundStyle(Color.bgmMuted)
+                }
+                if isTakingLonger || app.startupError != nil {
+                    Button("先进入应用") { app.enterAppDuringStartup() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.brandPink)
+                        .accessibilityIdentifier("startup-continue")
+                }
+            }
+            .font(.subheadline)
+        }
+        .padding(32)
+        .frame(maxWidth: 360)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.bgmCanvas.ignoresSafeArea())
+        .accessibilityIdentifier("startup-screen")
+        .task(id: reduceMotion) {
+            isBreathing = false
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                isBreathing = true
+            }
+        }
+        .task {
+            do {
+                try await Task.sleep(for: .seconds(10))
+                isTakingLonger = true
+            } catch { /* Leaving the launch screen cancels this hint. */ }
         }
     }
 }

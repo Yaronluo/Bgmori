@@ -18,14 +18,18 @@ actor ImageLoader {
     private let memoryLimit = 180
     private var downloads: [URL: Task<Data?, Never>] = [:]
     private var generation = UUID()
+    private let gate = ImageDownloadGate(limit: 4)
 
     init(session: URLSession? = nil, directory: URL? = nil, routing: MirrorRouting = .shared) {
         self.routing = routing
         let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForRequest = 12
+        configuration.timeoutIntervalForResource = 18
+        configuration.waitsForConnectivity = false
+        configuration.httpMaximumConnectionsPerHost = 4
         configuration.urlCache = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         configuration.httpShouldSetCookies = false
-        self.session = session ?? URLSession(configuration: configuration)
+        self.session = session ?? URLSession(configuration: configuration, delegate: ConnectionSessionDelegate(), delegateQueue: nil)
 
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         self.directory = directory ?? base.appendingPathComponent("BgmoriImages", isDirectory: true)
@@ -101,26 +105,8 @@ actor ImageLoader {
         if let download = downloads[url] { return await download.value }
 
         let currentGeneration = generation
-        let download = Task { [session, routing] () -> Data? in
-            for candidate in routing.candidates(for: url, forRequest: true) {
-                do {
-                    try Task.checkCancellation()
-                    var request = URLRequest(url: candidate)
-                    request.assumesHTTP3Capable = false
-                    request.timeoutInterval = 15
-                    request.setValue(APIClient.userAgent, forHTTPHeaderField: "User-Agent")
-                    let (data, response) = try await session.data(for: request)
-                    guard !Task.isCancelled else { return nil }
-                    guard let http = response as? HTTPURLResponse,
-                          (200...299).contains(http.statusCode), !data.isEmpty,
-                          CGImageSourceCreateWithData(data as CFData, nil) != nil else { continue }
-                    return data
-                } catch {
-                    if Task.isCancelled { return nil }
-                    routing.markUnavailable(candidate)
-                }
-            }
-            return nil
+        let download = Task { [self] () -> Data? in
+            await fetchData(for: url)
         }
         downloads[url] = download
         let data = await download.value
@@ -128,6 +114,65 @@ actor ImageLoader {
         downloads[url] = nil
         if let data { try? data.write(to: fileURL(for: url), options: .atomic) }
         return data
+    }
+
+    func resetConnections() async { await session.reset() }
+
+    /// Diagnostics deliberately bypass disk/memory caches and exercise the image transport.
+    func checkConnection(_ url: URL) async -> Bool {
+        await fetchData(for: routing.canonicalURL(for: url)) != nil
+    }
+
+    private func fetchData(for url: URL) async -> Data? {
+        guard await gate.acquire() else { return nil }
+        let result = await fetchUncachedData(for: url)
+        await gate.release()
+        return result
+    }
+
+    private func fetchUncachedData(for url: URL) async -> Data? {
+        let started = Date()
+        let revision = routing.revision
+        for candidate in routing.candidates(for: url, forRequest: true) {
+            let attempt = Date()
+            var penalize = true
+            do {
+                try Task.checkCancellation()
+                guard revision == routing.revision else { return nil }
+                if routing.offline, !MirrorRouting.isECHHost(candidate.host) { throw URLError(.notConnectedToInternet) }
+                let remaining = 14 - Date().timeIntervalSince(started)
+                guard remaining > 0 else { return nil }
+                var request = URLRequest(url: candidate)
+                request.assumesHTTP3Capable = false
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                request.timeoutInterval = min(remaining, routing.timeout(for: candidate))
+                request.setValue(APIClient.userAgent, forHTTPHeaderField: "User-Agent")
+                let (data, response) = try await ConnectionTransport.data(for: request, session: session,
+                                                                          timeout: request.timeoutInterval)
+                guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+                if http.statusCode == 429 {
+                    routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
+                                   result: "请求限流（429）", succeeded: false, revision: revision, penalize: false)
+                    return nil
+                }
+                if http.statusCode == 404 { penalize = false }
+                guard (200...299).contains(http.statusCode), !data.isEmpty,
+                      !MirrorRouting.isVerificationPage(data) else { throw URLError(.badServerResponse) }
+                guard CGImageSourceCreateWithData(data as CFData, nil) != nil else {
+                    penalize = false
+                    throw URLError(.cannotDecodeContentData)
+                }
+                routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
+                               result: "连接成功", succeeded: true, revision: revision)
+                return data
+            } catch {
+                if Task.isCancelled || (error as? URLError)?.code == .cancelled { return nil }
+                routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
+                               result: ConnectionTransport.failureDescription(error), succeeded: false, revision: revision, penalize: penalize)
+                if routing.offline { return nil }
+            }
+        }
+        return nil
     }
 
     func cacheSize() -> Int64 {
@@ -159,5 +204,41 @@ actor ImageLoader {
             kCGImageSourceThumbnailMaxPixelSize: maxPixel
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+}
+
+/// A cancelled queued download must release its continuation without consuming a slot.
+actor ImageDownloadGate {
+    private let limit: Int
+    private var active = 0
+    private var waiting: [(UUID, CheckedContinuation<Bool, Never>)] = []
+
+    init(limit: Int) { self.limit = limit }
+
+    func acquire() async -> Bool {
+        guard !Task.isCancelled else { return false }
+        if active < limit {
+            active += 1
+            return true
+        }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled { continuation.resume(returning: false) }
+                else { waiting.append((id, continuation)) }
+            }
+        } onCancel: {
+            Task { await self.cancel(id) }
+        }
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(returning: false)
+    }
+
+    func release() {
+        if waiting.isEmpty { active -= 1 }
+        else { waiting.removeFirst().1.resume(returning: true) }
     }
 }

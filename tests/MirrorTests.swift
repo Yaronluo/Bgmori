@@ -57,9 +57,9 @@ struct MirrorTests {
         routing.update(first, etag: "v1")
         let original = URL(string: "http://bgm.tv/subject/8?name=%E6%B5%8B%E8%AF%95#comments")!
         let mapped = routing.preferredURL(for: original)
-        precondition(mapped.host == "first.test" && mapped.scheme == "https")
+        precondition(mapped.host == "bgm.tv" && mapped.scheme == "https")
         precondition(mapped.query == original.query && mapped.fragment == original.fragment)
-        precondition(routing.preferredURL(for: URL(string: "https://chii.in/ep/1")!).host == "first.test")
+        precondition(routing.preferredURL(for: URL(string: "https://chii.in/ep/1")!).host == "bgm.tv")
         for raw in ["https://example.com/subject/8", "bgmori://oauth/callback", "https://bgm.tv.evil.test/8",
                     "https://user@bgm.tv/8", "https://bgm.tv:444/8"] {
             let url = URL(string: raw)!
@@ -70,7 +70,7 @@ struct MirrorTests {
         let second = try JSONDecoder().decode(MirrorCatalog.self, from: catalog("second.test"))
         restored.update(second, etag: "v2")
         let oldCover = URL(string: "https://lain.first.test/pic/cover/l/8.jpg")!
-        precondition(restored.preferredURL(for: oldCover).host == "lain.second.test")
+        precondition(restored.preferredURL(for: oldCover).host == "lain.bgm.tv")
         let resized = ImageLoader.requestURL(for: restored.canonicalURL(for: oldCover), maxPixel: 597)
         precondition(restored.preferredURL(for: resized).path == "/r/600/pic/cover/l/8.jpg")
         restored.markUnavailable(URL(string: "https://api.second.test")!)
@@ -106,23 +106,25 @@ struct MirrorTests {
         MirrorRequests.shared.reset([directory: .init(status: 304, data: Data())])
         await api.prepareMirrors(force: true)
         precondition(MirrorRequests.shared.requests.first?.value(forHTTPHeaderField: "If-None-Match") == "v1")
-        precondition(isolated.preferredURL(for: URL(string: "https://api.bgm.tv")!).host == "api.first.test")
+        precondition(isolated.candidates(for: URL(string: "https://api.bgm.tv")!).contains { $0.host == "api.first.test" })
         MirrorRequests.shared.reset([directory: .init(status: 503, data: Data("{}".utf8))])
         await api.prepareMirrors(force: true)
-        precondition(isolated.preferredURL(for: URL(string: "https://api.bgm.tv")!).host == "api.first.test")
+        precondition(isolated.candidates(for: URL(string: "https://api.bgm.tv")!).contains { $0.host == "api.first.test" })
         print("PASS: concurrent discovery coalesces; ETag and failed refresh preserve the cached directory")
 
         let challenge = Data(#"<html><script id="anubis_challenge"></script></html>"#.utf8)
+        isolated.resetHealth()
         MirrorRequests.shared.reset([
-            "https://api.first.test/v0/subjects/8": .init(status: 200, data: challenge),
-            "https://api.bgm.tv/v0/subjects/8": .init(status: 200, data: subject)
+            "https://api.bgm.tv/v0/subjects/8": .init(status: 200, data: challenge),
+            "https://api.first.test/v0/subjects/8": .init(status: 200, data: subject)
         ])
         let fallback = try await api.get("/v0/subjects/8", as: Subject.self)
         precondition(fallback.id == 8 && MirrorRequests.shared.requests.count == 2)
         print("PASS: a verification page is rejected as API data and public reads fall back")
 
         isolated.update(first, etag: "v1")
-        MirrorRequests.shared.reset(["https://api.first.test/v0/users/me/collections/8": .init(status: 503, data: Data("{}".utf8))])
+        isolated.resetHealth()
+        MirrorRequests.shared.reset(["https://api.bgm.tv/v0/users/me/collections/8": .init(status: 503, data: Data("{}".utf8))])
         struct Change: Encodable, Sendable { let type: Int }
         do {
             try await api.patch("/v0/users/me/collections/8", body: Change(type: 3), auth: false)
@@ -132,12 +134,14 @@ struct MirrorTests {
         print("PASS: uncertain write failures are never replayed on another host")
 
         isolated.update(first, etag: "v1")
-        MirrorRequests.shared.reset(["https://api.first.test/v0/me": .init(status: 401, data: Data("{}".utf8))])
+        isolated.resetHealth()
+        MirrorRequests.shared.reset(["https://api.bgm.tv/v0/me": .init(status: 401, data: Data("{}".utf8))])
         do {
             let _: User = try await api.get("/v0/me", as: User.self)
             preconditionFailure("401 must retain its authentication meaning")
         } catch APIError.unauthorized { }
         precondition(MirrorRequests.shared.requests.count == 1)
+        isolated.resetHealth()
 
         MirrorRequests.shared.reset([
             "https://first.test/blog": .init(status: 200, data: challenge),
@@ -149,6 +153,7 @@ struct MirrorTests {
         let saved = await cache.readStale("blog")
         precondition(saved.map { !MirrorRouting.isVerificationPage($0) } == true)
         isolated.update(first, etag: "v1")
+        isolated.resetHealth()
         MirrorRequests.shared.reset([
             "https://first.test/group": .init(status: 200, data: challenge),
             "https://bgm.tv/group": .init(status: 200, data: challenge)
@@ -156,10 +161,11 @@ struct MirrorTests {
         do {
             _ = try await api.rawHTML(URL(string: "https://bgm.tv/group")!, cacheKey: "group")
             preconditionFailure("Verification must not become an empty social page")
-        } catch APIError.network { }
+        } catch APIError.verificationRequired { }
         let badCache = await cache.readStale("group")
         precondition(badCache == nil)
         isolated.update(first, etag: "v1")
+        isolated.resetHealth()
         let poisoned = Data("<html>login wall</html>".utf8)
         let valid = Data("<div id='content'>正文</div>".utf8)
         await cache.write("validated", data: poisoned)
@@ -190,7 +196,7 @@ struct MirrorTests {
             let live = APIClient(cache: liveCache, routing: liveRouting)
             await live.prepareMirrors()
             let host = liveRouting.preferredURL(for: URL(string: "https://api.bgm.tv")!).host!
-            precondition(host != "api.bgm.tv", "Live discovery must return a usable mirror")
+            precondition(liveRouting.candidates(for: URL(string: "https://api.bgm.tv")!).count > 1, "Live directory must contain mirror candidates")
             let item = try await live.get("/v0/subjects/8", as: Subject.self)
             precondition(item.id == 8)
             let cover = liveRouting.preferredURL(for: Images.normalized(item.images?.common)!)
@@ -198,7 +204,7 @@ struct MirrorTests {
             let image = await loader.image(for: cover, maxPixel: 597)
             precondition(image != nil)
             await liveCache.clear()
-            print("PASS: live directory, subject JSON and decoded mirror cover on \(host)")
+            print("PASS: live directory, subject JSON and decoded cover on \(host)")
         }
     }
 }

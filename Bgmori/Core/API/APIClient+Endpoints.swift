@@ -44,8 +44,8 @@ extension APIClient {
         return try await get("/v0/users/\(username)/collections", query: query, as: Paged<UserSubjectCollection>.self, cacheKey: key, ttl: 600, auth: auth, force: force)
     }
 
-    func userCollection(_ username: String, subjectID: Int) async throws -> UserSubjectCollection {
-        try await get("/v0/users/\(username)/collections/\(subjectID)", as: UserSubjectCollection.self, cacheKey: "collection-\(username)-\(subjectID)", ttl: 60, auth: true)
+    func userCollection(_ username: String, subjectID: Int, force: Bool = false) async throws -> UserSubjectCollection {
+        try await get("/v0/users/\(username)/collections/\(subjectID)", as: UserSubjectCollection.self, cacheKey: "collection-\(username)-\(subjectID)", ttl: 60, auth: true, force: force)
     }
 
     func userCharacterCollections(_ username: String, limit: Int = 100, offset: Int = 0, auth: Bool = false, force: Bool = false) async throws -> Paged<UserCharacterCollection> {
@@ -92,7 +92,7 @@ extension APIClient {
         if let year { query.append(.init(name: "year", value: String(year))) }
         if let month { query.append(.init(name: "month", value: String(month))) }
         let key = "browse-\(type)-\(sort)-\(year ?? 0)-\(month ?? 0)-\(offset)-\(limit)"
-        return try await get("/v0/subjects", query: query, as: Paged<Subject>.self, cacheKey: key, ttl: force ? 0 : 1_800)
+        return try await get("/v0/subjects", query: query, as: Paged<Subject>.self, cacheKey: key, ttl: 1_800, force: force)
     }
 
     func searchSubjects(
@@ -102,7 +102,8 @@ extension APIClient {
         limit: Int = 24,
         offset: Int = 0,
         cacheKey: String? = nil,
-        ttl: TimeInterval = 0
+        ttl: TimeInterval = 0,
+        force: Bool = false
     ) async throws -> Paged<Subject> {
         let body = SubjectSearchRequest(keyword: keyword, sort: sort, filter: filter)
         return try await post(
@@ -115,7 +116,8 @@ extension APIClient {
             as: Paged<Subject>.self,
             auth: false,
             cacheKey: cacheKey,
-            ttl: ttl
+            ttl: ttl,
+            force: force
         )
     }
 
@@ -302,31 +304,48 @@ extension APIClient {
         try await get("/v0/episodes/\(id)", as: Episode.self, cacheKey: "episode-\(id)", ttl: 86_400)
     }
 
-    func episodeCollections(subjectID: Int) async throws -> Paged<EpisodeCollection> {
+    func episodeCollections(subjectID: Int, force: Bool = false) async throws -> Paged<EpisodeCollection> {
         try await get(
             "/v0/users/-/collections/\(subjectID)/episodes",
             query: [.init(name: "limit", value: "1000")],
             as: Paged<EpisodeCollection>.self,
             cacheKey: "epcol-\(subjectID)",
             ttl: 300,
-            auth: true
+            auth: true,
+            force: force
         )
     }
 
     // MARK: - Calendar
 
-    func calendar() async throws -> [CalendarDay] {
-        try await get("/calendar", as: [CalendarDay].self, cacheKey: "calendar", ttl: 21_600)
+    func calendar(force: Bool = false) async throws -> [CalendarDay] {
+        try await get("/calendar", as: [CalendarDay].self, cacheKey: "calendar", ttl: 21_600, force: force)
     }
 
     // MARK: - Collection mutations
 
     func createOrUpdateCollection(subjectID: Int, patch: CollectionPatch) async throws {
-        try await postNoContent("/v0/users/-/collections/\(subjectID)", body: patch)
+        do {
+            try await postNoContent("/v0/users/-/collections/\(subjectID)", body: patch)
+        } catch {
+            if await confirmCollectionWrite(subjectID: subjectID, patch: patch, after: error) { return }
+            throw error
+        }
     }
 
     func patchCollection(subjectID: Int, patch: CollectionPatch) async throws {
-        try await self.patch("/v0/users/-/collections/\(subjectID)", body: patch)
+        do {
+            try await self.patch("/v0/users/-/collections/\(subjectID)", body: patch)
+        } catch {
+            if await confirmCollectionWrite(subjectID: subjectID, patch: patch, after: error) { return }
+            throw error
+        }
+    }
+
+    private func confirmCollectionWrite(subjectID: Int, patch: CollectionPatch, after error: Error) async -> Bool {
+        guard !Task.isCancelled, let failure = error as? APIError, failure.isUncertainWrite else { return false }
+        guard let collection = try? await userCollection("-", subjectID: subjectID, force: true) else { return false }
+        return patch.isApplied(to: collection)
     }
 
     func updateEpisode(episodeID: Int, type: Int) async throws {

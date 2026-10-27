@@ -75,7 +75,7 @@ enum EpisodeCollectionType: Int, Sendable {
 
 // MARK: - Shared value types
 
-struct Images: Decodable, Hashable, Sendable {
+struct Images: Codable, Hashable, Sendable {
     let small: String?
     let grid: String?
     let large: String?
@@ -119,7 +119,7 @@ struct Images: Decodable, Hashable, Sendable {
     var fullURL: URL? { Self.normalized(medium ?? large ?? common ?? small ?? grid) }
 }
 
-struct Tag: Decodable, Hashable, Sendable, Identifiable {
+struct Tag: Codable, Hashable, Sendable, Identifiable {
     let name: String
     let count: Int
     let totalCount: Int
@@ -138,7 +138,7 @@ struct Tag: Decodable, Hashable, Sendable, Identifiable {
     }
 }
 
-struct Rating: Decodable, Hashable, Sendable {
+struct Rating: Codable, Hashable, Sendable {
     let rank: Int?
     let total: Int
     let count: [String: Int]
@@ -163,7 +163,7 @@ struct Rating: Decodable, Hashable, Sendable {
     var scoreText: String { String(format: "%.1f", score) }
 }
 
-struct CollectionStats: Decodable, Hashable, Sendable {
+struct CollectionStats: Codable, Hashable, Sendable {
     let wish: Int
     let collect: Int
     let doing: Int
@@ -185,11 +185,11 @@ struct CollectionStats: Decodable, Hashable, Sendable {
     }
 }
 
-struct InfoboxEntry: Decodable, Hashable, Sendable {
+struct InfoboxEntry: Codable, Hashable, Sendable {
     let v: String
 }
 
-enum InfoboxValue: Decodable, Hashable, Sendable {
+enum InfoboxValue: Codable, Hashable, Sendable {
     case text(String)
     case list([String])
 
@@ -205,6 +205,14 @@ enum InfoboxValue: Decodable, Hashable, Sendable {
         self = .text("")
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .text(let value): try container.encode(value)
+        case .list(let values): try container.encode(values.map { ["v": $0] })
+        }
+    }
+
     var display: String {
         switch self {
         case .text(let value): value
@@ -213,7 +221,7 @@ enum InfoboxValue: Decodable, Hashable, Sendable {
     }
 }
 
-struct InfoboxItem: Decodable, Hashable, Sendable, Identifiable {
+struct InfoboxItem: Codable, Hashable, Sendable, Identifiable {
     let key: String
     let value: InfoboxValue
 
@@ -228,7 +236,7 @@ struct ErrorDetail: Decodable, Sendable {
 
 // MARK: - Subject
 
-struct Subject: Decodable, Identifiable, Hashable, Sendable {
+struct Subject: Codable, Identifiable, Hashable, Sendable {
     let id: Int
     let type: Int
     let name: String
@@ -590,6 +598,16 @@ struct CollectionPatch: Encodable, Sendable {
         self.tags = tags
     }
 
+    func isApplied(to collection: UserSubjectCollection) -> Bool {
+        (type == nil || type == collection.type)
+            && (rate == nil || rate == collection.rate)
+            && (epStatus == nil || epStatus == collection.epStatus)
+            && (volStatus == nil || volStatus == collection.volStatus)
+            && (comment == nil || comment == (collection.comment ?? ""))
+            && (isPrivate == nil || isPrivate == collection.isPrivate)
+            && (tags == nil || tags?.sorted() == collection.tags.sorted())
+    }
+
     enum CodingKeys: String, CodingKey {
         case type, rate, comment, tags
         case epStatus = "ep_status"
@@ -803,7 +821,7 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
 
 // MARK: - Calendar
 
-struct Weekday: Decodable, Hashable, Sendable, Identifiable {
+struct Weekday: Codable, Hashable, Sendable, Identifiable {
     let id: Int
     let en: String
     let cn: String
@@ -826,14 +844,14 @@ struct Weekday: Decodable, Hashable, Sendable, Identifiable {
     }
 }
 
-struct CalendarDay: Decodable, Identifiable, Sendable {
+struct CalendarDay: Codable, Identifiable, Sendable {
     let weekday: Weekday
     let items: [LegacySubject]
 
     var id: Int { weekday.id }
 }
 
-struct LegacySubject: Decodable, Identifiable, Hashable, Sendable {
+struct LegacySubject: Codable, Identifiable, Hashable, Sendable {
     let id: Int
     let type: Int
     let name: String

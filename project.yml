@@ -19,6 +19,10 @@ targets:
     type: application
     platform: auto
     supportedDestinations: [iOS, macOS]
+    preBuildScripts:
+      - name: Build ECH transport
+        script: /bin/bash "$SRCROOT/scripts/build-ech-library.sh"
+        basedOnDependencyAnalysis: false
     sources:
       - path: Bgmori
         excludes:
@@ -32,6 +36,8 @@ targets:
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
         UIPrerenderedIcon: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         CFBundleURLTypes:
           - CFBundleURLName: com.yaron.bgmori.oauth
             CFBundleURLSchemes: [bgmori]
@@ -40,6 +46,11 @@ targets:
         BGMOAuthRedirect: "bgmori://oauth/callback"
     settings:
       base:
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BGMORI_ECH"
+        SWIFT_OBJC_BRIDGING_HEADER: Bgmori/Core/API/ECHBridge.h
+        LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/build/ech/$(PLATFORM_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -lBgmoriECH -framework Security -framework CoreFoundation -lresolv"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIconFlat
         PRODUCT_BUNDLE_IDENTIFIER: com.yaron.bgmori
         PRODUCT_NAME: Bgmori

@@ -37,11 +37,12 @@
 - [x] 我的：账号概览、继续观看、最近浏览、评分分布与收藏构成、好友、角色 / 人物收藏、时光机与社区入口；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
 - [x] 我的评分：平均分、评分分布、按评分 / 更新 / 标题排序的短评列表
 - [x] 本地缓存：API JSON 缓存、图片磁盘/内存缓存、离线可读
-- [x] 自动镜像：从 bangumi.wiki 获取 API、图片与网页地址，缓存镜像目录并使用 ETag 更新；匿名网页优先直连官网，吐槽和分类排序会校验页面结构后缓存，失败再尝试镜像；写请求不自动重复发送
+- [x] 网络与连接：API、图片和网页分别选择线路，ECH 加密直连优先、失败冷却、成功线路复用、网络变化后重新检测；镜像目录在后台更新，凭证仅发送到官方或明确配置的自定义服务；支持仅官方、自定义服务、应用内加密 DNS、脱敏诊断与三项真实连接检测；[两端浅深色与验证说明](docs/screenshots/network-connections/README.md)
 - [x] 本地每日放送通知（完全本地计算）
 
 ### 设计
 
+- [x] 启动页：图标轻微呼吸，冷启动准备首屏数据与少量图片后切入；有缓存时先显示内容再后台刷新，慢网可先进入、失败可重试，支持减少动态效果；[两端浅深色截图](docs/screenshots/startup/README.md)
 - [x] 纯白底黑白漫画少女图标，附[源图与生成说明](docs/branding/README.md)
 - [x] iOS 原生大标题与轻量搜索栏、分组列表、随系统字号缩放的内容层级
 - [x] 发现页：最近热播每 6 秒自动轮播，支持双向循环滑动与圆点切换，封面边缘渐变融入页面；手机端完整展示封面，保留日期、简介与观看信息；书架评分统一放在封面下方，正在看保留进度；[两端浅深色截图](docs/screenshots/home-blend/README.md)
@@ -105,6 +106,16 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 镜像接入检查：`bash scripts/test-mirrors.sh --live`，在 Mac 与 iPhone 17 上验证域名更新、目录缓存、ETag、读取回退、人机验证识别、写请求不重放，以及真实条目和封面加载。来源说明统一位于「设置 → 关于软件」。
 
+连接策略检查：`bash scripts/test-connections.sh --live`，验证线路隔离、凭证保护、配置持久化、网络恢复、请求时限、取消、图片并发，以及启用应用内加密 DNS 后的新连接。`bash scripts/check-native-ech.sh` 检查当前 SDK 的 ECH 接口可用性。连接设置的真实浅深色 UI 检查：`bash scripts/test-shell-ui.sh all testConnectionsLightAndDark`。
+
+## ECH 国内加密直连
+
+自动模式优先使用 ECH 连接官方；「设置 → 网络与连接 → 加密直连（ECH）」可强制只用这条线路，失败时不会借用普通连接或镜像。ECH 请求直接连接 Cloudflare IP，使用加密握手并按真实域名验证证书，绑定物理 Wi-Fi/以太网或蜂窝接口，绕过本应用的 HTTP/SOCKS 代理和 TUN 路由，不修改其他软件的网络设置。
+
+验证：`bash scripts/test-ech.sh --live`；两端严格 ECH UI：`bash scripts/test-shell-ui.sh all testECHOnlyConnectionsLightAndDark`。应同时看到握手被接受、Cloudflare `sni=encrypted` 和物理接口；[实现与国内网络验证记录](docs/screenshots/ech-direct/README.md)。
+
+外部浏览器的 OAuth 授权页使用浏览器自己的网络，无法自动借用本应用的 ECH。授权网页不可达时，可通过已有 Access Token 登录；应用内的数据、图片、匿名网页和账号 API 均可使用 ECH。
+
 ## 登录配置
 
 Bgmori 不内置任何第三方应用的 Client Secret，需要你自己注册一个 Bangumi OAuth 应用：
@@ -142,7 +153,7 @@ Bgmori/
 └─ Resources/            Assets、Info.plist
 ```
 
-第三方依赖：**0**。网络、图片缓存、HTML 适配均为原生实现，避免 SPM 解析和构建环境差异。
+界面、普通网络、图片缓存和 HTML 适配使用 Apple 原生框架。ECH 加密直连额外嵌入 Go 标准库静态连接层，无外部 Go 模块；构建需要 **Go 1.27+**。Xcode 自动执行 `scripts/build-ech-library.sh`，分别生成 arm64 Mac、iPhone 模拟器和 iPhone 真机所需的库；产物位于忽略入库的 `build/ech/`，源码在 `Native/ECH/`，许可证随应用提供。
 
 ## 已知限制
 

@@ -36,6 +36,74 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testECHOnlyConnectionsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment["BGMORI_ROUTE"] = "settings"
+            app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            app.launchEnvironment["BGMORI_ECH_ONLY"] = "1"
+            app.launchArguments = ["-appearance", appearance]
+            app.launch()
+            let settings = app.buttons["connection-settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 20))
+            #if os(macOS)
+            app.activate()
+            settings.click()
+            #else
+            if !settings.isHittable { app.swipeUp() }
+            settings.tap()
+            #endif
+            let recheck = app.buttons["connection-recheck"]
+            XCTAssertTrue(recheck.waitForExistence(timeout: 10))
+            #if os(macOS)
+            recheck.click()
+            #else
+            recheck.tap()
+            #endif
+            XCTAssertTrue(app.staticTexts["connection-check-summary"].waitForExistence(timeout: 60))
+            XCTAssertGreaterThanOrEqual(app.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", "ECH 已验证", "ECH 已验证")).count, 3,
+                                       "Every service must complete verified ECH; plain HTTP and mirrors cannot satisfy this test")
+            snapshot("ech-only-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testConnectionsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("settings", appearance: appearance)
+            let settings = app.buttons["connection-settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 20))
+            if !settings.isHittable {
+                #if os(iOS)
+                app.swipeUp()
+                #else
+                app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -250)
+                #endif
+            }
+            #if os(macOS)
+            app.activate()
+            settings.click()
+            #else
+            settings.tap()
+            #endif
+            let recheck = app.buttons["connection-recheck"]
+            XCTAssertTrue(recheck.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.descendants(matching: .any)["connection-encrypted-dns"].exists)
+            #if os(macOS)
+            recheck.click()
+            #else
+            recheck.tap()
+            #endif
+            XCTAssertTrue(app.staticTexts["connection-check-summary"].waitForExistence(timeout: 50))
+            XCTAssertTrue(app.descendants(matching: .any)["connection-status-api"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["connection-status-images"].exists)
+            snapshot("connections-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testTabNavigationRemainsVisible() {
         let app = launch("categories")
         #if os(iOS)

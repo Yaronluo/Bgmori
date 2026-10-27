@@ -34,6 +34,35 @@ private final class CollectionProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+private final class WriteReadback: @unchecked Sendable {
+    static let shared = WriteReadback()
+    private let lock = NSLock()
+    private var payload = Data()
+    private var methods: [String] = []
+    func reset(_ body: String) { lock.withLock { payload = Data(body.utf8); methods = [] } }
+    func reply(_ request: URLRequest) -> (Int, Data) {
+        lock.withLock {
+            precondition(request.url?.host == "api.bgm.tv")
+            methods.append(request.httpMethod ?? "GET")
+            return request.httpMethod == "GET" ? (200, payload) : (503, Data("{}".utf8))
+        }
+    }
+    var recorded: [String] { lock.withLock { methods } }
+}
+
+private final class WriteProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let (status, data) = WriteReadback.shared.reply(request)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
+            httpVersion: "HTTP/1.1", headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
 @main struct CollectionRefreshTests {
     static func main() async throws {
         let cache = DiskCache(namespace: "BgmoriCollectionTests-\(UUID())")
@@ -69,6 +98,30 @@ private final class CollectionProtocol: URLProtocol, @unchecked Sendable {
         print("PASS: failed force refresh surfaces errors and preserves the last successful cache")
         await cache.clear()
         session.invalidateAndCancel()
+
+        let writeConfiguration = URLSessionConfiguration.ephemeral
+        writeConfiguration.protocolClasses = [WriteProtocol.self]
+        let writeSession = URLSession(configuration: writeConfiguration)
+        defer { writeSession.invalidateAndCancel() }
+        let writeCache = DiskCache(namespace: "WriteReadbackTests-\(UUID())")
+        let writer = APIClient(session: writeSession, cache: writeCache, routing: MirrorRouting(), discoverMirrors: false)
+        await writer.setToken(UUID().uuidString) // Generated fixture credential is used only by the stub protocol.
+        let applied = #"{"subject_id":8,"subject_type":2,"type":3,"rate":8,"tags":["a","b"]}"#
+        WriteReadback.shared.reset(applied)
+        try await writer.patchCollection(subjectID: 8, patch: CollectionPatch(type: 3, rate: 8, tags: ["b", "a"]))
+        precondition(WriteReadback.shared.recorded == ["PATCH", "GET"])
+        WriteReadback.shared.reset(applied)
+        try await writer.createOrUpdateCollection(subjectID: 8, patch: CollectionPatch(type: 3))
+        precondition(WriteReadback.shared.recorded == ["POST", "GET"])
+        await writeCache.write("collection---8", data: Data(applied.utf8))
+        WriteReadback.shared.reset(#"{"subject_id":8,"subject_type":2,"type":2}"#)
+        do {
+            try await writer.patchCollection(subjectID: 8, patch: CollectionPatch(type: 3))
+            preconditionFailure("A stale cached match must never confirm a failed write")
+        } catch APIError.server { }
+        precondition(WriteReadback.shared.recorded == ["PATCH", "GET"])
+        await writeCache.clear()
+        print("PASS: ambiguous collection writes use fresh readback, never replay, and never accept stale cached confirmation")
 
         if CommandLine.arguments.contains("--live") {
             let live = try await APIClient().userCollections("sai", auth: false, force: true)

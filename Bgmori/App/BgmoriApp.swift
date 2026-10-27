@@ -15,7 +15,7 @@ struct BgmoriApp: App {
         }
 
         Settings {
-            SettingsView()
+            NavigationStack { SettingsView() }
                 .environment(app)
                 .environment(\.openURL, browserAction)
                 .frame(minWidth: 620, minHeight: 520)

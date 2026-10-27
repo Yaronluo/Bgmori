@@ -9,6 +9,7 @@ enum APIError: LocalizedError, Sendable {
     case server(Int, String?)
     case decoding(String)
     case network(String)
+    case verificationRequired
     case cancelled
     case missingConfiguration
     case message(String)
@@ -23,6 +24,7 @@ enum APIError: LocalizedError, Sendable {
         case .server(let code, let message): message ?? "服务器错误（\(code)）"
         case .decoding: "数据解析失败"
         case .network(let message): message.isEmpty ? "网络连接失败" : message
+        case .verificationRequired: "服务需要网页验证，请在浏览器中打开。"
         case .cancelled: "请求已取消"
         case .missingConfiguration: "请先在设置中填写 Bangumi OAuth 配置"
         case .message(let message): message
@@ -31,7 +33,14 @@ enum APIError: LocalizedError, Sendable {
 
     var isRetryable: Bool {
         switch self {
-        case .network, .server, .rateLimited: true
+        case .network, .server, .rateLimited, .verificationRequired: true
+        default: false
+        }
+    }
+
+    var isUncertainWrite: Bool {
+        switch self {
+        case .network, .server: true
         default: false
         }
     }

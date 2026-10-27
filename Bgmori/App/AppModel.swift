@@ -27,12 +27,25 @@ final class AppModel {
     var showLogin = false
     var showSettings = false
     var toast: ToastMessage?
+    var hasFinishedStartup = false
+    var startupMessage = "正在准备首页…"
+    var startupError: String?
+    var homeShowsCachedContent = false
+    var isCheckingConnections = false
+    var connectionCheckSummary: String?
 
     private var didBootstrap = false
+    private var isPreparingStartup = false
     private var didLoadCalendar = false
     private var didLoadHome = false
 
     init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["BGMORI_ECH_ONLY"] == "1" {
+            try? MirrorRouting.shared.configure(ConnectionSettings(mode: .encrypted), persistChanges: false)
+        }
+        #endif
+        MirrorRouting.shared.startNetworkMonitoring()
         let settings = AppSettings()
         let api = APIClient()
         let auth = AuthManager(api: api, settings: settings)
@@ -100,27 +113,138 @@ final class AppModel {
     }
 
     func bootstrap() async {
-        guard !didBootstrap else { return }
+        guard !didBootstrap else {
+            if !hasFinishedStartup && !isPreparingStartup { await prepareStartupContent() }
+            return
+        }
         didBootstrap = true
 
         #if DEBUG
         applyDebugRouteIfNeeded()
         #endif
 
-        await api.prepareMirrors()
+        Task { await api.prepareMirrors() }
+        if router.selectedSection != .home || !router.homePath.isEmpty || showSettings || showLogin {
+            hasFinishedStartup = true
+        }
 
-        // Discover should paint as soon as possible: it does not depend on the
-        // account restore or collection sync, so start it alongside them.
-        async let calendarLoad: Void = loadCalendar()
-        async let homeLoad: Void = loadHome()
+        // The launch screen follows the first page, independently of a potentially
+        // large account reconciliation. Keep the root task alive for both.
+        async let initialContent: Void = prepareStartupContent()
 
         await auth.restore()
         if auth.isLoggedIn, let username = auth.username {
             await library.loadAll(username: username, force: true)
         }
-        await calendarLoad
-        await homeLoad
+        await initialContent
         await updateDailyReminder()
+    }
+
+    func prepareStartupContent(force: Bool = false) async {
+        guard !isPreparingStartup else { return }
+        isPreparingStartup = true
+        startupError = nil
+        startupMessage = "正在准备首页…"
+        defer { isPreparingStartup = false }
+
+        async let minimumPresentation: Void = Task.sleep(for: .milliseconds(650))
+        let key = "startup-home-v1-\(settings.showNSFW ? 1 : 0)"
+        let cached = !force ? await api.cache.read(key, maxAge: 7 * 86_400) : nil
+        if let cached, let page = try? JSONDecoder().decode(HomeSnapshot.self, from: cached),
+           !page.trending.isEmpty || !page.ranking.isEmpty || !page.seasonal.isEmpty {
+            trending = rankingPageFilter(page.trending)
+            ranking = rankingPageFilter(page.ranking)
+            seasonal = rankingPageFilter(page.seasonal)
+            movies = rankingPageFilter(page.movies)
+            calendar = page.calendar
+            hasLoadedHome = true
+            hasLoadedCalendar = true
+            homeShowsCachedContent = true
+            startupMessage = "正在读取缓存…"
+            // Cached content can open immediately; cover refresh continues below.
+            try? await minimumPresentation
+            guard !Task.isCancelled else { return }
+            hasFinishedStartup = true
+        }
+
+        async let calendarLoad: Void = loadCalendar(force: force || cached != nil)
+        async let homeLoad: Void = loadHome(force: force || cached != nil)
+        await homeLoad
+        await calendarLoad
+        try? await minimumPresentation
+        guard !Task.isCancelled else { return }
+
+        guard !trending.isEmpty || !ranking.isEmpty || !seasonal.isEmpty || !movies.isEmpty else {
+            startupError = homeError ?? "首页暂时无法加载，请检查网络后重试。"
+            return
+        }
+
+        if homeError == nil {
+            let snapshot = HomeSnapshot(trending: trending, ranking: ranking, seasonal: seasonal,
+                                        movies: movies, calendar: calendar)
+            if let data = try? JSONEncoder().encode(snapshot) { await api.cache.write(key, data: data) }
+        }
+        startupMessage = "正在准备封面…"
+        await warmStartupImages()
+        guard !Task.isCancelled else { return }
+        hasFinishedStartup = true
+    }
+
+    private struct HomeSnapshot: Codable {
+        let trending: [Subject]
+        let ranking: [Subject]
+        let seasonal: [Subject]
+        let movies: [Subject]
+        let calendar: [CalendarDay]
+    }
+
+    private func warmStartupImages() async {
+        let hero = trending.first?.heroURL
+        let covers = Array(todayAiring.prefix(2)).compactMap(\.coverURL)
+        await withTaskGroup(of: Void.self) { group in
+            if let hero {
+                group.addTask {
+                    #if os(macOS)
+                    _ = await ImageLoader.shared.image(for: hero, maxPixel: 900)
+                    #else
+                    _ = await ImageLoader.shared.image(for: hero, maxPixel: 1000)
+                    #endif
+                }
+            }
+            for url in covers {
+                group.addTask { _ = await ImageLoader.shared.image(for: url, maxPixel: 400) }
+            }
+        }
+    }
+
+    func applyConnectionSettings(_ settings: ConnectionSettings) async throws {
+        try MirrorRouting.shared.configure(settings)
+        await api.resetConnections()
+        await ImageLoader.shared.resetConnections()
+        connectionCheckSummary = nil
+        Task { await api.prepareMirrors() }
+    }
+
+    func checkConnections() async {
+        guard !isCheckingConnections else { return }
+        isCheckingConnections = true
+        connectionCheckSummary = nil
+        MirrorRouting.shared.resetHealth()
+        defer { isCheckingConnections = false }
+        async let web: Void? = try? api.checkWebConnection()
+        let subject = try? await api.checkAPIConnection()
+        let sample = subject?.coverURL ?? trending.first?.heroURL ?? todayAiring.first?.coverURL
+        if let sample { _ = await ImageLoader.shared.checkConnection(sample) }
+        _ = await web
+        let events = MirrorRouting.shared.diagnostics
+        let count = ConnectionService.allCases.filter { service in events.first { $0.service == service }?.succeeded == true }.count
+        connectionCheckSummary = sample == nil
+            ? "\(count)/3 项连接正常；未取得封面样本，图片检测已跳过"
+            : "\(count)/3 项连接正常"
+    }
+
+    func enterAppDuringStartup() {
+        hasFinishedStartup = true
     }
 
     #if DEBUG
@@ -192,7 +316,7 @@ final class AppModel {
         }
 
         do {
-            calendar = try await api.calendar().sorted { $0.weekday.id < $1.weekday.id }
+            calendar = try await api.calendar(force: force).sorted { $0.weekday.id < $1.weekday.id }
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? "放送表加载失败"
             calendarError = message
@@ -232,7 +356,8 @@ final class AppModel {
             filter: trendingFilter,
             limit: 18,
             cacheKey: "home-trending-\(recentStart)-\(today)-\(includeNSFW ? 1 : 0)",
-            ttl: 1_800
+            ttl: 1_800,
+            force: force
         )
         async let moviePage = api.searchSubjects(
             keyword: "",
@@ -240,7 +365,8 @@ final class AppModel {
             filter: movieFilter,
             limit: 16,
             cacheKey: "home-movies-\(includeNSFW ? 1 : 0)",
-            ttl: 3_600
+            ttl: 3_600,
+            force: force
         )
         async let rankingPage = api.browseSubjects(
             type: SubjectType.anime.rawValue,
@@ -291,6 +417,9 @@ final class AppModel {
         if !loadedSeasonal.isEmpty { seasonal = loadedSeasonal }
         if !loadedMovies.isEmpty { movies = loadedMovies }
 
+        if !loadedTrending.isEmpty || !loadedRanking.isEmpty || !loadedSeasonal.isEmpty || !loadedMovies.isEmpty {
+            homeShowsCachedContent = false
+        }
         if loadedTrending.isEmpty && loadedRanking.isEmpty && loadedSeasonal.isEmpty && loadedMovies.isEmpty {
             let message = "发现页加载失败，请检查网络后重试"
             homeError = message
@@ -421,5 +550,6 @@ final class AppModel {
 
     func handleOpenURL(_ url: URL) {
         router.handle(url: url)
+        hasFinishedStartup = true
     }
 }

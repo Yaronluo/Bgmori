@@ -195,6 +195,9 @@ final class LibraryStore {
                 episodeTypes[subject.id] = reverted
             }
             collections[subject.id] = oldCollection
+            if let actual = await reconcileProgress(subjectID: subject.id, after: error) {
+                if actual[episode.id] == type { return }
+            }
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -232,8 +235,27 @@ final class LibraryStore {
         } catch {
             episodeTypes[subject.id] = current
             collections[subject.id] = oldCollection
+            if let actual = await reconcileProgress(subjectID: subject.id, after: error),
+               toDone.allSatisfy({ actual[$0] == EpisodeCollectionType.done.rawValue }),
+               toNone.allSatisfy({ (actual[$0] ?? 0) == EpisodeCollectionType.none.rawValue }) { return }
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// Read back an ambiguous write; never repeat the mutation itself.
+    private func reconcileProgress(subjectID: Int, after error: Error) async -> [Int: Int]? {
+        guard !Task.isCancelled, let failure = error as? APIError, failure.isUncertainWrite,
+              let page = try? await api.episodeCollections(subjectID: subjectID, force: true) else { return nil }
+        var actual: [Int: Int] = [:]
+        for item in page.data {
+            if let episode = item.episode { actual[episode.id] = item.type }
+        }
+        episodeTypes[subjectID] = actual
+        if let username = auth.username,
+           let collection = try? await api.userCollection(username, subjectID: subjectID, force: true) {
+            collections[subjectID] = collection
+        }
+        return actual
     }
 
     func reset() {

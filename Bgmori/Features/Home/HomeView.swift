@@ -36,6 +36,12 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: sectionGap) {
                 VStack(alignment: .leading, spacing: 26) {
                     header
+                    if app.homeShowsCachedContent {
+                        Label(app.isLoadingHome ? "正在显示缓存，更新中…" : "正在显示缓存，下拉可重试更新", systemImage: "clock.arrow.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(Color.bgmMuted)
+                            .padding(.horizontal, 20)
+                    }
                     if !app.trending.isEmpty {
                         heroSection
                     }

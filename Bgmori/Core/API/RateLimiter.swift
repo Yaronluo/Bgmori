@@ -1,20 +1,23 @@
 import Foundation
 
 actor RateLimiter {
-    private var nextAllowed = Date.distantPast
+    private var nextAllowed = ContinuousClock.now
     private let interval: TimeInterval
 
-    init(interval: TimeInterval) {
-        self.interval = interval
-    }
+    init(interval: TimeInterval) { self.interval = interval }
 
-    func wait() async {
-        let now = Date()
-        let allowed = max(now, nextAllowed)
-        nextAllowed = allowed.addingTimeInterval(interval)
-        let delay = allowed.timeIntervalSince(now)
-        if delay > 0 {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+    /// Claim a slot only when dispatching. Cancelled waiters never reserve future time.
+    func wait(maxDelay: TimeInterval = .infinity) async throws {
+        let deadline = maxDelay.isFinite ? ContinuousClock.now.advanced(by: .seconds(max(0, maxDelay))) : nil
+        while true {
+            try Task.checkCancellation()
+            let now = ContinuousClock.now
+            if nextAllowed <= now {
+                nextAllowed = now.advanced(by: .seconds(interval))
+                return
+            }
+            if let deadline, nextAllowed >= deadline { throw URLError(.timedOut) }
+            try await Task.sleep(until: nextAllowed, clock: .continuous)
         }
     }
 }

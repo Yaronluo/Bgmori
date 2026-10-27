@@ -7,6 +7,9 @@ test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-shell-ui.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 # Build a snapshot in a temporary project; preserve the checkout's Xcode signing settings.
 ditto Bgmori "$test_dir/Bgmori"
+ditto Native "$test_dir/Native"
+mkdir -p "$test_dir/scripts"
+cp scripts/build-ech-library.sh "$test_dir/scripts/build-ech-library.sh"
 cp tests/ShellUITests.swift "$test_dir/ShellUITests.swift"
 ruby -ryaml -rjson -e '
   spec = YAML.load_file(ARGV[0])
@@ -24,9 +27,14 @@ ruby -ryaml -rjson -e '
 ' project.yml "$test_dir/project.json"
 xcodegen generate --spec "$test_dir/project.json" --project "$test_dir"
 args=(-project "$test_dir/BgmoriShellVerification.xcodeproj" -scheme Bgmori -configuration Debug -parallel-testing-enabled NO)
+if [[ -n "${2:-}" ]]; then args+=("-only-testing:ShellUITests/ShellUITests/$2"); fi
+result_args=()
+if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then mkdir -p "$BGMORI_UI_RESULT_DIR"; fi
 if [[ "$mode" != mac ]]; then
-  xcodebuild "${args[@]}" -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath "$test_dir/ios" CODE_SIGNING_ALLOWED=NO test
+  if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then result_args=(-resultBundlePath "$BGMORI_UI_RESULT_DIR/ios.xcresult"); fi
+  xcodebuild "${args[@]}" "${result_args[@]}" -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath "$test_dir/ios" CODE_SIGNING_ALLOWED=NO test
 fi
 if [[ "$mode" != ios ]]; then
-  xcodebuild "${args[@]}" -destination 'platform=macOS,arch=arm64' -derivedDataPath "$test_dir/mac" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
+  if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then result_args=(-resultBundlePath "$BGMORI_UI_RESULT_DIR/mac.xcresult"); fi
+  xcodebuild "${args[@]}" "${result_args[@]}" -destination 'platform=macOS,arch=arm64' -derivedDataPath "$test_dir/mac" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
 fi

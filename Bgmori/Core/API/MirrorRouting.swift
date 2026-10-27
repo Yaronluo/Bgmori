@@ -1,4 +1,45 @@
 import Foundation
+import Network
+
+enum ConnectionMode: String, Codable, CaseIterable, Sendable {
+    case automatic, official, encrypted, custom
+    var title: String {
+        switch self {
+        case .automatic: "自动"
+        case .official: "仅官方"
+        case .encrypted: "加密直连（ECH）"
+        case .custom: "自定义服务"
+        }
+    }
+}
+
+struct ConnectionSettings: Codable, Equatable, Sendable {
+    var mode: ConnectionMode = .automatic
+    var customRoot = ""
+    var encryptedDNS = false
+}
+
+enum ConnectionService: String, CaseIterable, Sendable {
+    case api, images, web
+    var title: String {
+        switch self {
+        case .api: "API"
+        case .images: "图片"
+        case .web: "网页"
+        }
+    }
+}
+
+struct ConnectionEvent: Identifiable, Sendable {
+    let id = UUID()
+    let date: Date
+    let service: ConnectionService
+    let host: String
+    let milliseconds: Int
+    let result: String
+    let succeeded: Bool
+    let encrypted: Bool
+}
 
 struct MirrorCatalog: Codable, Sendable {
     struct Mirror: Codable, Sendable {
@@ -27,6 +68,7 @@ final class MirrorRouting: @unchecked Sendable {
         var etag: String?
         var checkedAt: Date?
         var knownHosts: [String: String] = [:]
+        var connection: ConnectionSettings?
     }
 
     private static var defaultPersistenceURL: URL {
@@ -37,10 +79,23 @@ final class MirrorRouting: @unchecked Sendable {
     private let lock = NSLock()
     private let persistenceURL: URL?
     private var snapshot: Snapshot
-    private var unavailableUntil: [String: Date] = [:]
+    private struct Health {
+        var failures = 0
+        var until = Date.distantPast
+        var succeededAt: Date?
+    }
+    private var health: [String: Health] = [:]
+    private var selected: [ConnectionService: (String, Date)] = [:]
+    private var events: [ConnectionEvent] = []
+    private var generation = 0
+    private let now: @Sendable () -> Date
+    private var monitor: NWPathMonitor?
+    private var lastPath: String?
+    private var isOffline = false
 
-    init(persistenceURL: URL? = nil) {
+    init(persistenceURL: URL? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
         self.persistenceURL = persistenceURL
+        self.now = now
         if let persistenceURL, let data = try? Data(contentsOf: persistenceURL),
            let saved = try? JSONDecoder().decode(Snapshot.self, from: data) {
             snapshot = saved
@@ -67,7 +122,6 @@ final class MirrorRouting: @unchecked Sendable {
             snapshot.catalog = catalog
             snapshot.etag = etag
             snapshot.checkedAt = .now
-            unavailableUntil.removeAll()
             persist()
         }
     }
@@ -84,11 +138,12 @@ final class MirrorRouting: @unchecked Sendable {
         lock.withLock { canonicalURL(for: url, snapshot: snapshot) }
     }
 
-    func preferredURL(for url: URL) -> URL {
-        candidates(for: url).first ?? url
+    func preferredURL(for url: URL, credentials: Bool = false) -> URL {
+        candidates(for: url, forRequest: true, credentials: credentials).first { !Self.isECHHost($0.host) }
+            ?? canonicalURL(for: url)
     }
 
-    func candidates(for url: URL, forRequest: Bool = false) -> [URL] {
+    func candidates(for url: URL, forRequest: Bool = false, credentials: Bool = false) -> [URL] {
         lock.withLock {
             let canonical = canonicalURL(for: url, snapshot: snapshot)
             guard ["http", "https"].contains(canonical.scheme?.lowercased() ?? ""),
@@ -100,12 +155,28 @@ final class MirrorRouting: @unchecked Sendable {
                 if $0.weight != $1.weight { return $0.weight > $1.weight }
                 return $0.id < $1.id
             }
-            var hosts = mirrors.flatMap { $0.services.filter { $0.id == service }.flatMap(\.hosts) }
-                .filter(Self.validHost).map { $0.lowercased() }
-            if forRequest {
-                hosts.removeAll { unavailableUntil[$0].map { $0 > Date() } ?? false }
+            let settings = snapshot.connection ?? ConnectionSettings()
+            var hosts = [host]
+            if Self.echAvailable, let encrypted = Self.echHost(for: host) {
+                hosts.insert(encrypted, at: 0)
             }
-            hosts.append(host)
+            if settings.mode == .encrypted { hosts = hosts.filter { Self.isECHHost($0) } }
+            if settings.mode == .custom, let root = Self.normalizedRoot(settings.customRoot) {
+                hosts.insert(service == "main" ? root : "\(service == "lain" ? "lain" : service).\(root)", at: 0)
+            } else if settings.mode == .automatic, !credentials {
+                hosts += mirrors.flatMap { $0.services.filter { $0.id == service }.flatMap(\.hosts) }
+                    .filter(Self.validHost).map { $0.lowercased() }
+            }
+            let channel = Self.channel(for: service)
+            if let (working, date) = selected[channel], now().timeIntervalSince(date) < 1800,
+               hosts.contains(working), (!credentials || Self.isECHHost(working) || working == host) {
+                hosts.removeAll { $0 == working }
+                hosts.insert(working, at: 0)
+            }
+            if forRequest, !credentials {
+                let available = hosts.filter { (health["\(channel.rawValue)|\($0)"]?.until ?? .distantPast) <= now() }
+                hosts = available
+            }
             var seen: Set<String> = []
             return hosts.compactMap { candidate in
                 guard seen.insert(candidate).inserted else { return nil }
@@ -117,20 +188,177 @@ final class MirrorRouting: @unchecked Sendable {
     }
 
     func markUnavailable(_ url: URL) {
-        guard let host = url.host else { return }
-        lock.withLock { unavailableUntil[host] = Date().addingTimeInterval(300) }
+        record(url, milliseconds: 0, result: "连接失败", succeeded: false)
+    }
+
+    var settings: ConnectionSettings { lock.withLock { snapshot.connection ?? ConnectionSettings() } }
+    var revision: Int { lock.withLock { generation } }
+    var offline: Bool { lock.withLock { isOffline } }
+    var diagnostics: [ConnectionEvent] { lock.withLock { events } }
+
+    func configure(_ value: ConnectionSettings, persistChanges: Bool = true) throws {
+        var value = value
+        if value.mode == .custom {
+            guard let root = Self.normalizedRoot(value.customRoot) else {
+                throw URLError(.badURL)
+            }
+            value.customRoot = root
+        }
+        lock.withLock {
+            snapshot.connection = value
+            if let root = Self.normalizedRoot(value.customRoot) {
+                for service in ["main", "api", "lain", "next", "doujin"] {
+                    snapshot.knownHosts[service == "main" ? root : "\(service).\(root)"] = service
+                }
+            }
+            health.removeAll()
+            selected.removeAll()
+            generation += 1
+            if persistChanges { persist() }
+        }
+        Self.applyEncryptedDNS(value.encryptedDNS)
+    }
+
+    func resetHealth() {
+        lock.withLock {
+            health.removeAll()
+            selected.removeAll()
+            events.removeAll()
+            generation += 1
+        }
+    }
+
+    func record(_ url: URL, milliseconds: Int, result: String, succeeded: Bool, revision: Int? = nil,
+                penalize: Bool = true) {
+        lock.withLock {
+            guard revision == nil || revision == generation,
+                  let host = url.host,
+                  let canonicalHost = canonicalURL(for: url, snapshot: snapshot).host,
+                  let service = Self.service(for: canonicalHost) else { return }
+            let channel = Self.channel(for: service)
+            let key = "\(channel.rawValue)|\(host)"
+            if succeeded {
+                health[key] = Health(succeededAt: now())
+                if selected[channel]?.0 != host || now().timeIntervalSince(selected[channel]?.1 ?? .distantPast) >= 1800 {
+                    selected[channel] = (host, now())
+                }
+            } else if penalize {
+                var state = health[key] ?? Health()
+                state.failures = min(state.failures + 1, 6)
+                state.until = now().addingTimeInterval(min(300, 15 * pow(2, Double(state.failures - 1))))
+                health[key] = state
+                if selected[channel]?.0 == host { selected[channel] = nil }
+            }
+            let encrypted = Self.isECHHost(host)
+            events.insert(ConnectionEvent(date: now(), service: channel, host: encrypted ? canonicalHost : host,
+                                          milliseconds: milliseconds,
+                                          result: succeeded && encrypted ? "ECH 已验证" : result,
+                                          succeeded: succeeded, encrypted: encrypted), at: 0)
+            events = Array(events.prefix(40))
+        }
+    }
+
+    func timeout(for url: URL, credentials: Bool = false) -> TimeInterval {
+        return lock.withLock {
+            guard let host = url.host,
+                  let canonical = canonicalURL(for: url, snapshot: snapshot).host,
+                  let service = Self.service(for: canonical) else { return 12 }
+            let key = "\(Self.channel(for: service).rawValue)|\(host)"
+            return health[key]?.succeededAt == nil ? (Self.isECHHost(host) ? 8 : 5) : 12
+        }
+    }
+
+    func startNetworkMonitoring() {
+        Self.applyEncryptedDNS(settings.encryptedDNS)
+        lock.withLock {
+            guard monitor == nil else { return }
+            let observer = NWPathMonitor()
+            observer.pathUpdateHandler = { [weak self] path in
+                self?.networkChanged(offline: path.status == .unsatisfied,
+                                     signature: "\(path.status)-\(path.availableInterfaces.map(\.name))-\(path.isExpensive)-\(path.isConstrained)")
+            }
+            monitor = observer
+            observer.start(queue: DispatchQueue(label: "com.yaron.bgmori.network"))
+        }
+    }
+
+    func networkChanged(offline: Bool, signature: String) {
+        lock.withLock {
+            isOffline = offline
+            if let previous = lastPath, previous != signature {
+                health.removeAll()
+                selected.removeAll()
+                generation += 1
+            }
+            lastPath = signature
+        }
+    }
+
+    static func applyEncryptedDNS(_ enabled: Bool) {
+        let context = NWParameters.PrivacyContext.default
+        context.requireEncryptedNameResolution(enabled, fallbackResolver: enabled
+            ? .https(URL(string: "https://dns.alidns.com/dns-query")!, serverAddresses: []) : nil)
+        context.flushCache()
+    }
+
+    static func normalizedRoot(_ input: String) -> String? {
+        let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URLComponents(string: raw.contains("://") ? raw : "https://\(raw)"),
+              url.scheme == "https", let host = url.host?.lowercased(), validHost(host),
+              url.port == nil, url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/",
+              service(for: host) == nil, !host.hasSuffix(".invalid") else { return nil }
+        return host
+    }
+
+    private static func channel(for service: String) -> ConnectionService {
+        service == "lain" ? .images : (service == "main" ? .web : .api)
     }
 
     private func canonicalURL(for url: URL, snapshot: Snapshot) -> URL {
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.user == nil, url.password == nil, url.port == nil,
               let host = url.host?.lowercased(),
-              let service = Self.service(for: host) ?? snapshot.knownHosts[host],
+              let service = Self.service(for: host) ?? Self.echService(for: host) ?? snapshot.knownHosts[host],
               let official = Self.officialHost(for: service),
               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         components.host = official
         components.scheme = "https"
         return components.url ?? url
+    }
+
+    static var echAvailable: Bool {
+        #if BGMORI_ECH
+        true
+        #else
+        false
+        #endif
+    }
+
+    static func isECHHost(_ host: String?) -> Bool { host.map { echService(for: $0) != nil } ?? false }
+
+    private static func echService(for host: String) -> String? {
+        switch host {
+        case "bgm-tv.ech.invalid": "main"
+        case "api.bgm-tv.ech.invalid": "api"
+        case "lain.bgm-tv.ech.invalid": "lain"
+        case "next.bgm-tv.ech.invalid": "next"
+        case "doujin.bgm-tv.ech.invalid": "doujin"
+        default: nil
+        }
+    }
+
+    private static func echHost(for host: String) -> String? {
+        guard let service = service(for: host) else { return nil }
+        return service == "main" ? "bgm-tv.ech.invalid" : "\(service).bgm-tv.ech.invalid"
+    }
+
+    static func echOrigin(for url: URL) -> URL? {
+        guard let host = url.host, let service = echService(for: host), let official = officialHost(for: service),
+              url.scheme == "https", url.port == nil, url.user == nil, url.password == nil,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.host = official
+        return components.url
     }
 
     private static func service(for host: String) -> String? {
@@ -175,5 +403,62 @@ final class MirrorRouting: @unchecked Sendable {
         return prefix.contains("anubis_challenge") || prefix.contains("anubis-main")
             || prefix.contains("正在确认你是不是机器人") || prefix.contains("cf-chl-")
             || prefix.contains("<title>just a moment")
+    }
+}
+
+/// Enforces an elapsed-time budget, rather than URLSession's idle timeout alone.
+enum ConnectionTransport {
+    static func data(for request: URLRequest, session: URLSession, timeout: TimeInterval) async throws -> (Data, URLResponse) {
+        try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+            group.addTask {
+                #if BGMORI_ECH
+                if MirrorRouting.isECHHost(request.url?.host) {
+                    return try await ECHTransport.data(for: request, timeout: timeout)
+                }
+                #endif
+                return try await session.data(for: request)
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(timeout))
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+
+    static func failureDescription(_ error: Error) -> String {
+        #if BGMORI_ECH
+        if let error = error as? ECHFailure { return error.errorDescription ?? "ECH 加密直连失败" }
+        #endif
+        if let error = error as? URLError {
+            switch error.code {
+            case .timedOut: return "连接超时"
+            case .notConnectedToInternet, .networkConnectionLost: return "网络不可用"
+            case .cannotFindHost, .dnsLookupFailed: return "域名解析失败"
+            case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+                    .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid: return "安全连接失败"
+            default: return "连接失败（\(error.code.rawValue)）"
+            }
+        }
+        // Never put error descriptions, request URLs or server-provided text into diagnostics.
+        return "响应无法使用"
+    }
+}
+
+final class ConnectionSessionDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        let original = task.originalRequest
+        let sensitive = original?.value(forHTTPHeaderField: "Authorization") != nil
+            || original?.url?.path.hasPrefix("/oauth/") == true
+            || !["GET", "HEAD"].contains(original?.httpMethod ?? "GET")
+                && original?.url?.path.hasPrefix("/v0/search/") != true
+        guard request.url?.scheme == "https",
+              !sensitive || request.url?.host == original?.url?.host else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }
