@@ -1,4 +1,7 @@
 import XCTest
+#if os(macOS)
+import AppKit
+#endif
 
 final class ShellUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
@@ -191,6 +194,57 @@ final class ShellUITests: XCTestCase {
             #endif
             snapshot("calendar-tab-\(appearance)", app: app)
             app.terminate()
+        }
+    }
+
+    @MainActor
+    func testInfoLinksAndFiltersLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let person = launch("person:17491", appearance: appearance)
+            let twitter = person.descendants(matching: .any)["infobox-value-Twitter"].firstMatch
+            XCTAssertTrue(twitter.waitForExistence(timeout: 40))
+            for _ in 0..<5 {
+                #if os(iOS)
+                if twitter.isHittable && twitter.frame.maxY < person.frame.maxY - 150 && twitter.frame.minY > 150 { break }
+                let start = person.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.65))
+                let end = person.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: twitter.frame.minY < 150 ? 0.8 : 0.5))
+                start.press(forDuration: 0.1, thenDragTo: end)
+                #else
+                if twitter.isHittable { break }
+                person.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -250)
+                #endif
+            }
+            XCTAssertTrue(twitter.isHittable)
+            snapshot("infobox-links-\(appearance)", app: person)
+            #if os(macOS)
+            let browserURL = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://twitter.com/taka8rie")!)!
+            let browser = XCUIApplication(bundleIdentifier: Bundle(url: browserURL)!.bundleIdentifier!)
+            twitter.click()
+            #else
+            let browser = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+            twitter.tap()
+            #endif
+            XCTAssertTrue(browser.wait(for: .runningForeground, timeout: 15), "Tapping the handle must open the browser")
+            person.terminate()
+
+            let comments = launch("comments:317613", appearance: appearance)
+            let sort = comments.descendants(matching: .any)["comments-sort-filter"].firstMatch
+            XCTAssertTrue(sort.waitForExistence(timeout: 40))
+            snapshot("comment-filters-\(appearance)", app: comments)
+            #if os(macOS)
+            sort.click()
+            let newest = comments.menuItems["最新"]
+            XCTAssertTrue(newest.waitForExistence(timeout: 5))
+            newest.click()
+            #else
+            sort.tap()
+            let newest = comments.buttons["最新"]
+            XCTAssertTrue(newest.waitForExistence(timeout: 5))
+            newest.tap()
+            #endif
+            XCTAssertTrue(comments.buttons["comments-filter-reset"].waitForExistence(timeout: 5))
+            snapshot("comment-filters-active-\(appearance)", app: comments)
+            comments.terminate()
         }
     }
 
