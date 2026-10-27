@@ -80,8 +80,11 @@ bash scripts/build-install-ios.sh --route subject:8 --screenshot /tmp/bgmori.png
 
 脚本把 DerivedData 固定为当前 checkout 的 `build/DerivedData-ios`。DerivedData 目录名由工程绝对路径决定，每个 checkout / git worktree 各一份，而副本的 Bundle ID 都是 `com.yaron.bgmori`；用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-* … | head -1` 猜路径很容易把主工作树的旧安装包装进模拟器。脚本安装后会比对二进制哈希与构建号，构建号同时显示在「设置 → 关于软件」的版本里。
 
+工程文件由 XcodeGen 生成、不入库；新 clone 或新工作树里没有 `Bgmori.xcodeproj` 是正常的（`scripts/build-install-*.sh` 会自动生成）。
+
 ```bash
 cd Bgmori
+xcodegen generate --spec project.yml --project .
 open Bgmori.xcodeproj
 ```
 

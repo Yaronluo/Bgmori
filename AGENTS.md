@@ -9,7 +9,7 @@
 - 部署目标：iOS 27 / macOS 27（不要擅自下探）
 - 构建工具：Xcode 27.1 / Swift 6
 - UI、缓存和 HTML 解析保持原生实现；为实现用户要求的国内 ECH 直连，增加 **Go 标准库静态连接层**（2026-10-27）。无外部 Go 模块、不需要额外服务器；构建需要 Go 1.27+，Xcode 会执行 `scripts/build-ech-library.sh`。不要再将项目描述为零运行时依赖。
-- 工程文件由 **XcodeGen** 生成：改工程设置请改 `project.yml`，然后运行 `xcodegen generate`，不要手改 `project.pbxproj`
+- 工程文件由 **XcodeGen** 生成且**不入库**（`Bgmori.xcodeproj/` 已写进 `.gitignore`）：改工程设置请改 `project.yml`，不要手改、也不要提交 `project.pbxproj`。新 checkout 里由 `scripts/check-project-sync.sh` 按需生成（两个构建脚本都会自动调用）。
 - 设计基调：Apple 风格 + Liquid Glass，优先使用系统导航栏/Sheet/工具栏材质
 
 ## 当前适配与验收范围
@@ -24,7 +24,7 @@
 ## 常用命令
 
 ```bash
-# 生成 Xcode 工程（修改 project.yml 或增删源文件后）
+# 生成 Xcode 工程（新 checkout 首次构建前；构建脚本会自动执行）
 xcodegen generate --spec project.yml --project .
 
 # iOS 模拟器构建
@@ -104,7 +104,7 @@ docs/                方案与截图
 - `updated_at` 不可靠，同步策略是全量对账，不要改成增量游标。
 - HTML 选择器会随 Bangumi 改版失效；解析失败必须回退 Safari，不能崩。
 - **别用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/… | head -1` 找安装包。** DerivedData 目录名由工程绝对路径决定，每个 checkout / worktree 各一份，而所有副本的 Bundle ID 都是 `com.yaron.bgmori`；`head -1` 常常命中主工作树（更早）的产物，结果就是「编了新代码、装进模拟器测的却是旧 App」，且启动后看不出来（版本号恒为 `1.0.0 (1)`）。统一走 `scripts/build-install-ios.sh`：DerivedData 固定在当前 checkout 的 `build/DerivedData-ios`，装完比对二进制哈希，启动的构建号会显示在设置页版本里。
-- 新增/删除源文件后忘记 `xcodegen generate`，工程会静默跳过新文件：编译照样成功，功能却还是旧的。`scripts/check-project-sync.sh` 专门拦这种情况，`build-install-ios.sh` 已内置该检查。
+- 工程文件不入库，新工作树里没有 `Bgmori.xcodeproj` 是正常的：`scripts/check-project-sync.sh` 会在缺失、`project.yml` 更新或源码文件变动时自动重新生成，构建脚本已内置该检查。手动跑 `xcodebuild` 前先跑一次它。
 
 ## 提交
 
