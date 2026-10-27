@@ -344,6 +344,9 @@ var echHTTP = &http.Client{
 	Transport: &http.Transport{Proxy: nil, DialTLSContext: dialECH, ForceAttemptHTTP2: false, MaxIdleConns: 24,
 		MaxIdleConnsPerHost: 4, MaxConnsPerHost: 4, IdleConnTimeout: 60 * time.Second, ResponseHeaderTimeout: 12 * time.Second},
 	CheckRedirect: func(request *http.Request, previous []*http.Request) error {
+		if request.Context().Value(loginContextKey{}) == true {
+			return http.ErrUseLastResponse
+		}
 		if len(previous) >= 5 || request.URL.Scheme != "https" || request.URL.User != nil ||
 			request.URL.Port() != "" && request.URL.Port() != "443" || !allowedHosts[request.URL.Hostname()] {
 			return http.ErrUseLastResponse
@@ -365,13 +368,29 @@ type input struct {
 	Headers             map[string]string `json:"headers"`
 	Body                []byte            `json:"body"`
 	TimeoutMilliseconds int               `json:"timeoutMilliseconds"`
+	WebLogin            bool              `json:"webLogin"`
 }
+type loginContextKey struct{}
+
+func loginEndpoint(target *url.URL, method string) bool {
+	switch target.Hostname() {
+	case "bgm.tv":
+		return method == "GET" && (target.Path == "/login" || target.Path == "/signup/captcha") || method == "POST" && target.Path == "/FollowTheRabbit"
+	case "next.bgm.tv":
+		return method == "GET" && target.Path == "/demo/access-token" || (method == "POST" || method == "DELETE") && target.Path == "/demo/access-tokens"
+	case "api.bgm.tv":
+		return method == "GET" && target.Path == "/v0/me"
+	}
+	return false
+}
+
 type output struct {
 	Status      int               `json:"status"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	Body        []byte            `json:"body,omitempty"`
 	ECHAccepted bool              `json:"echAccepted"`
 	Error       string            `json:"error,omitempty"`
+	Cookies     []string          `json:"cookies,omitempty"`
 }
 type requestContext struct {
 	ctx    context.Context
@@ -415,6 +434,12 @@ func perform(ctx context.Context, request input) output {
 	default:
 		return output{Error: "UNSUPPORTED_METHOD"}
 	}
+	if request.WebLogin {
+		if !loginEndpoint(target, request.Method) {
+			return output{Error: "UNSUPPORTED_HOST"}
+		}
+		ctx = context.WithValue(ctx, loginContextKey{}, true)
+	}
 	timeout := time.Duration(request.TimeoutMilliseconds) * time.Millisecond
 	if timeout <= 0 || timeout > 60*time.Second {
 		timeout = 30 * time.Second
@@ -426,7 +451,7 @@ func perform(ctx context.Context, request input) output {
 		return output{Error: "INVALID_REQUEST"}
 	}
 	for name, value := range request.Headers {
-		if strings.EqualFold(name, "Host") || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "Proxy-Authorization") {
+		if strings.EqualFold(name, "Host") || strings.EqualFold(name, "Cookie") && !request.WebLogin || strings.EqualFold(name, "Proxy-Authorization") {
 			continue
 		}
 		req.Header.Set(name, value)
@@ -468,7 +493,11 @@ func perform(ctx context.Context, request input) output {
 			headers[name] = strings.Join(values, ", ")
 		}
 	}
-	return output{Status: resp.StatusCode, Headers: headers, Body: body, ECHAccepted: true}
+	result := output{Status: resp.StatusCode, Headers: headers, Body: body, ECHAccepted: true}
+	if request.WebLogin {
+		result.Cookies = resp.Header.Values("Set-Cookie")
+	}
+	return result
 }
 
 //export BgmoriECHPerform

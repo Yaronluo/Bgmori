@@ -115,12 +115,13 @@ struct ConnectionTests {
         precondition(Requests.shared.requests.count == 1 && Requests.shared.requests[0].url?.host == "api.bgm.tv")
         precondition(Requests.shared.requests[0].value(forHTTPHeaderField: "Authorization") != nil)
         routing.resetHealth()
-        Requests.shared.reset(["https://bgm.tv/oauth/access_token": .init(status: 503)])
-        do { _ = try await api.oauthToken(form: ["client_secret": credential]); preconditionFailure() }
-        catch APIError.server { }
+        Requests.shared.reset(["https://bgm.tv/FollowTheRabbit": .init(status: 503)])
+        let loginRoutes = await api.webLoginRoutes()
+        let loginResponse = try await api.webLoginRequest(URL(string: "https://bgm.tv/FollowTheRabbit")!, method: "POST", route: loginRoutes[0])
+        precondition(loginResponse.response.statusCode == 503)
         precondition(Requests.shared.requests.count == 1 && Requests.shared.requests[0].url?.host == "bgm.tv")
         precondition(!routing.diagnostics.contains { $0.result.contains(credential) || $0.host.contains(credential) })
-        print("PASS: bearer and OAuth forms stay on official hosts and never replay failed writes")
+        print("PASS: bearer and login forms stay on official hosts and never replay failed writes")
 
         let delegate = ConnectionSessionDelegate()
         var protected = URLRequest(url: apiURL)

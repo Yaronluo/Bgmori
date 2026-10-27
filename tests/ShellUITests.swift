@@ -36,6 +36,40 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testDirectLoginLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment["BGMORI_ROUTE"] = "login"
+            app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            app.launchEnvironment["BGMORI_ECH_ONLY"] = "1"
+            app.launchArguments = ["-appearance", appearance]
+            app.launch()
+            XCTAssertTrue(app.textFields["login-email"].waitForExistence(timeout: 20))
+            XCTAssertTrue(app.secureTextFields["login-password"].exists)
+            XCTAssertTrue(app.textFields["login-captcha"].exists)
+            let captcha = app.buttons["login-captcha-image"]
+            let loaded = NSPredicate(format: "label == %@ AND enabled == true", "更换验证码")
+            expectation(for: loaded, evaluatedWith: captcha)
+            waitForExpectations(timeout: 45)
+            XCTAssertFalse(app.buttons["login-submit"].isEnabled)
+            XCTAssertFalse(app.staticTexts["OAuth 应用"].exists)
+            XCTAssertFalse(app.staticTexts["已有 Access Token"].exists)
+            XCTAssertFalse(app.staticTexts["login-error"].exists)
+            snapshot("direct-login-\(appearance)", app: app)
+            #if os(macOS)
+            app.activate()
+            captcha.click()
+            #else
+            captcha.tap()
+            #endif
+            expectation(for: loaded, evaluatedWith: captcha)
+            waitForExpectations(timeout: 45)
+            XCTAssertFalse(app.staticTexts["login-error"].exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testECHOnlyConnectionsLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()

@@ -4,8 +4,8 @@ actor APIClient {
     static let shared = APIClient()
 
     private let apiBase = URL(string: "https://api.bgm.tv")!
-    private let oauthBase = URL(string: "https://bgm.tv")!
     private let session: URLSession
+    private let loginSession: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
     let cache: DiskCache
@@ -27,6 +27,14 @@ actor APIClient {
         configuration.httpShouldSetCookies = false
         configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 128 * 1024 * 1024)
         self.session = session ?? URLSession(configuration: configuration, delegate: ConnectionSessionDelegate(), delegateQueue: nil)
+        let loginConfiguration = URLSessionConfiguration.ephemeral
+        loginConfiguration.httpShouldSetCookies = false
+        loginConfiguration.httpCookieStorage = nil
+        loginConfiguration.urlCache = nil
+        loginConfiguration.waitsForConnectivity = false
+        loginConfiguration.timeoutIntervalForRequest = 20
+        loginConfiguration.timeoutIntervalForResource = 30
+        loginSession = session ?? URLSession(configuration: loginConfiguration, delegate: WebLoginRedirectDelegate(), delegateQueue: nil)
         self.cache = cache
         self.routing = routing
         self.discoverMirrors = discoverMirrors
@@ -98,7 +106,81 @@ actor APIClient {
         routing.preferredURL(for: url, credentials: true)
     }
 
-    func resetConnections() async { await session.reset() }
+    func resetConnections() async {
+        await session.reset()
+        await loginSession.reset()
+    }
+
+    // Website authentication has an isolated, memory-only cookie jar owned by BangumiWebLogin.
+    // It never enters the anonymous HTML cache, normal API transport or community mirrors.
+    func webLoginRoutes() -> [WebLoginRoute] {
+        routing.candidates(for: URL(string: "https://bgm.tv/login")!, credentials: true).compactMap { candidate in
+            guard candidate.host == "bgm.tv" || MirrorRouting.isECHHost(candidate.host) else { return nil }
+            return WebLoginRoute(encrypted: MirrorRouting.isECHHost(candidate.host), revision: routing.revision)
+        }
+    }
+
+    func webLoginRequest(_ url: URL, method: String = "GET", route: WebLoginRoute,
+                         cookie: String? = nil, bearer: String? = nil, body: Data? = nil,
+                         contentType: String? = nil) async throws -> WebLoginHTTPResult {
+        guard url.scheme == "https", url.port == nil, url.user == nil,
+              ["bgm.tv", "next.bgm.tv", "api.bgm.tv"].contains(url.host),
+              Self.webLoginEndpoint(url, method: method) else { throw APIError.invalidURL }
+        try Task.checkCancellation()
+        guard route.revision == routing.revision else { throw APIError.message("连接设置已改变，请重新获取验证码") }
+        try await limiter.wait(maxDelay: 5)
+        try Task.checkCancellation()
+        let target: URL
+        if route.encrypted {
+            guard let encrypted = MirrorRouting.encryptedURL(for: url) else { throw APIError.invalidURL }
+            target = encrypted
+        } else { target = url }
+        var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
+        request.httpMethod = method
+        request.httpBody = body
+        request.assumesHTTP3Capable = false
+        request.httpShouldHandleCookies = false
+        request.setValue(Self.safariUserAgent + " Bgmori/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.setValue("https://" + (url.host ?? "bgm.tv"), forHTTPHeaderField: "Origin")
+        request.setValue(url.host == "next.bgm.tv" ? "https://next.bgm.tv/demo/access-token" : "https://bgm.tv/login", forHTTPHeaderField: "Referer")
+        if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+        if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+        let result: WebLoginHTTPResult
+        #if BGMORI_ECH
+        if route.encrypted {
+            result = try await ECHTransport.loginData(for: request, timeout: 25)
+        } else {
+            let (data, response) = try await ConnectionTransport.data(for: request, session: loginSession, timeout: 25)
+            guard let http = response as? HTTPURLResponse else { throw APIError.network("登录服务响应无效") }
+            result = WebLoginHTTPResult(data: data, response: http, setCookies: http.value(forHTTPHeaderField: "Set-Cookie").map { [$0] } ?? [])
+        }
+        #else
+        guard !route.encrypted else { throw APIError.network("当前构建不支持加密直连") }
+        let (data, response) = try await ConnectionTransport.data(for: request, session: loginSession, timeout: 25)
+        guard let http = response as? HTTPURLResponse else { throw APIError.network("登录服务响应无效") }
+        result = WebLoginHTTPResult(data: data, response: http, setCookies: http.value(forHTTPHeaderField: "Set-Cookie").map { [$0] } ?? [])
+        #endif
+        try Task.checkCancellation()
+        guard route.revision == routing.revision else { throw APIError.message("连接设置已改变，请重新获取验证码") }
+        if result.response.statusCode == 429 { throw APIError.rateLimited }
+        if MirrorRouting.isVerificationPage(result.data) { throw APIError.verificationRequired }
+        return result
+    }
+
+    private static func webLoginEndpoint(_ url: URL, method: String) -> Bool {
+        switch url.host {
+        case "bgm.tv":
+            return method == "GET" && ["/login", "/signup/captcha"].contains(url.path)
+                || method == "POST" && url.path == "/FollowTheRabbit"
+        case "next.bgm.tv":
+            return method == "GET" && url.path == "/demo/access-token"
+                || ["POST", "DELETE"].contains(method) && url.path == "/demo/access-tokens"
+        case "api.bgm.tv": return method == "GET" && url.path == "/v0/me"
+        default: return false
+        }
+    }
 
     func checkAPIConnection() async throws -> Subject {
         try await get("/v0/subjects/8", as: Subject.self, force: true)
@@ -190,29 +272,6 @@ actor APIClient {
 
     func delete(_ path: String, auth: Bool = true) async throws {
         _ = try await requestData(path: path, method: "DELETE", query: [], body: nil, auth: auth)
-    }
-
-    // MARK: - OAuth
-
-    func oauthToken(form: [String: String]) async throws -> TokenResponse {
-        let body = form
-            .map { key, value in
-                "\(urlEncode(key))=\(urlEncode(value))"
-            }
-            .joined(separator: "&")
-            .data(using: .utf8)
-
-        let data = try await requestData(
-            path: "/oauth/access_token",
-            method: "POST",
-            query: [],
-            body: body,
-            auth: false,
-            base: oauthBase,
-            contentType: "application/x-www-form-urlencoded",
-            accept: "application/json"
-        )
-        return try decode(TokenResponse.self, from: data)
     }
 
     // MARK: - HTML
@@ -427,12 +486,6 @@ actor APIClient {
         } catch {
             throw APIError.decoding(error.localizedDescription)
         }
-    }
-
-    private func urlEncode(_ value: String) -> String {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     static var userAgent: String {

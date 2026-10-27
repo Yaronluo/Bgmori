@@ -48,7 +48,7 @@ final class AppModel {
         MirrorRouting.shared.startNetworkMonitoring()
         let settings = AppSettings()
         let api = APIClient()
-        let auth = AuthManager(api: api, settings: settings)
+        let auth = AuthManager(api: api)
         self.settings = settings
         self.api = api
         self.auth = auth
@@ -448,25 +448,14 @@ final class AppModel {
         showToast("已刷新")
     }
 
-    func signIn() async {
-        await auth.signIn()
+    func signIn(email: String, password: String, captcha: String) async {
+        await auth.signIn(email: email, password: password, captcha: captcha)
         if auth.isLoggedIn, let username = auth.username {
-            await library.loadAll(username: username, force: true)
-            await updateDailyReminder()
             showToast("欢迎回来，\(auth.displayName)")
-        } else if let error = auth.errorMessage {
-            showToast(error, isError: true)
-        }
-    }
-
-    func signInWithToken(_ token: String) async {
-        await auth.signInWithToken(token)
-        if auth.isLoggedIn, let username = auth.username {
-            await library.loadAll(username: username, force: true)
-            await updateDailyReminder()
-            showToast("登录成功")
-        } else if let error = auth.errorMessage {
-            showToast(error, isError: true)
+            Task {
+                await library.loadAll(username: username, force: true)
+                await updateDailyReminder()
+            }
         }
     }
 

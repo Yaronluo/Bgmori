@@ -1014,34 +1014,6 @@ struct Revision: Decodable, Identifiable, Sendable {
     }
 }
 
-// MARK: - Auth
-
-struct TokenResponse: Decodable, Sendable {
-    let accessToken: String
-    let expiresIn: Int
-    let tokenType: String
-    let refreshToken: String?
-    let userId: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case expiresIn = "expires_in"
-        case tokenType = "token_type"
-        case refreshToken = "refresh_token"
-        case userId = "user_id"
-    }
-}
-
-struct OAuthErrorResponse: Decodable, Sendable {
-    let error: String?
-    let errorDescription: String?
-
-    enum CodingKeys: String, CodingKey {
-        case error
-        case errorDescription = "error_description"
-    }
-}
-
 // MARK: - Helpers
 
 extension String {

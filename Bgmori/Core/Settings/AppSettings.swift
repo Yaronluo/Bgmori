@@ -35,10 +35,6 @@ final class AppSettings {
     var dailyReminder = false { didSet { save() } }
     var useSafariUserAgentForHTML = true { didSet { save() } }
 
-    var oauthClientID: String = "" { didSet { save() } }
-    var oauthClientSecret: String = "" { didSet { save() } }
-    var oauthRedirectURI: String = "bgmori://oauth/callback" { didSet { save() } }
-
     private let defaults = UserDefaults.standard
     /// @Observable 会把存储属性改写成计算属性，init 里的赋值同样会触发 didSet。
     /// 加载完成前禁止回写，否则第一行赋值就会用默认值覆盖磁盘上已有的设置。
@@ -52,21 +48,12 @@ final class AppSettings {
         dailyReminder = defaults.object(forKey: "dailyReminder") as? Bool ?? false
         useSafariUserAgentForHTML = defaults.object(forKey: "useSafariUserAgentForHTML") as? Bool ?? true
 
-        oauthClientID = defaults.string(forKey: "oauthClientID")
-            ?? Bundle.main.object(forInfoDictionaryKey: "BGMApiClientID") as? String
-            ?? ""
-        oauthClientSecret = defaults.string(forKey: "oauthClientSecret")
-            ?? Bundle.main.object(forInfoDictionaryKey: "BGMApiClientSecret") as? String
-            ?? ""
-        oauthRedirectURI = defaults.string(forKey: "oauthRedirectURI")
-            ?? (Bundle.main.object(forInfoDictionaryKey: "BGMOAuthRedirect") as? String)
-            ?? "bgmori://oauth/callback"
+        // Account/password login no longer needs a locally configured OAuth application.
+        for key in ["oauthClientID", "oauthClientSecret", "oauthRedirectURI"] {
+            defaults.removeObject(forKey: key)
+        }
 
         isLoaded = true
-    }
-
-    var hasOAuthConfig: Bool {
-        !oauthClientID.trimmed.isEmpty && !oauthClientSecret.trimmed.isEmpty
     }
 
     var appVersion: String {
@@ -83,8 +70,5 @@ final class AppSettings {
         defaults.set(showNSFW, forKey: "showNSFW")
         defaults.set(dailyReminder, forKey: "dailyReminder")
         defaults.set(useSafariUserAgentForHTML, forKey: "useSafariUserAgentForHTML")
-        defaults.set(oauthClientID, forKey: "oauthClientID")
-        defaults.set(oauthClientSecret, forKey: "oauthClientSecret")
-        defaults.set(oauthRedirectURI, forKey: "oauthRedirectURI")
     }
 }

@@ -31,6 +31,7 @@
 		7ADBF7FC51E00EB4F6A34749 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030FA9D716469EFFD223E15E /* LibraryView.swift */; };
 		7F3FE22E246D72CE5A202E48 /* CollectionReviewRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BED91726F0BA33C578B1ED /* CollectionReviewRow.swift */; };
 		91D62C88A8605C0CB0197897 /* RecentSubjectsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C06B51B46D334A8D08860871 /* RecentSubjectsStore.swift */; };
+		93EEC5DEE0D0AB47156EFA91 /* BangumiWebLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6A11780AED6F3D9D2B047A /* BangumiWebLogin.swift */; };
 		9545CE4892BF390D2C68F1BD /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAA7DF72FD3651ED6C639F7 /* Components.swift */; };
 		962CF6BEA75C13290FF3DC6F /* BgmoriApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E090669CE60F5D9E3EBC09E /* BgmoriApp.swift */; };
 		9812D36B633D94CCAFD00E55 /* CategoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4BEA66367A01ED2D45FB9C /* CategoryModels.swift */; };
@@ -100,6 +101,7 @@
 		AF6392234ED17608FA707617 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		AF757773706E9F9D3177AF56 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		B415F6AD3CE5F77DDECFA2A2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		BA6A11780AED6F3D9D2B047A /* BangumiWebLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BangumiWebLogin.swift; sourceTree = "<group>"; };
 		C06B51B46D334A8D08860871 /* RecentSubjectsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentSubjectsStore.swift; sourceTree = "<group>"; };
 		C23E68B630433308F7C2F987 /* CommentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsView.swift; sourceTree = "<group>"; };
 		C266BFBD1C15553A334D7108 /* IndexViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexViews.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 			isa = PBXGroup;
 			children = (
 				AF757773706E9F9D3177AF56 /* AuthManager.swift */,
+				BA6A11780AED6F3D9D2B047A /* BangumiWebLogin.swift */,
 				51D83B48129417AAEFC8FF45 /* Keychain.swift */,
 			);
 			path = Auth;
@@ -484,6 +487,7 @@
 				64646CE5D0E0951D07BF82E3 /* AppRouter.swift in Sources */,
 				EC6401714A57A1613564ABE9 /* AppSettings.swift in Sources */,
 				DED14277499E754F4A8D53FB /* AuthManager.swift in Sources */,
+				93EEC5DEE0D0AB47156EFA91 /* BangumiWebLogin.swift in Sources */,
 				962CF6BEA75C13290FF3DC6F /* BgmoriApp.swift in Sources */,
 				FE8B1CBEAE62B4C42D10B523 /* CalendarView.swift in Sources */,
 				9812D36B633D94CCAFD00E55 /* CategoryModels.swift in Sources */,

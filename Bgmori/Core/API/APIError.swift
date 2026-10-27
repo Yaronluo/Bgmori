@@ -11,7 +11,6 @@ enum APIError: LocalizedError, Sendable {
     case network(String)
     case verificationRequired
     case cancelled
-    case missingConfiguration
     case message(String)
 
     var errorDescription: String? {
@@ -26,7 +25,6 @@ enum APIError: LocalizedError, Sendable {
         case .network(let message): message.isEmpty ? "网络连接失败" : message
         case .verificationRequired: "服务需要网页验证，请在浏览器中打开。"
         case .cancelled: "请求已取消"
-        case .missingConfiguration: "请先在设置中填写 Bangumi OAuth 配置"
         case .message(let message): message
         }
     }

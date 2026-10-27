@@ -25,9 +25,8 @@
 
 ### 收藏与账号
 
-- [x] OAuth 2.0 登录（Authorization Code + ASWebAuthenticationSession）
-- [x] 手动 Access Token 登录（方便私人使用）
-- [x] Token 刷新、Keychain 存储、401 处理
+- [x] 应用内邮箱、密码、图片验证码登录：通过官网生成一年有效的个人令牌，无需配置 OAuth 或复制 Token
+- [x] 密码不保存、临时 Cookie 会话隔离、令牌 Keychain 存储、过期与 401 处理；退出时后台撤销本次登录生成的令牌
 - [x] 收藏状态：想看 / 看过 / 在看 / 搁置 / 抛弃；收藏编辑采用分段状态、十分制评分滑杆、进度条与轻量输入区，Mac 评分与进度并排；[两端浅深色截图](docs/screenshots/collection-editor/README.md)
 - [x] 评分（1–10）、标签、短评、私密标记
 - [x] 移除收藏入口：收藏列表的「…」菜单或编辑收藏页底部 → 前往 Bangumi 网页移除 → 返回自动同步（官方 API 暂未提供条目收藏删除接口）
@@ -114,23 +113,15 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 验证：`bash scripts/test-ech.sh --live`；两端严格 ECH UI：`bash scripts/test-shell-ui.sh all testECHOnlyConnectionsLightAndDark`。应同时看到握手被接受、Cloudflare `sni=encrypted` 和物理接口；[实现与国内网络验证记录](docs/screenshots/ech-direct/README.md)。
 
-外部浏览器的 OAuth 授权页使用浏览器自己的网络，无法自动借用本应用的 ECH。授权网页不可达时，可通过已有 Access Token 登录；应用内的数据、图片、匿名网页和账号 API 均可使用 ECH。
+账号登录在应用内完成，验证码、登录表单和令牌创建均可走 ECH；密码不会发送到社区镜像或自定义服务，临时 Cookie 不参与匿名网页浏览。
 
-## 登录配置
+## 账号登录
 
-Bgmori 不内置任何第三方应用的 Client Secret，需要你自己注册一个 Bangumi OAuth 应用：
+在「我的 → 登录 Bangumi」填写邮箱、密码和图片验证码即可。登录成功后由应用创建一年有效的个人令牌并存入钥匙串；无需注册 OAuth 应用或手动复制 Token。点击验证码图片可换图。密码仅在本次操作中使用，临时 Cookie 在完成或关闭登录页时清除。
 
-1. 打开 <https://bgm.tv/dev/app>，创建一个应用。
-2. 回调地址填：`bgmori://oauth/callback`
-3. 把 **Client ID / Client Secret** 填入 App 的「我的 → 设置 → OAuth 应用」；或修改 `project.yml` 里 `info.properties` 的以下字段后运行 `xcodegen generate`：
-   - `BGMApiClientID`
-   - `BGMApiClientSecret`
-   - `BGMOAuthRedirect`（默认 `bgmori://oauth/callback`）
-4. 回到登录页点「使用 Bangumi 登录」。
+账号请求只走官方或 ECH，固定同一条线路完成会话，不发送到社区镜像和自定义服务；不自动重放密码或创建令牌的 POST。验证码错误会换图；令牌创建成功而账户验证临时失败时，重试只验证已有令牌。退出时清除本地登录，并尝试在后台撤销这次登录生成的令牌；网络不可达时服务器上的令牌仍可能有效，直至撤销或到期。
 
-也可以点「已有 Access Token」手动粘贴一个 token；适合临时使用。
-
-> 私人使用可以直接把配置写进 Info.plist；如果要分发，建议把换 token 的逻辑放到自己的 Cloudflare Worker，避免 Client Secret 被提取。
+验证：`bash scripts/test-web-login.sh` 运行两端本地协议桩流程；`bash scripts/test-web-login.sh --live` 在严格 ECH 模式下读取真实登录页与验证码，不提交账号密码；`bash scripts/test-shell-ui.sh all testDirectLoginLightAndDark` 检查两端浅深色界面。[截图和验证边界](docs/screenshots/direct-login/README.md)。
 
 ## 给 AI 代理的说明
 
@@ -143,9 +134,9 @@ Bgmori/
 ├─ App/                  入口、Root Shell、路由、AppModel
 ├─ Core/
 │  ├─ API/               URLSession API 客户端、限流、缓存、错误
-│  ├─ Auth/              OAuth、Keychain
+│  ├─ Auth/              账号登录、临时会话、Keychain
 │  ├─ Models/            Bangumi DTO
-│  ├─ Settings/          外观、内容、OAuth 配置
+│  ├─ Settings/          外观与内容配置
 │  ├─ Social/            HTML 解析（吐槽/小组/日志/时光机）
 │  └─ Storage/           收藏状态、图片缓存、本地通知
 ├─ Design/               Tokens、玻璃组件、通用卡片
@@ -160,7 +151,6 @@ Bgmori/
 - 官方 API 没有评论/小组/日志/发布接口；这些页面采用 **匿名 HTML 只读解析**，页面结构变化时可能失效，失效会回退到 Safari。
 - 不支持发吐槽、回帖、发日志、发话题、提醒、维基编辑（没有公开写接口）。好友列表与角色/人物收藏为只读，不支持添加好友、好友动态或写操作。
 - 审核/公开分发需要处理 Bangumi 商标、UGC 举报与 R18 过滤；当前是私人使用版本，默认关闭 NSFW，设置里可手动开启。
-- OAuth 未预置 Client ID/Secret，需按上面的步骤配置。
 - 系统级 Widget、App Intents、Handoff、Spotlight 尚未接入；当前版本聚焦客户端本体。
 - iPhone 底栏按用户指定改为系统原生 Tab Bar。早期模拟器曾出现截图图标重影，当前以本次原生底栏截图和真机表现为准。
 - 已适配 Mac 原生窗口，但未做多窗口/Stage Manager 的专门优化。
@@ -175,7 +165,7 @@ Bgmori/
 
 | 条目 | 吐槽 | 登录 |
 | --- | --- | --- |
-| ![条目](docs/screenshots/redesign/subject-light.png) | ![吐槽](docs/screenshots/comments.png) | ![登录](docs/screenshots/login.png) |
+| ![条目](docs/screenshots/redesign/subject-light.png) | ![吐槽](docs/screenshots/comments.png) | ![登录](docs/screenshots/direct-login/iphone-light.png) |
 
 | 收藏（游客） | 我的（Mac） | 设置 |
 | --- | --- | --- |

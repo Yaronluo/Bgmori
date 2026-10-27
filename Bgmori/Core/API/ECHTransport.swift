@@ -31,6 +31,7 @@ enum ECHTransport {
         let headers: [String: String]
         let body: Data?
         let timeoutMilliseconds: Int
+        let webLogin: Bool
     }
     private struct Output: Decodable {
         let status: Int
@@ -38,6 +39,7 @@ enum ECHTransport {
         let body: Data?
         let echAccepted: Bool
         let error: String?
+        let cookies: [String]?
     }
 
     static var info: ECHInfo? {
@@ -47,13 +49,18 @@ enum ECHTransport {
     }
 
     static func data(for request: URLRequest, timeout: TimeInterval) async throws -> (Data, URLResponse) {
+        let result = try await loginData(for: request, timeout: timeout, webLogin: false)
+        return (result.data, result.response)
+    }
+
+    static func loginData(for request: URLRequest, timeout: TimeInterval, webLogin: Bool = true) async throws -> WebLoginHTTPResult {
         try Task.checkCancellation()
         guard let marker = request.url, let official = MirrorRouting.echOrigin(for: marker) else {
             throw ECHFailure(code: "UNSUPPORTED_HOST")
         }
         let input = Input(url: official.absoluteString, method: request.httpMethod ?? "GET",
                           headers: request.allHTTPHeaderFields ?? [:], body: request.httpBody,
-                          timeoutMilliseconds: max(1, Int(timeout * 1000)))
+                          timeoutMilliseconds: max(1, Int(timeout * 1000)), webLogin: webLogin)
         let json = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
         let identifier = UUID().uuidString
         identifier.withCString { BgmoriECHBegin($0) }
@@ -77,7 +84,8 @@ enum ECHTransport {
                                                              httpVersion: "HTTP/1.1", headerFields: decoded.headers) else {
                             throw ECHFailure(code: "ECH_NOT_ACCEPTED")
                         }
-                        continuation.resume(returning: (decoded.body ?? Data(), response))
+                        continuation.resume(returning: WebLoginHTTPResult(data: decoded.body ?? Data(), response: response,
+                                                                          setCookies: decoded.cookies ?? []))
                     } catch { continuation.resume(throwing: error) }
                 }
             }

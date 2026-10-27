@@ -24,7 +24,7 @@ bash scripts/build-ech-library.sh iphoneos
 
 内置多个 Cloudflare IPv4 地址，每日后台尝试刷新 Izuko 的公开地址清单；清单只提供 IP，TLS 始终验证 Bangumi 官方真实域名。清单不可用时保留内置地址，首次请求不依赖 GitHub 可达性。目录镜像 API 未更换。
 
-目标只允许 `bgm.tv`、`api.bgm.tv`、`lain.bgm.tv`、`next.bgm.tv`、`doujin.bgm.tv` 的 HTTPS 443。禁止代理凭证和 Cookie，丢弃响应 Cookie；带 Authorization 的重定向不得跨域，写请求不得通过重定向重放。响应最大 32 MiB，连接和请求均受时限限制。日志只返回固定错误类别，不返回地址查询参数、请求体或凭证。
+目标只允许 `bgm.tv`、`api.bgm.tv`、`lain.bgm.tv`、`next.bgm.tv`、`doujin.bgm.tv` 的 HTTPS 443。禁止代理凭证；普通请求禁止 Cookie 并丢弃响应 Cookie。隔离的网页登录请求仅在白名单登录及令牌端点之间交换临时 Cookie，且禁止所有重定向；带 Authorization 的重定向不得跨域，写请求不得通过重定向重放。响应最大 32 MiB，连接和请求均受时限限制。日志只返回固定错误类别，不返回地址查询参数、请求体或凭证。
 
 ## 验证与边界
 
@@ -34,4 +34,4 @@ bash scripts/test-ech.sh --live
 bash scripts/test-shell-ui.sh all testECHOnlyConnectionsLightAndDark
 ```
 
-[两端实际验证与截图](../../docs/screenshots/ech-direct/README.md)。当前传输选择具有 IPv4 地址的物理接口；纯 IPv6 网络尚未支持，自动模式仍可按既有策略使用普通连接。严格 ECH 模式下会报错，不以回退结果冒充成功。外部浏览器 OAuth 网页使用浏览器自己的连接；应用内账号 API 可以使用 ECH。
+[两端实际验证与截图](../../docs/screenshots/ech-direct/README.md)。当前传输选择具有 IPv4 地址的物理接口；纯 IPv6 网络尚未支持，自动模式仍可按既有策略使用普通连接。严格 ECH 模式下会报错，不以回退结果冒充成功。应用内邮箱、密码、验证码登录同样使用 ECH，网页会话与匿名浏览隔离。

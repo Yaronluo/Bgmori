@@ -361,6 +361,13 @@ final class MirrorRouting: @unchecked Sendable {
         return components.url
     }
 
+    static func encryptedURL(for url: URL) -> URL? {
+        guard let host = url.host, let encrypted = echHost(for: host),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.host = encrypted
+        return components.url
+    }
+
     private static func service(for host: String) -> String? {
         switch host {
         case "bgm.tv", "www.bgm.tv", "bangumi.tv", "www.bangumi.tv", "chii.in", "www.chii.in": "main"
@@ -403,6 +410,24 @@ final class MirrorRouting: @unchecked Sendable {
         return prefix.contains("anubis_challenge") || prefix.contains("anubis-main")
             || prefix.contains("正在确认你是不是机器人") || prefix.contains("cf-chl-")
             || prefix.contains("<title>just a moment")
+    }
+}
+
+struct WebLoginHTTPResult: Sendable {
+    let data: Data
+    let response: HTTPURLResponse
+    let setCookies: [String]
+}
+
+struct WebLoginRoute: Sendable {
+    let encrypted: Bool
+    let revision: Int
+}
+
+final class WebLoginRedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 

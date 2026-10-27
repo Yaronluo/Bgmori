@@ -55,7 +55,7 @@ xcrun simctl io "iPhone 17" screenshot /tmp/bgmori.png
 ```
 Bgmori/App/          入口、Root Shell、路由、AppModel
 Bgmori/Core/API/     APIClient、端点、限流、错误
-Bgmori/Core/Auth/    OAuth、Keychain
+Bgmori/Core/Auth/    官网账号登录、临时会话、Keychain
 Bgmori/Core/Models/  Bangumi DTO
 Bgmori/Core/Social/  HTML 只读解析（吐槽/小组/日志/时光机）
 Bgmori/Core/Storage/ 收藏状态、图片缓存、本地通知
@@ -77,9 +77,9 @@ docs/                方案与截图
 ## 安全与隐私
 
 - **绝对不要**把 OAuth Client Secret、Access Token、Refresh Token、Cookie 写进仓库、日志、截图或注释。
-- 私人配置放在 App 内「设置 → OAuth 应用」，或使用本地未入库的 `Secrets.xcconfig`。
+- 登录仅保留邮箱、密码、图片验证码；不再提供 OAuth 配置或手动 Token 入口。密码不保存，生成的个人令牌放在 Keychain。
 - `Info.plist` 中的 `BGMApiClientSecret` 保持空字符串；发布前如要内置，必须改用 Worker 代理。
-- 社交页面是匿名 HTML 只读，不要加 Cookie 登录、发帖、点赞等写操作。
+- 社交页面继续匿名 HTML 只读，禁止给社交请求加 Cookie、发帖或点赞。用户于 2026-10-27 明确授权账号密码登录：仅隔离的登录会话可临时使用 Cookie 获取验证码、登录及管理本应用生成的个人令牌，不得扩展到社交写操作。
 - 日志里不要打印完整 URL 查询参数中的 code/token。
 
 ## 验证要求
@@ -118,7 +118,7 @@ docs/                方案与截图
 - 开始改代码前，先快速读 `README.md` 和本文件；必要时先跑一次基线构建，确认当前是绿的。
 - **除非用户明确说“提交/推送”，否则不要 `git commit`、`git push`、开 PR。**
 - 改完必须实际跑构建（iPhone 17 / iOS 27.0 模拟器 + 当前这台 Mac），并在回复里写清楚构建结果；UI 改动要附模拟器截图。
-- OAuth 没有配置时，不要伪造 token、不要把测试 token 写进代码；使用游客模式，或让用户自己在 App 设置里填。
+- 不要伪造线上登录结果、保存密码或把真实凭证用于测试。真实网络验收可以只获取登录页和验证码；完整账号登录需要用户本人在应用内输入，报告中应说明验证边界。
 - 不要擅自升级 deployment target、引入 ECH 连接层之外的第三方依赖、改 Bundle ID / Team / URL Scheme。
 - 不要为了“让编译过”而删掉功能、吞掉错误或把测试改成永远通过；要修根因。
 - 若 HTML 解析失效，保留 Safari 回退，不要静默返回空列表。

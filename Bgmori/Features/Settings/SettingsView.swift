@@ -39,23 +39,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("OAuth 应用") {
-                TextField("Client ID", text: $settings.oauthClientID)
-                    .textContentType(.username)
-                SecureField("Client Secret", text: $settings.oauthClientSecret)
-                TextField("回调地址", text: $settings.oauthRedirectURI)
-                Link("打开 Bangumi 开发者平台", destination: URL(string: "https://bgm.tv/dev/app")!)
-                    .font(.system(size: 13))
-                Text("回调地址需要与开发者后台一致；默认使用 bgmori://oauth/callback。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if settings.hasOAuthConfig {
-                    Label("配置已就绪", systemImage: "checkmark.seal.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-            }
-
             Section("外观") {
                 Picker("主题", selection: $settings.appearance) {
                     ForEach(AppAppearance.allCases) { appearance in
@@ -285,7 +268,7 @@ struct ConnectionSettingsView: View {
                         LabeledContent("直连接口", value: info.directInterface.isEmpty ? "尚未连接" : info.directInterface)
                         LabeledContent("ECH 配置", value: info.configReady ? "已取得" : "首次连接时获取")
                     }
-                    Text("只有服务器接受 ECH 并通过域名证书验证后才会显示已验证。外部浏览器的授权网页使用浏览器自己的网络；无法打开时可使用已有 Access Token 登录。")
+                    Text("只有服务器接受 ECH 并通过域名证书验证后才会显示已验证。账号登录也使用应用内官方直连，不需要打开浏览器。")
                         .font(.caption).foregroundStyle(Color.bgmMuted)
                     #else
                     Text("此构建没有包含 ECH 连接库。")

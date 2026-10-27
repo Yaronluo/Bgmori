@@ -5,7 +5,11 @@ enum Keychain {
     static let service = "com.yaron.bgmori.oauth"
 
     static func save(_ value: String, for key: String) {
-        guard let data = value.data(using: .utf8) else { return }
+        try? store(value, for: key)
+    }
+
+    static func store(_ value: String, for key: String) throws {
+        let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -15,12 +19,13 @@ enum Keychain {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var add = query
             add.merge(attributes) { _, new in new }
-            SecItemAdd(add as CFDictionary, nil)
+            status = SecItemAdd(add as CFDictionary, nil)
         }
+        guard status == errSecSuccess else { throw APIError.message("无法安全保存登录凭证，请解锁钥匙串后重试") }
     }
 
     static func read(_ key: String) -> String? {
