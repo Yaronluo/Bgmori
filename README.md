@@ -72,6 +72,14 @@ bash scripts/build-install-macos.sh
 
 脚本会构建 arm64 Mac 版本、校验本地签名、备份旧应用、替换 `/Applications/Bgmori.app` 并重新打开，最后比对安装包与构建产物。旧应用保存在 `~/Library/Application Support/Bgmori/BuildBackups/`。只执行 `xcodebuild` 会更新构建目录，不会替换「应用程序」里的副本。
 
+在 iPhone 17 模拟器上构建、安装并启动：
+
+```bash
+bash scripts/build-install-ios.sh --route subject:8 --screenshot /tmp/bgmori.png
+```
+
+脚本把 DerivedData 固定为当前 checkout 的 `build/DerivedData-ios`。DerivedData 目录名由工程绝对路径决定，每个 checkout / git worktree 各一份，而副本的 Bundle ID 都是 `com.yaron.bgmori`；用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-* … | head -1` 猜路径很容易把主工作树的旧安装包装进模拟器。脚本安装后会比对二进制哈希与构建号，构建号同时显示在「设置 → 关于软件」的版本里。
+
 ```bash
 cd Bgmori
 open Bgmori.xcodeproj

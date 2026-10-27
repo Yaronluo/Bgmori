@@ -39,14 +39,13 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 ```
 
-模拟器调试（可选）：
+模拟器调试（构建 → 安装 → 启动 → 截图，在要测试的 checkout 里执行）：
 
 ```bash
-xcrun simctl boot "iPhone 17"
-xcrun simctl install "iPhone 17" "$(find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -name Bgmori.app | head -1)"
-SIMCTL_CHILD_BGMORI_ROUTE="subject:8" xcrun simctl launch "iPhone 17" com.yaron.bgmori
-xcrun simctl io "iPhone 17" screenshot /tmp/bgmori.png
+bash scripts/build-install-ios.sh --route subject:8 --screenshot /tmp/bgmori.png
 ```
+
+脚本把 DerivedData 固定为当前 checkout 的 `build/DerivedData-ios`，构建后校验模拟器里安装的二进制哈希与构建号都和本次构建一致，再启动。**不要**用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/… | head -1` 找安装包（原因见「已知坑」）。
 
 `BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`categories`、`categories:类型ID`（1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元）、`calendar`、`library`、`search:关键词`、`subject:ID`、`tag:名称`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`。发布构建中不存在。
 
@@ -104,6 +103,8 @@ docs/                方案与截图
 - 收藏的 `ep_status` 只对书籍有效；动画进度走章节接口。
 - `updated_at` 不可靠，同步策略是全量对账，不要改成增量游标。
 - HTML 选择器会随 Bangumi 改版失效；解析失败必须回退 Safari，不能崩。
+- **别用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/… | head -1` 找安装包。** DerivedData 目录名由工程绝对路径决定，每个 checkout / worktree 各一份，而所有副本的 Bundle ID 都是 `com.yaron.bgmori`；`head -1` 常常命中主工作树（更早）的产物，结果就是「编了新代码、装进模拟器测的却是旧 App」，且启动后看不出来（版本号恒为 `1.0.0 (1)`）。统一走 `scripts/build-install-ios.sh`：DerivedData 固定在当前 checkout 的 `build/DerivedData-ios`，装完比对二进制哈希，启动的构建号会显示在设置页版本里。
+- 新增/删除源文件后忘记 `xcodegen generate`，工程会静默跳过新文件：编译照样成功，功能却还是旧的。`scripts/check-project-sync.sh` 专门拦这种情况，`build-install-ios.sh` 已内置该检查。
 
 ## 提交
 

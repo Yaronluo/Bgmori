@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+bash scripts/check-project-sync.sh
+
 installed_app=/Applications/Bgmori.app
 task_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-install.XXXXXX")
 stage_dir=""
@@ -15,8 +17,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# 构建号取时间戳，装好后能在「设置 → 关于软件」里直接看出是不是本次构建。
+stamp=$(date +%Y%m%d%H%M)
 build_args=(-project Bgmori.xcodeproj -scheme Bgmori -configuration Debug
-  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-)
+  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+  CURRENT_PROJECT_VERSION="$stamp")
 if ! xcodebuild "${build_args[@]}" build > "$task_dir/build.log" 2>&1; then
   tail -80 "$task_dir/build.log"
   exit 1
@@ -52,5 +57,5 @@ codesign --verify --deep --strict "$installed_app"
 diff -qr "$built_app" "$installed_app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$installed_app"
 open "$installed_app"
-echo "已构建、安装并打开：$installed_app"
+echo "已构建（构建号 $stamp）、安装并打开：$installed_app"
 [[ -z "$backup_app" ]] || echo "旧应用备份：$backup_app"
