@@ -142,6 +142,10 @@ struct CommentsView: View {
                     .accessibilityIdentifier("comments-filter-reset")
                 }
             }
+            #if os(macOS)
+            .menuStyle(.button)
+            #endif
+            .buttonStyle(.plain)
             .padding(.horizontal, 20)
         }
         .padding(.top, 4)
