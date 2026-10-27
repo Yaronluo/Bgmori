@@ -10,7 +10,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    static let phoneTabs: [AppSection] = [.home, .categories, .library, .profile]
+    static let phoneTabs: [AppSection] = [.home, .categories, .calendar, .library, .profile]
 
     var title: String {
         switch self {
@@ -93,11 +93,8 @@ final class AppRouter {
     }
 
     func openCalendar() {
-        #if os(iOS)
-        selectedSection = .home
-        if homePath.last != .calendar { homePath.append(.calendar) }
-        #else
         selectedSection = .calendar
+        #if os(macOS)
         macPath.removeAll()
         #endif
     }

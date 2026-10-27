@@ -4,7 +4,7 @@ import Foundation
 struct NavigationTests {
     @MainActor
     static func main() {
-        precondition(AppSection.phoneTabs == [.home, .categories, .library, .profile])
+        precondition(AppSection.phoneTabs == [.home, .categories, .calendar, .library, .profile])
         let router = AppRouter()
         router.selectedSection = .categories
         router.categoriesPath = [.subject(8)]
@@ -37,17 +37,21 @@ struct NavigationTests {
         router.setPath(Array(router.categoriesPath.dropLast()), for: .categories)
         precondition(router.categoriesPath == [.subject(8)], "Back from search must preserve earlier history")
         router.selectedSection = .profile
+        let homeHistory = router.homePath
         router.openCalendar()
-        precondition(router.selectedSection == .home && router.homePath == [.calendar])
+        precondition(router.selectedSection == .calendar && router.calendarPath.isEmpty)
+        precondition(router.homePath == homeHistory, "Calendar must not alter Discover history")
+        router.push(.subject(8))
+        router.selectedSection = .profile
         router.openCalendar()
-        precondition(router.homePath == [.calendar])
-        router.setPath([], for: .home)
-        precondition(router.selectedSection == .home, "Back from calendar returns to Discover")
+        precondition(router.calendarPath == [.subject(8)], "Calendar keeps its own navigation history")
+        router.setPath([], for: .calendar)
+        precondition(router.selectedSection == .calendar)
         router.selectedSection = .library
         router.handle(url: URL(string: "bgmori://search?q=CLANNAD")!)
         precondition(router.selectedSection == .library && router.libraryPath == [.search])
         precondition(router.searchQuery == "CLANNAD")
-        print("PASS iPhone: four tabs, search/back/history, Discover calendar/back, search deep link")
+        print("PASS iPhone: five tabs, search/back/history, independent calendar history, search deep link")
         #else
         precondition(router.selectedSection == .search && router.macPath.isEmpty)
         router.macPath = [.subject(9)]

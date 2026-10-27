@@ -53,95 +53,30 @@ struct RootView: View {
 #if os(iOS)
 struct PhoneShell: View {
     @Environment(AppModel.self) private var app
-    @State private var visitedSections: Set<AppSection> = []
 
     var body: some View {
         @Bindable var router = app.router
 
-        // Keep each tab's navigation history while search and calendar are pushed pages.
-        ZStack {
-            ForEach(AppSection.phoneTabs.filter { visitedSections.contains($0) || $0 == router.selectedSection }) { section in
+        TabView(selection: $router.selectedSection) {
+            ForEach(AppSection.phoneTabs) { section in
                 NavigationStack(path: Binding(
                     get: { router.path(for: section) },
                     set: { router.setPath($0, for: section) }
                 )) {
                     SectionRootView(section: section)
-                        .modifier(PhoneTabBarInset(section: section))
                         .navigationDestination(for: Route.self) { route in
                             RouteView(route: route)
-                                .modifier(PhoneTabBarInset(section: section, route: route))
                         }
                 }
-                .opacity(router.selectedSection == section ? 1 : 0)
-                .allowsHitTesting(router.selectedSection == section)
-                .accessibilityHidden(router.selectedSection != section)
-            }
-        }
-        .onChange(of: router.selectedSection, initial: true) { old, new in
-            visitedSections.formUnion([old, new])
-        }
-    }
-}
-
-/// Reserve space in each page's scroll container, inside its navigation stack.
-private struct PhoneTabBarInset: ViewModifier {
-    let section: AppSection
-    var route: Route? = nil
-    @Environment(AppModel.self) private var app
-
-    func body(content: Content) -> some View {
-        @Bindable var router = app.router
-        content.safeAreaInset(edge: .bottom, spacing: 12) {
-            if router.selectedSection == section,
-               router.path(for: section).last == route,
-               !router.isShowingSubject {
-                BgmoriTabBar(selection: $router.selectedSection)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 4)
-            }
-        }
-    }
-}
-
-struct BgmoriTabBar: View {
-    @Binding var selection: AppSection
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var selectionAnimation
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(AppSection.phoneTabs) { section in
-                Button {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
-                        selection = section
-                    }
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: selection == section ? section.filledIcon : section.icon)
-                            .font(.system(size: 19, weight: .medium))
-                        Text(section.title)
-                            .font(.caption2.weight(.medium))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .foregroundStyle(selection == section ? Color.brandPink : Color.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .background {
-                        if selection == section {
-                            Capsule().fill(Color.brandPink.opacity(0.10))
-                                .matchedGeometryEffect(id: "selection", in: selectionAnimation)
-                        }
-                    }
-                    .contentShape(Capsule())
+                .toolbar(router.isShowingSubject ? .hidden : .visible, for: .tabBar)
+                .tabItem {
+                    Label(section == .calendar ? "每日放送" : section.title, systemImage: section.icon)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tab-\(section.rawValue)")
-                .accessibilityAddTraits(selection == section ? .isSelected : [])
+                .tag(section)
             }
         }
-        .padding(4)
-        .bgmFloatingGlass(cornerRadius: 30)
+        .tabBarMinimizeBehavior(.never)
+        .background(Color.bgmCanvas)
     }
 }
 #endif

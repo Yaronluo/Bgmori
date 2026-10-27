@@ -93,7 +93,7 @@ docs/                方案与截图
 
 ## 已知坑
 
-- iOS 27 模拟器上系统原生 Liquid Glass Tab Bar 在截图里会出现图标重影；当前用自绘玻璃 Tab Bar 规避。不要改回系统 `Tab(role:)`，除非确认系统问题已修复。
+- 用户于 2026-10-27 明确要求使用 iOS 系统原生底栏和内嵌横向胶囊选中态；当前采用原生 `TabView`，保留五个栏目。早期模拟器出现过图标重影，需检查当前浅深色截图；不要因此擅自改回自绘底栏、凸起圆泡或放大透镜。
 - 部分网络环境下 `bgm.tv` 会走 QUIC/HTTP3 卡住；`URLRequest.assumesHTTP3Capable = false` 是刻意保留的。
 - legacy `/calendar` 返回的图片是 `http://`，必须升级 https。
 - 搜索 `nsfw` 不传等于包含 R18；审核/展示逻辑要显式过滤。
