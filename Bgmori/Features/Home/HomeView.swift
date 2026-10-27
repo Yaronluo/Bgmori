@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hotSelection: Int?
     @State private var isVisible = false
     @State private var scrollingSections: Set<String> = []
@@ -51,11 +52,13 @@ struct HomeView: View {
                         }) { subjects, isPrevious in
                             heroSection(subjects: subjects, isPrevious: isPrevious)
                         }
+                        .transition(sectionTransition)
                     }
                 }
 
                 if !app.continueWatching.isEmpty {
                     continueSection
+                        .transition(sectionTransition)
                 }
 
                 if !app.todayAiring.isEmpty {
@@ -64,6 +67,7 @@ struct HomeView: View {
                     }) { subjects, isPrevious in
                         todaySection(subjects: subjects, isPrevious: isPrevious)
                     }
+                    .transition(sectionTransition)
                 }
 
                 if !app.seasonal.isEmpty {
@@ -72,6 +76,7 @@ struct HomeView: View {
                     }) { subjects, isPrevious in
                         seasonalSection(subjects: subjects, isPrevious: isPrevious)
                     }
+                    .transition(sectionTransition)
                 }
 
                 if !app.ranking.isEmpty {
@@ -80,6 +85,7 @@ struct HomeView: View {
                     }) { subjects, isPrevious in
                         rankingSection(subjects: subjects, isPrevious: isPrevious)
                     }
+                    .transition(sectionTransition)
                 }
 
                 if !app.movies.isEmpty {
@@ -88,20 +94,25 @@ struct HomeView: View {
                     }) { subjects, isPrevious in
                         moviesSection(subjects: subjects, isPrevious: isPrevious)
                     }
+                    .transition(sectionTransition)
                 }
 
                 if showsGuestCard {
                     guestCard
+                        .transition(sectionTransition)
                 }
 
                 if showsSkeleton {
                     loadingSkeleton
+                        .transition(sectionTransition)
                 } else if showsEmptyState {
                     emptyState
+                        .transition(sectionTransition)
                 }
             }
             .padding(.top, 4)
             .padding(.bottom, 44)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.42), value: sectionLayoutSignature)
             .bgmDesktopContent()
         }
         .background(Color.bgmCanvas)
@@ -175,19 +186,26 @@ struct HomeView: View {
                 app.openLibrary()
             }
 
-            shelf(id: "continue") {
-                ForEach(app.continueWatching) { item in
-                    NavigationLink(value: Route.subject(item.subjectId)) {
-                        CoverCard(
-                            title: item.title,
-                            subtitle: continueProgressText(item),
-                            coverURL: item.coverURL,
-                            progress: item.progressFraction,
-                            tint: .subjectTint(item.subjectType),
-                            width: cardWidth
-                        )
+            HomeRefreshSection(value: app.continueWatching,
+                               sourceVersion: app.homeContentVersion,
+                               isInteracting: isInteracting,
+                               prepare: { items in
+                await HomeImageWarmup.prepare(urls: items.prefix(2).compactMap(\.coverURL), maxPixel: 400)
+            }) { items, isPrevious in
+                shelf(id: "continue", isPrevious: isPrevious) {
+                    ForEach(items) { item in
+                        NavigationLink(value: Route.subject(item.subjectId)) {
+                            CoverCard(
+                                title: item.title,
+                                subtitle: continueProgressText(item),
+                                coverURL: item.coverURL,
+                                progress: item.progressFraction,
+                                tint: .subjectTint(item.subjectType),
+                                width: cardWidth
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -437,6 +455,27 @@ struct HomeView: View {
         return "\(components.month ?? 1) 月 \(components.day ?? 1) 日 · \(names[weekday])"
     }
 
+    private var sectionTransition: AnyTransition {
+        let base = AnyTransition.opacity.combined(with: .scale(scale: 0.985, anchor: .top))
+        return reduceMotion ? .opacity : base.animation(.easeInOut(duration: 0.42))
+    }
+
+    /// Animates sections entering or leaving the stack without animating every
+    /// text/score update inside a stable section.
+    private var sectionLayoutSignature: Int {
+        var value = 0
+        if !app.trending.isEmpty { value |= 1 << 0 }
+        if !app.continueWatching.isEmpty { value |= 1 << 1 }
+        if !app.todayAiring.isEmpty { value |= 1 << 2 }
+        if !app.seasonal.isEmpty { value |= 1 << 3 }
+        if !app.ranking.isEmpty { value |= 1 << 4 }
+        if !app.movies.isEmpty { value |= 1 << 5 }
+        if showsGuestCard { value |= 1 << 6 }
+        if showsSkeleton { value |= 1 << 7 }
+        if showsEmptyState { value |= 1 << 8 }
+        return value
+    }
+
     private var hasNoHomeContent: Bool {
         app.trending.isEmpty
             && app.seasonal.isEmpty
@@ -497,7 +536,6 @@ private struct HomeRefreshSection<Value: Encodable, Content: View>: View {
 
     private struct Update: Equatable {
         let revision: Data
-        let sourceVersion: Int
         let isInteracting: Bool
         let reduceMotion: Bool
     }
@@ -513,13 +551,13 @@ private struct HomeRefreshSection<Value: Encodable, Content: View>: View {
                         .accessibilityHidden(true)
                 }
             }
-            .task(id: Update(revision: revision, sourceVersion: sourceVersion, isInteracting: isInteracting, reduceMotion: reduceMotion)) {
-                // A newer update or a gesture can interrupt an in-flight fade.
+            .task(id: Update(revision: revision, isInteracting: isInteracting, reduceMotion: reduceMotion)) {
+                guard !isInteracting, displayedRevision != revision else { return }
+                // A newer update can interrupt an in-flight fade.
                 withTransaction(Transaction(animation: nil)) {
                     previous = nil
                     blend = 1
                 }
-                guard !isInteracting, displayedRevision != revision else { return }
                 await prepare(value)
                 guard !Task.isCancelled else { return }
                 if reduceMotion {
@@ -536,8 +574,8 @@ private struct HomeRefreshSection<Value: Encodable, Content: View>: View {
                 // Give the two layers a frame before starting their crossfade.
                 do { try await Task.sleep(for: .milliseconds(16)) }
                 catch { return }
-                withAnimation(.easeInOut(duration: 0.25)) { blend = 1 }
-                do { try await Task.sleep(for: .milliseconds(250)) }
+                withAnimation(.easeInOut(duration: 0.5)) { blend = 1 }
+                do { try await Task.sleep(for: .milliseconds(520)) }
                 catch { return }
                 previous = nil
             }
