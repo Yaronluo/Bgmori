@@ -214,15 +214,28 @@ extension APIClient {
             if slice.isEmpty || offset + ids.count >= total { break }
         }
         // Hydrate official IDs in their original order, including NSFW and public-tag metadata.
-        let subjects = try await withThrowingTaskGroup(of: (Int, Subject).self) { group in
+        // The website can still list entries that the API has since removed (merged or
+        // deleted games are common). One stale ID must not fail the whole page.
+        let subjects = try await withThrowingTaskGroup(of: (Int, Subject?).self) { group in
             for (index, id) in ids.enumerated() {
-                group.addTask { (index, try await self.subject(id)) }
+                group.addTask {
+                    do {
+                        return (index, try await self.subject(id))
+                    } catch APIError.notFound {
+                        return (index, nil)
+                    } catch APIError.forbidden {
+                        return (index, nil)
+                    }
+                }
             }
-            var rows: [(Int, Subject)] = []
+            var rows: [(Int, Subject?)] = []
             for try await row in group { rows.append(row) }
-            return rows.sorted { $0.0 < $1.0 }.map(\.1)
+            return rows.sorted { $0.0 < $1.0 }.compactMap(\.1)
         }
-        return Paged(data: subjects, total: total, limit: limit, offset: offset)
+        // Keep the cursor on source rows, not hydrated rows: stale and NSFW entries
+        // must not be fetched again on the next page.
+        return Paged(data: subjects, total: total, limit: limit, offset: offset,
+                     nextOffset: min(offset + ids.count, total))
     }
 
     func categoryFilters(type: SubjectType, force: Bool = false) async throws -> [CategoryFilterGroup] {

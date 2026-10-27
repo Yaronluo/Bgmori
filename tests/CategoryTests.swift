@@ -25,6 +25,12 @@ private final class TestServer: @unchecked Sendable {
             if request.url?.host == "bgm.tv", request.url?.query?.contains("page=") == true {
                 let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
                 let page = Int(items.first { $0.name == "page" }!.value!)!
+                if request.url?.path == "/book/browser" {
+                    let html = "<div id='browserTools'></div><ul id='browserItemList'>"
+                        + [901, 902].map { "<li id='item_\($0)'><a href='/subject/\($0)'>作品</a></li>" }.joined()
+                        + "</ul>"
+                    return StubResponse(data: Data(html.utf8), status: fail ? 503 : 200, delay: 0.01)
+                }
                 let ids = page == 1 ? Array(701...724) : [725, 726]
                 let html = "<div id='browserTools'></div><ul id='browserItemList'>"
                     + ids.map { "<li id='item_\($0)'><a href='/subject/\($0)'>作品</a></li>" }.joined()
@@ -45,7 +51,11 @@ private final class TestServer: @unchecked Sendable {
             }
             if request.httpMethod == "GET", request.url?.path.hasPrefix("/v0/subjects/") == true {
                 let id = Int(request.url!.lastPathComponent)!
-                let data = try! JSONSerialization.data(withJSONObject: ["id": id, "type": 2, "nsfw": id == 702,
+                if id == 902 {
+                    return StubResponse(data: Data("{}".utf8), status: 404, delay: 0.01)
+                }
+                let type = id == 901 ? 1 : 2
+                let data = try! JSONSerialization.data(withJSONObject: ["id": id, "type": type, "nsfw": id == 702,
                     "date": "2020-01-01", "meta_tags": ["TV", "科幻"]] as [String: Any])
                 return StubResponse(data: data, status: fail ? 503 : 200, delay: id == 701 ? 0.15 : 0.01)
             }
@@ -250,6 +260,10 @@ struct CategoryTests {
         let slice = try await api.categorySubjects(query: browserQuery, limit: 3, offset: 23)
         precondition(slice.data.map(\.id) == [724, 725, 726] && slice.total == 26)
         print("PASS: website order survives concurrent hydration, NSFW filtering, pagination and page boundaries")
+        let staleBrowserQuery = CategoryQuery(type: .book, sort: .title)
+        await store.load(staleBrowserQuery)
+        precondition(store.subjects.map(\.id) == [901] && store.errorText == nil && !store.hasMore)
+        print("PASS: a stale website ID is skipped instead of failing the whole category page")
         await cache.clear()
     }
 
@@ -265,6 +279,14 @@ struct CategoryTests {
             precondition(!page.data.isEmpty && page.data.allSatisfy { $0.type == type.rawValue && !$0.nsfw })
             print("PASS live \(type.title): \(page.data.map(\.displayTitle).joined(separator: ", "))")
         }
+        let gameTrends = try await api.categorySubjects(
+            query: CategoryQuery(type: .game, sort: .heat),
+            limit: 6,
+            force: true
+        )
+        precondition(!gameTrends.data.isEmpty && gameTrends.data.allSatisfy { $0.type == SubjectType.game.rawValue })
+        print("PASS live game trends: \(gameTrends.data.map(\.displayTitle).joined(separator: ", "))")
+
         let query = CategoryQuery(type: .anime, sort: .rank, year: 2011, tag: "科幻")
         let first = try await api.categorySubjects(query: query, limit: 3, force: true)
         let next = try await api.categorySubjects(query: query, limit: 3, offset: 3, force: true)
