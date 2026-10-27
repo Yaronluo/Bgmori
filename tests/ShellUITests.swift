@@ -39,6 +39,45 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testSilentHomeRefreshLightAndDark() {
+        for appearance in ["light", "dark"] {
+            // First obtain a real home snapshot, then exercise the cached launch.
+            let initial = launch("home", appearance: appearance)
+            XCTAssertTrue(initial.buttons["home-hot-dot-0"].waitForExistence(timeout: 60))
+            initial.terminate()
+
+            let app = launch("home", appearance: appearance)
+            let firstPage = app.buttons["home-hot-dot-0"]
+            XCTAssertTrue(firstPage.waitForExistence(timeout: 5), "Cached home must be available without waiting for the network")
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "正在显示缓存")).firstMatch.exists)
+            XCTAssertFalse(app.staticTexts["正在读取缓存…"].exists)
+            XCTAssertFalse(app.otherElements["startup-screen"].exists)
+
+            let secondPage = app.buttons["home-hot-dot-1"]
+            XCTAssertTrue(secondPage.exists)
+            #if os(macOS)
+            app.activate()
+            secondPage.click()
+            #else
+            XCTAssertEqual(app.tabBars.buttons.count, 5)
+            secondPage.tap()
+            #endif
+            let selected = NSPredicate(format: "selected == true")
+            expectation(for: selected, evaluatedWith: secondPage)
+            waitForExpectations(timeout: 3)
+            #if os(macOS)
+            firstPage.click()
+            #else
+            firstPage.tap()
+            #endif
+            expectation(for: selected, evaluatedWith: firstPage)
+            waitForExpectations(timeout: 3)
+            snapshot("silent-home-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testDirectLoginLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()

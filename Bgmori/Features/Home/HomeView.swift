@@ -4,6 +4,10 @@ struct HomeView: View {
     @Environment(AppModel.self) private var app
     @State private var hotSelection: Int?
     @State private var isVisible = false
+    @State private var scrollingSections: Set<String> = []
+    @State private var shelfPositions: [String: Int] = [:]
+
+    private var isInteracting: Bool { !scrollingSections.isEmpty }
 
     private var isHeroActive: Bool {
         #if os(macOS)
@@ -36,14 +40,17 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: sectionGap) {
                 VStack(alignment: .leading, spacing: 26) {
                     header
-                    if app.homeShowsCachedContent {
-                        Label(app.isLoadingHome ? "正在显示缓存，更新中…" : "正在显示缓存，下拉可重试更新", systemImage: "clock.arrow.circlepath")
-                            .font(.caption)
-                            .foregroundStyle(Color.bgmMuted)
-                            .padding(.horizontal, 20)
-                    }
                     if !app.trending.isEmpty {
-                        heroSection
+                        HomeRefreshSection(value: app.trending, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
+                            let selected = subjects.first { $0.id == hotSelection } ?? subjects.first
+                            #if os(macOS)
+                            await HomeImageWarmup.prepare(urls: [selected?.heroURL].compactMap { $0 }, maxPixel: 900)
+                            #else
+                            await HomeImageWarmup.prepare(urls: [selected?.heroURL].compactMap { $0 }, maxPixel: 1000)
+                            #endif
+                        }) { subjects, isPrevious in
+                            heroSection(subjects: subjects, isPrevious: isPrevious)
+                        }
                     }
                 }
 
@@ -52,19 +59,35 @@ struct HomeView: View {
                 }
 
                 if !app.todayAiring.isEmpty {
-                    todaySection
+                    HomeRefreshSection(value: app.todayAiring, sourceVersion: app.calendarContentVersion, isInteracting: isInteracting, prepare: { subjects in
+                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
+                    }) { subjects, isPrevious in
+                        todaySection(subjects: subjects, isPrevious: isPrevious)
+                    }
                 }
 
                 if !app.seasonal.isEmpty {
-                    seasonalSection
+                    HomeRefreshSection(value: app.seasonal, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
+                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
+                    }) { subjects, isPrevious in
+                        seasonalSection(subjects: subjects, isPrevious: isPrevious)
+                    }
                 }
 
                 if !app.ranking.isEmpty {
-                    rankingSection
+                    HomeRefreshSection(value: app.ranking, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
+                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
+                    }) { subjects, isPrevious in
+                        rankingSection(subjects: subjects, isPrevious: isPrevious)
+                    }
                 }
 
                 if !app.movies.isEmpty {
-                    moviesSection
+                    HomeRefreshSection(value: app.movies, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
+                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
+                    }) { subjects, isPrevious in
+                        moviesSection(subjects: subjects, isPrevious: isPrevious)
+                    }
                 }
 
                 if showsGuestCard {
@@ -83,10 +106,14 @@ struct HomeView: View {
         }
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
+        .onScrollPhaseChange { _, phase in setScrolling("page", phase: phase) }
         .refreshable { await app.refreshAll() }
         .bgmLargeNavigationTitle("发现")
         .onAppear { isVisible = true }
-        .onDisappear { isVisible = false }
+        .onDisappear {
+            isVisible = false
+            scrollingSections.removeAll()
+        }
         #if os(macOS)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -123,10 +150,18 @@ struct HomeView: View {
 
     // MARK: - Sections
 
-    private var heroSection: some View {
+    private func heroSection(subjects: [Subject], isPrevious: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "最近热播", subtitle: "近 90 天 · 人气动画")
-            DiscoverHero(subjects: app.trending, seasonLabel: app.seasonLabel, selection: $hotSelection, isActive: isHeroActive)
+            DiscoverHero(
+                subjects: subjects,
+                seasonLabel: app.seasonLabel,
+                selection: isPrevious ? .constant(hotSelection) : $hotSelection,
+                isActive: !isPrevious && isHeroActive,
+                onScrollPhaseChange: { phase in
+                    if !isPrevious { setScrolling("hero", phase: phase) }
+                }
+            )
         }
     }
 
@@ -140,7 +175,7 @@ struct HomeView: View {
                 app.openLibrary()
             }
 
-            shelf {
+            shelf(id: "continue") {
                 ForEach(app.continueWatching) { item in
                     NavigationLink(value: Route.subject(item.subjectId)) {
                         CoverCard(
@@ -158,18 +193,18 @@ struct HomeView: View {
         }
     }
 
-    private var todaySection: some View {
+    private func todaySection(subjects: [LegacySubject], isPrevious: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "今日放送",
-                subtitle: "\(app.todayAiring.count) 部作品今日更新",
+                subtitle: "\(subjects.count) 部作品今日更新",
                 actionTitle: "全部"
             ) {
                 app.router.openCalendar()
             }
 
-            shelf {
-                ForEach(Array(app.todayAiring.prefix(12))) { item in
+            shelf(id: "today", isPrevious: isPrevious) {
+                ForEach(Array(subjects.prefix(12))) { item in
                     NavigationLink(value: Route.subject(item.id)) {
                         AiringCard(
                             subject: item,
@@ -183,7 +218,7 @@ struct HomeView: View {
         }
     }
 
-    private var seasonalSection: some View {
+    private func seasonalSection(subjects: [Subject], isPrevious: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "本季新番",
@@ -193,8 +228,8 @@ struct HomeView: View {
                 app.openCategory(sort: .rank, tag: app.seasonTag)
             }
 
-            shelf {
-                ForEach(app.seasonal) { subject in
+            shelf(id: "seasonal", isPrevious: isPrevious) {
+                ForEach(subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
                         subjectPosterCard(subject, subtitle: seriesSubtitle(subject))
                     }
@@ -204,7 +239,7 @@ struct HomeView: View {
         }
     }
 
-    private var rankingSection: some View {
+    private func rankingSection(subjects: [Subject], isPrevious: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "口碑佳作",
@@ -214,8 +249,8 @@ struct HomeView: View {
                 app.openCategory(sort: .rank)
             }
 
-            shelf {
-                ForEach(Array(app.ranking.enumerated()), id: \.element.id) { index, subject in
+            shelf(id: "ranking", isPrevious: isPrevious) {
+                ForEach(Array(subjects.enumerated()), id: \.element.id) { index, subject in
                     NavigationLink(value: Route.subject(subject.id)) {
                         subjectPosterCard(subject, subtitle: seriesSubtitle(subject, usesYear: true), rank: index + 1)
                     }
@@ -225,7 +260,7 @@ struct HomeView: View {
         }
     }
 
-    private var moviesSection: some View {
+    private func moviesSection(subjects: [Subject], isPrevious: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "剧场版精选",
@@ -235,8 +270,8 @@ struct HomeView: View {
                 app.openCategory(sort: .collects, tag: "剧场版")
             }
 
-            shelf {
-                ForEach(app.movies) { subject in
+            shelf(id: "movies", isPrevious: isPrevious) {
+                ForEach(subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
                         subjectPosterCard(subject, subtitle: movieSubtitle(subject))
                     }
@@ -331,15 +366,28 @@ struct HomeView: View {
 
     // MARK: - Helpers
 
-    private func shelf<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func setScrolling(_ section: String, phase: ScrollPhase) {
+        if phase == .idle { scrollingSections.remove(section) }
+        else { scrollingSections.insert(section) }
+    }
+
+    private func shelf<Content: View>(id: String, isPrevious: Bool = false, @ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: 16) {
                 content()
             }
+            .scrollTargetLayout()
             .padding(.horizontal, 20)
             .padding(.vertical, 2)
         }
+        .scrollPosition(id: Binding<Int?>(
+            get: { shelfPositions[id] },
+            set: { if !isPrevious { shelfPositions[id] = $0 } }
+        ))
         .scrollIndicators(.hidden)
+        .onScrollPhaseChange { _, phase in
+            if !isPrevious { setScrolling(id, phase: phase) }
+        }
     }
 
     private func subjectPosterCard(_ subject: Subject, subtitle: String, rank: Int? = nil) -> some View {
@@ -409,6 +457,121 @@ struct HomeView: View {
     }
 
     private var showsGuestCard: Bool {
-        app.isGuest && app.hasLoadedHome && !app.isLoadingHome && !showsEmptyState
+        app.isGuest && app.hasLoadedHome && !showsEmptyState
+    }
+}
+
+/// Keep the live subtree (and its scroll position) while fading away an inert
+/// copy of the previous data. Refreshes wait until scrolling has settled.
+private struct HomeRefreshSection<Value: Encodable, Content: View>: View {
+    let value: Value
+    private let revision: Data
+    let sourceVersion: Int
+    let isInteracting: Bool
+    let prepare: @MainActor (Value) async -> Void
+    @ViewBuilder let content: (Value, Bool) -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var displayed: Value
+    @State private var displayedRevision: Data
+    @State private var previous: Value?
+    @State private var blend = 1.0
+
+    init(value: Value, sourceVersion: Int, isInteracting: Bool,
+         prepare: @escaping @MainActor (Value) async -> Void,
+         @ViewBuilder content: @escaping (Value, Bool) -> Content) {
+        self.value = value
+        self.sourceVersion = sourceVersion
+        // Subject/LegacySubject compare identity only. A sorted JSON revision
+        // also detects title, rating, image and other changes on the same IDs.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let revision = (try? encoder.encode(value)) ?? Data(UUID().uuidString.utf8)
+        self.revision = revision
+        _displayedRevision = State(initialValue: revision)
+        self.isInteracting = isInteracting
+        self.prepare = prepare
+        self.content = content
+        _displayed = State(initialValue: value)
+    }
+
+    private struct Update: Equatable {
+        let revision: Data
+        let sourceVersion: Int
+        let isInteracting: Bool
+        let reduceMotion: Bool
+    }
+
+    var body: some View {
+        content(displayed, false)
+            .opacity(blend)
+            .overlay(alignment: .topLeading) {
+                if let previous {
+                    content(previous, true)
+                        .opacity(1 - blend)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .task(id: Update(revision: revision, sourceVersion: sourceVersion, isInteracting: isInteracting, reduceMotion: reduceMotion)) {
+                // A newer update or a gesture can interrupt an in-flight fade.
+                withTransaction(Transaction(animation: nil)) {
+                    previous = nil
+                    blend = 1
+                }
+                guard !isInteracting, displayedRevision != revision else { return }
+                await prepare(value)
+                guard !Task.isCancelled else { return }
+                if reduceMotion {
+                    displayed = value
+                    displayedRevision = revision
+                    return
+                }
+                withTransaction(Transaction(animation: nil)) {
+                    previous = displayed
+                    displayed = value
+                    displayedRevision = revision
+                    blend = 0
+                }
+                // Give the two layers a frame before starting their crossfade.
+                do { try await Task.sleep(for: .milliseconds(16)) }
+                catch { return }
+                withAnimation(.easeInOut(duration: 0.25)) { blend = 1 }
+                do { try await Task.sleep(for: .milliseconds(250)) }
+                catch { return }
+                previous = nil
+            }
+    }
+}
+
+/// Image downloads may continue into the shared cache after the short readiness
+/// window, so a slow or missing cover never holds a content update indefinitely.
+@MainActor
+private final class HomeImageWarmup {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    static func prepare(urls: [URL], maxPixel: Int) async {
+        guard !urls.isEmpty, !Task.isCancelled else { return }
+        let readiness = HomeImageWarmup()
+        await withCheckedContinuation { continuation in
+            readiness.continuation = continuation
+            Task {
+                await withTaskGroup(of: Void.self) { group in
+                    for url in urls {
+                        group.addTask { _ = await ImageLoader.shared.image(for: url, maxPixel: maxPixel) }
+                    }
+                }
+                readiness.finish()
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(800))
+                readiness.finish()
+            }
+        }
+    }
+
+    private func finish() {
+        continuation?.resume()
+        continuation = nil
     }
 }

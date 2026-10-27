@@ -14,9 +14,11 @@ final class AppModel {
     let recentSubjects: RecentSubjectsStore
 
     var calendar: [CalendarDay] = []
+    private(set) var calendarContentVersion = 0
     var isLoadingCalendar = false
     var hasLoadedCalendar = false
     var calendarError: String?
+    private(set) var homeContentVersion = 0
     var ranking: [Subject] = []
     var seasonal: [Subject] = []
     var trending: [Subject] = []
@@ -30,7 +32,6 @@ final class AppModel {
     var hasFinishedStartup = false
     var startupMessage = "正在准备首页…"
     var startupError: String?
-    var homeShowsCachedContent = false
     var isCheckingConnections = false
     var connectionCheckSummary: String?
 
@@ -159,16 +160,13 @@ final class AppModel {
             calendar = page.calendar
             hasLoadedHome = true
             hasLoadedCalendar = true
-            homeShowsCachedContent = true
-            startupMessage = "正在读取缓存…"
-            // Cached content can open immediately; cover refresh continues below.
-            try? await minimumPresentation
+            // Cached content opens immediately; refresh stays in the background.
             guard !Task.isCancelled else { return }
             hasFinishedStartup = true
         }
 
-        async let calendarLoad: Void = loadCalendar(force: force || cached != nil)
-        async let homeLoad: Void = loadHome(force: force || cached != nil)
+        async let calendarLoad: Void = loadCalendar(force: force || cached != nil, silently: true)
+        async let homeLoad: Void = loadHome(force: force || cached != nil, silently: true)
         await homeLoad
         await calendarLoad
         try? await minimumPresentation
@@ -304,7 +302,7 @@ final class AppModel {
     }
     #endif
 
-    func loadCalendar(force: Bool = false) async {
+    func loadCalendar(force: Bool = false, silently: Bool = false) async {
         guard force || !didLoadCalendar else { return }
         guard !isLoadingCalendar else { return }
         didLoadCalendar = true
@@ -317,14 +315,15 @@ final class AppModel {
 
         do {
             calendar = try await api.calendar(force: force).sorted { $0.weekday.id < $1.weekday.id }
+            calendarContentVersion &+= 1
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? "放送表加载失败"
             calendarError = message
-            showToast(message, isError: true)
+            if !silently { showToast(message, isError: true) }
         }
     }
 
-    func loadHome(force: Bool = false) async {
+    func loadHome(force: Bool = false, silently: Bool = false) async {
         guard force || !didLoadHome else { return }
         guard !isLoadingHome else { return }
         isLoadingHome = true
@@ -416,14 +415,14 @@ final class AppModel {
         if !loadedRanking.isEmpty { ranking = loadedRanking }
         if !loadedSeasonal.isEmpty { seasonal = loadedSeasonal }
         if !loadedMovies.isEmpty { movies = loadedMovies }
+        // Observable collections of identity-equal DTOs otherwise suppress
+        // notifications when only titles, scores or covers have changed.
+        homeContentVersion &+= 1
 
-        if !loadedTrending.isEmpty || !loadedRanking.isEmpty || !loadedSeasonal.isEmpty || !loadedMovies.isEmpty {
-            homeShowsCachedContent = false
-        }
         if loadedTrending.isEmpty && loadedRanking.isEmpty && loadedSeasonal.isEmpty && loadedMovies.isEmpty {
             let message = "发现页加载失败，请检查网络后重试"
             homeError = message
-            showToast(message, isError: true)
+            if !silently { showToast(message, isError: true) }
         }
     }
 
@@ -445,7 +444,7 @@ final class AppModel {
         await loadCalendar(force: true)
         await loadHome(force: true)
         await updateDailyReminder()
-        showToast("已刷新")
+        if calendarError == nil && homeError == nil { showToast("已刷新") }
     }
 
     func signIn(email: String, password: String, captcha: String) async {

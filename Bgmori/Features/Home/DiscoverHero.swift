@@ -6,6 +6,7 @@ struct DiscoverHero: View {
     let seasonLabel: String
     @Binding var selection: Int?
     let isActive: Bool
+    var onScrollPhaseChange: (ScrollPhase) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -52,6 +53,7 @@ struct DiscoverHero: View {
             .scrollPosition(id: $visiblePage)
             .onScrollPhaseChange { _, phase in
                 scrollPhase = phase
+                onScrollPhaseChange(phase)
                 if phase == .idle { recenterIfNeeded() }
             }
             .padding(.horizontal, 20)
