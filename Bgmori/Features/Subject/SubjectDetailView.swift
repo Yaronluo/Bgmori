@@ -658,9 +658,9 @@ struct SubjectDetailView: View {
 
     private func infoRow(_ item: InfoboxItem) -> some View {
         let value = item.value.display.trimmed
-        let isLink = value.hasPrefix("http"), url = URL(string: value)
+        let linkedText = item.linkedText
         let isExpanded = expandedInfoKeys.contains(item.id)
-        let canExpand = !isLink && value.count > 60
+        let canExpand = value.count > 60
 
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(item.key)
@@ -674,24 +674,14 @@ struct SubjectDetailView: View {
                 .frame(width: infoKeyWidth, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 5) {
-                if isLink, let url {
-                    Link(destination: url) {
-                        Text(value)
-                            .font(.system(size: infoValueSize))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .foregroundStyle(Color.brandPink)
-                } else {
-                    Text(value)
-                        .font(.system(size: infoValueSize))
-                        .foregroundStyle(.primary.opacity(0.85))
-                        .lineSpacing(2)
-                        .lineLimit(isExpanded ? nil : 3)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-
+                Text(linkedText)
+                    .font(.system(size: infoValueSize))
+                    .foregroundStyle(.primary.opacity(0.85))
+                    .tint(Color.brandPink)
+                    .lineSpacing(2)
+                    .lineLimit(isExpanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
                 if canExpand {
                     Button(isExpanded ? "收起" : "展开") {
                         withAnimation(.snappy(duration: 0.2)) {

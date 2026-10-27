@@ -148,9 +148,11 @@ struct PersonDetailView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 74, alignment: .leading)
-                            Text(item.value.display)
+                            Text(item.linkedText)
                                 .font(.system(size: 12))
+                                .tint(Color.brandPink)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("infobox-value-\(item.key)")
                         }
                         .padding(.vertical, 7)
                         Divider()
