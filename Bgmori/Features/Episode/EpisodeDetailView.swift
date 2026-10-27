@@ -7,6 +7,8 @@ struct EpisodeDetailView: View {
     @State private var episode: Episode?
     @State private var subject: Subject?
     @State private var comments: [SocialComment] = []
+    @State private var commentsLoading = true
+    @State private var commentsError: String?
     @State private var isLoading = true
     @State private var errorText: String?
 
@@ -35,7 +37,16 @@ struct EpisodeDetailView: View {
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                             }
-                            if comments.isEmpty {
+                            if commentsLoading && comments.isEmpty {
+                                ProgressView("加载吐槽…")
+                            } else if let commentsError, comments.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(commentsError).foregroundStyle(.secondary)
+                                    Button("重试") { Task { await loadComments(force: true) } }
+                                    Link("在网页查看", destination: URL(string: "https://bgm.tv/ep/\(episodeID)")!)
+                                }
+                                .font(.system(size: 12))
+                            } else if comments.isEmpty {
                                 Text("暂无吐槽")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
@@ -69,6 +80,7 @@ struct EpisodeDetailView: View {
         #endif
         .bgmWebFallback(URL(string: "https://bgm.tv/ep/\(episodeID)")!)
         .task(id: episodeID) { await load() }
+        .task(id: episodeID) { await loadComments() }
     }
 
     private func header(_ episode: Episode) -> some View {
@@ -138,6 +150,18 @@ struct EpisodeDetailView: View {
         return (app.library.collection(for: subject.id)?.epStatus ?? 0) >= Int(episode.ep ?? 0)
     }
 
+    private func loadComments(force: Bool = false) async {
+        commentsLoading = true
+        commentsError = nil
+        defer { commentsLoading = false }
+        do {
+            comments = try await app.social.episodeComments(episodeID: episodeID, force: force)
+        } catch {
+            guard !Task.isCancelled else { return }
+            commentsError = error.localizedDescription
+        }
+    }
+
     private func load() async {
         isLoading = true
         errorText = nil
@@ -151,7 +175,6 @@ struct EpisodeDetailView: View {
                     await app.library.loadEpisodes(subjectID: subjectID)
                 }
             }
-            comments = (try? await app.social.episodeComments(episodeID: episodeID)) ?? []
         } catch {
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

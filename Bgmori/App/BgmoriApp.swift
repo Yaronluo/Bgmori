@@ -38,7 +38,9 @@ struct BgmoriApp: App {
 
     private var browserAction: OpenURLAction {
         OpenURLAction { url in
-            .systemAction(MirrorRouting.shared.preferredURL(for: url))
+            .systemAction(MirrorRouting.shared.canonicalURL(for: url).host == "bgm.tv"
+                          ? MirrorRouting.shared.canonicalURL(for: url)
+                          : MirrorRouting.shared.preferredURL(for: url))
         }
     }
 }

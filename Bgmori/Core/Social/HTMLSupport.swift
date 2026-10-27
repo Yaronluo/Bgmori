@@ -28,11 +28,31 @@ enum HTMLSupport {
         html.components(separatedBy: separator).dropFirst().map { String($0) }
     }
 
+    /// Keep opening tags so callers can read attributes regardless of their order.
+    static func blocks(_ html: String, matching pattern: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return [] }
+        let source = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: source.length))
+        return matches.enumerated().map { index, match in
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            return source.substring(with: NSRange(location: match.range.location, length: end - match.range.location))
+        }
+    }
+
+    static func elementContents(class className: String, in html: String) -> String? {
+        let name = NSRegularExpression.escapedPattern(for: className)
+        return elementContents(openingPattern: "<([a-z][a-z0-9]*)\\b[^>]*\\bclass=[\"'][^\"']*\\b" + name + "\\b[^\"']*[\"'][^>]*>", in: html)
+    }
+
     // Match the closing container by depth so nested quotes and spoilers retain their full text.
     static func elementContents(id: String, in html: String) -> String? {
         let escapedID = NSRegularExpression.escapedPattern(for: id)
         let pattern = "<([a-z][a-z0-9]*)\\b[^>]*\\bid=[\"']" + escapedID + "[\"'][^>]*>"
-        guard let opening = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        return elementContents(openingPattern: pattern, in: html)
+    }
+
+    private static func elementContents(openingPattern: String, in html: String) -> String? {
+        guard let opening = try? NSRegularExpression(pattern: openingPattern, options: .caseInsensitive) else { return nil }
         let source = html as NSString
         guard let match = opening.firstMatch(in: html, range: NSRange(location: 0, length: source.length)) else { return nil }
         let tag = source.substring(with: match.range(at: 1))

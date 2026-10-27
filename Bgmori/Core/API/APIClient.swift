@@ -183,17 +183,23 @@ actor APIClient {
 
     // MARK: - HTML
 
-    func rawHTML(_ url: URL, cacheKey: String, ttl: TimeInterval = 3600) async throws -> String {
+    func rawHTML(_ url: URL, cacheKey: String, ttl: TimeInterval = 3600,
+                 validate: (@Sendable (String) throws -> Void)? = nil) async throws -> String {
         if let data = await cache.read(cacheKey, maxAge: ttl),
            !MirrorRouting.isVerificationPage(data),
-           let html = String(data: data, encoding: .utf8) {
+           let html = String(data: data, encoding: .utf8),
+           (try? validate?(html)) != nil || validate == nil {
             return html
         }
 
         do {
             await prepareMirrors()
             var lastError: Error = APIError.network("页面加载失败")
-            for candidate in routing.candidates(for: url, forRequest: true) {
+            // Public HTML often works directly while mirrors require JavaScript challenges.
+            let official = routing.canonicalURL(for: url)
+            var seen: Set<URL> = []
+            let candidates = ([official] + routing.candidates(for: url, forRequest: true)).filter { seen.insert($0).inserted }
+            for candidate in candidates {
                 do {
                     try Task.checkCancellation()
                     await htmlLimiter.wait()
@@ -221,6 +227,7 @@ actor APIClient {
                     if html.contains("id=\"colunmNotice\""), html.contains("/img/bangumi/404.png") {
                         throw APIError.notFound
                     }
+                    try validate?(html)
                     await cache.write(cacheKey, data: data)
                     return html
                 } catch {
@@ -234,7 +241,8 @@ actor APIClient {
         } catch {
             if Self.isCancellation(error) { throw APIError.cancelled }
             if let data = await cache.readStale(cacheKey), !MirrorRouting.isVerificationPage(data),
-               let html = String(data: data, encoding: .utf8) {
+               let html = String(data: data, encoding: .utf8),
+               (try? validate?(html)) != nil || validate == nil {
                 return html
             }
             throw error

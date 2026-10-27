@@ -315,7 +315,9 @@ struct CategoryTests {
         excluded = query
         excluded.year = 2021
         precondition(!excluded.matches(subject))
-        for malformed in ["<html>challenge</html>", "<ul id='browserItemList'><li id='item_9'></li><li id='item_9'></li></ul>"] {
+        let empty = try CategoryBrowserPage.parse("<div id='browserTools'></div><ul id='browserItemList'><p>没有找到相关条目</p></ul>", page: 1)
+        precondition(empty.ids.isEmpty)
+        for malformed in ["<html>challenge</html>", "<div id='browserTools'></div><ul id='browserItemList'></ul>", "<ul id='browserItemList'><li id='item_9'></li><li id='item_9'></li></ul>"] {
             do {
                 _ = try CategoryBrowserPage.parse(malformed, page: 1)
                 preconditionFailure("Broken website pages must fail visibly")

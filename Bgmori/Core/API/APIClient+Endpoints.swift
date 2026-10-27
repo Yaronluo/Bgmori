@@ -202,7 +202,9 @@ extension APIClient {
             var components = URLComponents(url: query.browserURL, resolvingAgainstBaseURL: false)!
             components.queryItems = (components.queryItems ?? []) + [.init(name: "page", value: String(page))]
             let url = components.url!
-            let html = try await rawHTML(url, cacheKey: "category-browser-\(url.absoluteString)", ttl: force ? 0 : 1_800)
+            let html = try await rawHTML(url, cacheKey: "category-browser-\(url.absoluteString)", ttl: force ? 0 : 1_800) {
+                _ = try CategoryBrowserPage.parse($0, page: page)
+            }
             let parsed = try CategoryBrowserPage.parse(html, page: page)
             total = parsed.total
             let slice = parsed.ids.dropFirst(position % CategoryBrowserPage.size).prefix(limit - ids.count)

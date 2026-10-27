@@ -73,7 +73,7 @@ enum CategoryBrowserPage {
         let rows = HTMLSupport.all(#"<li\b[^>]*\bid=["']item_(\d+)["']"#, in: list)
         let ids = rows.compactMap(Int.init)
         guard ids.count == HTMLSupport.matches(#"<li\b"#, in: list).count, Set(ids).count == ids.count,
-              !ids.isEmpty || HTMLSupport.elementContents(id: "browserTools", in: html) != nil else {
+              !ids.isEmpty || ["没有找到", "暂无条目", "没有相关", "无结果"].contains(where: list.contains) else {
             throw APIError.decoding("官网排序解析失败，请重试或在浏览器中查看。")
         }
         let links = HTMLSupport.all(#"href=["'][^"']*[?&](?:amp;)?page=(\d+)[^"']*["']"#, in: html).compactMap(Int.init)

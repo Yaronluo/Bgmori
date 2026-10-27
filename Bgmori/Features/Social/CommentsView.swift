@@ -19,8 +19,8 @@ struct CommentsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                 } else if comments.isEmpty {
-                    EmptyStateView(icon: "text.bubble", title: "还没有吐槽", message: errorText ?? "", actionTitle: "重试") {
-                        Task { await load(page: 1) }
+                    EmptyStateView(icon: "text.bubble", title: errorText == nil ? "还没有吐槽" : "吐槽加载失败", message: errorText ?? "", actionTitle: "重试") {
+                        Task { await load(page: 1, force: true) }
                     }
                 } else {
                     ForEach(visibleComments) { comment in
@@ -48,6 +48,7 @@ struct CommentsView: View {
             }
             .padding(.bottom, 24)
         }
+        .refreshable { await load(page: 1, force: true) }
         .scrollIndicators(.hidden)
         .navigationTitle("吐槽")
         #if os(iOS)
@@ -63,7 +64,7 @@ struct CommentsView: View {
         comments.filter { !blocked.contains($0.username) }
     }
 
-    private func load(page: Int) async {
+    private func load(page: Int, force: Bool = false) async {
         guard !isLoading else { return }
         isLoading = true
         errorText = nil
@@ -71,9 +72,9 @@ struct CommentsView: View {
         do {
             let fetched: [SocialComment]
             if let episodeID {
-                fetched = try await app.social.episodeComments(episodeID: episodeID)
+                fetched = try await app.social.episodeComments(episodeID: episodeID, force: force)
             } else {
-                fetched = try await app.social.subjectComments(subjectID: subjectID, page: page)
+                fetched = try await app.social.subjectComments(subjectID: subjectID, page: page, force: force)
             }
             if page == 1 {
                 comments = fetched

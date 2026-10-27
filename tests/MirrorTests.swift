@@ -145,6 +145,7 @@ struct MirrorTests {
         ])
         let html = try await api.rawHTML(URL(string: "https://bgm.tv/blog")!, cacheKey: "blog")
         precondition(html.contains("real blog content"))
+        precondition(MirrorRequests.shared.requests.map { $0.url!.host! } == ["bgm.tv"], "Public HTML must try the working official site before challenged mirrors")
         let saved = await cache.readStale("blog")
         precondition(saved.map { !MirrorRouting.isVerificationPage($0) } == true)
         isolated.update(first, etag: "v1")
@@ -158,8 +159,30 @@ struct MirrorTests {
         } catch APIError.network { }
         let badCache = await cache.readStale("group")
         precondition(badCache == nil)
+        isolated.update(first, etag: "v1")
+        let poisoned = Data("<html>login wall</html>".utf8)
+        let valid = Data("<div id='content'>正文</div>".utf8)
+        await cache.write("validated", data: poisoned)
+        MirrorRequests.shared.reset([
+            "https://bgm.tv/validated": .init(status: 200, data: poisoned),
+            "https://first.test/validated": .init(status: 200, data: valid)
+        ])
+        let recovered = try await api.rawHTML(URL(string: "https://bgm.tv/validated")!, cacheKey: "validated") {
+            guard $0.contains("id='content'") else { throw APIError.message("Unreadable content") }
+        }
+        precondition(recovered.contains("正文") && MirrorRequests.shared.requests.count == 2)
+        let cachedValid = await cache.readStale("validated")
+        precondition(cachedValid == valid, "Only validated content can replace the poisoned cache")
+        await cache.write("invalid-stale", data: poisoned)
+        MirrorRequests.shared.reset([:])
+        do {
+            _ = try await api.rawHTML(URL(string: "https://bgm.tv/unavailable")!, cacheKey: "invalid-stale", ttl: 0) {
+                guard $0.contains("id='content'") else { throw APIError.message("Unreadable content") }
+            }
+            preconditionFailure("Invalid stale HTML must not masquerade as an empty page")
+        } catch { }
         await cache.clear()
-        print("PASS: 401 stays explicit; HTML verification falls back and is never cached as content")
+        print("PASS: official HTML first, verified mirror fallback, poisoned-cache recovery and invalid stale rejection")
 
         if CommandLine.arguments.contains("--live") {
             let liveRouting = MirrorRouting()

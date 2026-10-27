@@ -7,16 +7,20 @@ actor SocialService {
         self.api = api
     }
 
-    func subjectComments(subjectID: Int, page: Int = 1) async throws -> [SocialComment] {
+    func subjectComments(subjectID: Int, page: Int = 1, force: Bool = false) async throws -> [SocialComment] {
         let url = URL(string: "https://bgm.tv/subject/\(subjectID)/comments?page=\(page)")!
-        let html = try await api.rawHTML(url, cacheKey: "social-comments-\(subjectID)-\(page)", ttl: 3_600)
-        return parseSubjectComments(html, subjectID: subjectID, page: page)
+        let html = try await api.rawHTML(url, cacheKey: "social-comments-\(subjectID)-\(page)", ttl: force ? 0 : 3_600) {
+            _ = try Self.parseSubjectComments($0, subjectID: subjectID, page: page)
+        }
+        return try Self.parseSubjectComments(html, subjectID: subjectID, page: page)
     }
 
-    func episodeComments(episodeID: Int) async throws -> [SocialComment] {
+    func episodeComments(episodeID: Int, force: Bool = false) async throws -> [SocialComment] {
         let url = URL(string: "https://bgm.tv/ep/\(episodeID)")!
-        let html = try await api.rawHTML(url, cacheKey: "social-episode-\(episodeID)", ttl: 3_600)
-        return parseEpisodeComments(html, episodeID: episodeID)
+        let html = try await api.rawHTML(url, cacheKey: "social-episode-\(episodeID)", ttl: force ? 0 : 3_600) {
+            _ = try Self.parseEpisodeComments($0, episodeID: episodeID)
+        }
+        return try Self.parseEpisodeComments(html, episodeID: episodeID)
     }
 
     func friends(username: String, force: Bool = false) async throws -> [FriendSummary] {
@@ -63,16 +67,19 @@ actor SocialService {
 
     // MARK: - Subject comments
 
-    private func parseSubjectComments(_ html: String, subjectID: Int, page: Int) -> [SocialComment] {
-        let blocks = HTMLSupport.blocks(html, separator: #"<div class="item clearit""#)
-        return blocks.enumerated().compactMap { index, block in
+    static func parseSubjectComments(_ html: String, subjectID: Int, page: Int) throws -> [SocialComment] {
+        guard let list = HTMLSupport.elementContents(id: "comment_box", in: html) else {
+            throw APIError.message("无法读取吐槽，请重试或在网页查看。")
+        }
+        let blocks = HTMLSupport.blocks(list, matching: #"<div\b[^>]*\bclass=["'][^"']*\bitem\b[^"']*["'][^>]*>"#)
+        let comments: [SocialComment] = blocks.enumerated().compactMap { index, block in
             let username = HTMLSupport.first(#"href="/user/([^"]+)" class="l""#, in: block) ?? "unknown"
             let name = HTMLSupport.first(#"class="l">([^<]+)</a>"#, in: block) ?? username
             let avatar = HTMLSupport.first(#"background-image:url\('([^']+)'\)"#, in: block)
             let rating = HTMLSupport.first(#"starlight stars(\d+)"#, in: block).flatMap(Int.init)
             let state = HTMLSupport.first(#"<small class="grey">\s*([^<@]+?)\s*</small>"#, in: block)?.trimmed
             let time = HTMLSupport.first(#"<small class="grey">\s*@\s*([^<]+)</small>"#, in: block)?.trimmed ?? ""
-            let text = HTMLSupport.first(#"<p class="comment">(.*?)</p>"#, in: block).map(HTMLSupport.text) ?? ""
+            let text = HTMLSupport.elementContents(class: "comment", in: block).map(HTMLSupport.text) ?? ""
             guard !text.isEmpty else { return nil }
             return SocialComment(
                 id: "\(subjectID)-\(page)-\(index)-\(username)",
@@ -85,34 +92,39 @@ actor SocialService {
                 text: text
             )
         }
+        guard blocks.isEmpty || !comments.isEmpty else {
+            throw APIError.message("吐槽格式发生变化，请重试或在网页查看。")
+        }
+        return comments
     }
 
-    private func parseEpisodeComments(_ html: String, episodeID: Int) -> [SocialComment] {
-        let blocks = HTMLSupport.blocks(html, separator: #"<div id="post_"#)
-        return blocks.enumerated().compactMap { index, block in
-            let postID = HTMLSupport.first(#"^(\d+)"#, in: block) ?? "\(index)"
+    static func parseEpisodeComments(_ html: String, episodeID: Int) throws -> [SocialComment] {
+        guard let list = HTMLSupport.elementContents(id: "comment_list", in: html) else {
+            throw APIError.message("无法读取章节吐槽，请重试或在网页查看。")
+        }
+        let blocks = HTMLSupport.blocks(list, matching: #"<div\b[^>]*\bid=["']post_\d+["'][^>]*>"#)
+        let comments = blocks.compactMap { block -> SocialComment? in
+            guard let postID = HTMLSupport.first(#"\bid=["']post_(\d+)["']"#, in: block) else { return nil }
             let username = HTMLSupport.first(#"data-item-user="([^"]*)""#, in: block) ?? "unknown"
             let name = HTMLSupport.first(#"class="l post_author[^"]*">([^<]+)</a>"#, in: block)
                 ?? HTMLSupport.first(#"class="l">([^<]+)</a>"#, in: block)
                 ?? username
             let avatar = HTMLSupport.first(#"background-image:url\('([^']+)'\)"#, in: block)
             let time = HTMLSupport.first(#"</a>\s*-\s*([^<]+)</small>"#, in: block)?.trimmed ?? ""
-            let content = HTMLSupport.first(#"class="reply_content">(.*?)<div class="likes_grid"#, in: block)
-                ?? HTMLSupport.first(#"class="reply_content">(.*?)</div>\s*</div>"#, in: block)
-                ?? ""
-            let text = HTMLSupport.text(content)
+            // Read only the message: nested replies and reaction grids are separate content.
+            let content = HTMLSupport.elementContents(class: "message", in: block)
+                ?? HTMLSupport.elementContents(class: "cmt_sub_content", in: block)
+                ?? HTMLSupport.elementContents(class: "reply_content", in: block)
+            let text = content.map(HTMLSupport.text) ?? ""
             guard !text.isEmpty else { return nil }
-            return SocialComment(
-                id: "ep\(episodeID)-\(postID)",
-                username: username,
-                name: name,
-                avatarURL: Images.normalized(avatar),
-                rating: nil,
-                state: nil,
-                time: time,
-                text: text
-            )
+            return SocialComment(id: "ep\(episodeID)-\(postID)", username: username,
+                                 name: HTMLSupport.decodeEntities(name), avatarURL: Images.normalized(avatar),
+                                 rating: nil, state: nil, time: time, text: text)
         }
+        guard blocks.isEmpty || !comments.isEmpty else {
+            throw APIError.message("章节吐槽格式发生变化，请重试或在网页查看。")
+        }
+        return comments
     }
 
     // MARK: - Friends

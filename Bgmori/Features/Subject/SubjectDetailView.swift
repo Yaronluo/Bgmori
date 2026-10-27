@@ -22,7 +22,8 @@ struct SubjectDetailView: View {
     @State private var showCollectionEditor = false
     @State private var synopsisExpanded = false
     @State private var expandedInfoKeys: Set<String> = []
-    @State private var commentsFailed = false
+    @State private var commentsLoading = true
+    @State private var commentsError: String?
     @State private var contentWidth: CGFloat = 0
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -118,6 +119,7 @@ struct SubjectDetailView: View {
         .task(id: subjectID) {
             await load()
         }
+        .task(id: subjectID) { await loadComments() }
         .sheet(isPresented: $showCollectionEditor) {
             if let subject {
                 CollectionEditorView(
@@ -1084,8 +1086,17 @@ struct SubjectDetailView: View {
     @ViewBuilder
     private var commentCard: some View {
         SectionCard("吐槽", accessory: AnyView(commentAccessory)) {
-            if comments.isEmpty {
-                Text(commentsFailed ? "吐槽加载失败，可点上方在网页查看。" : "还没有吐槽，或正在加载。")
+            if commentsLoading && comments.isEmpty {
+                ProgressView("加载吐槽…")
+                    .font(.system(size: 12))
+            } else if let commentsError, comments.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(commentsError).foregroundStyle(.secondary)
+                    Button("重试") { Task { await loadComments(force: true) } }
+                }
+                .font(.system(size: 12))
+            } else if comments.isEmpty {
+                Text("暂无吐槽")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             } else {
@@ -1223,10 +1234,21 @@ struct SubjectDetailView: View {
 
     // MARK: - Load
 
+    private func loadComments(force: Bool = false) async {
+        commentsLoading = true
+        commentsError = nil
+        defer { commentsLoading = false }
+        do {
+            comments = try await app.social.subjectComments(subjectID: subjectID, force: force)
+        } catch {
+            guard !Task.isCancelled else { return }
+            commentsError = error.localizedDescription
+        }
+    }
+
     private func load() async {
         isLoading = true
         errorText = nil
-        commentsFailed = false
         defer { isLoading = false }
 
         do {
@@ -1253,12 +1275,7 @@ struct SubjectDetailView: View {
             if app.auth.isLoggedIn {
                 await app.library.loadEpisodes(subjectID: subjectID)
             }
-            do {
-                comments = try await app.social.subjectComments(subjectID: subjectID)
-            } catch {
-                comments = []
-                commentsFailed = true
-            }
+
         } catch {
             errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -1332,6 +1349,7 @@ struct SocialCommentRow: View {
                         .foregroundStyle(.tertiary)
                 }
                 Text(comment.text)
+                    .accessibilityIdentifier("comment-text-\(comment.id)")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(compact ? 4 : nil)

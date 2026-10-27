@@ -148,6 +148,13 @@ struct CategoryView: View {
             EmptyStateView(icon: "wifi.exclamationmark", title: "暂时无法加载", message: error, actionTitle: "重试") {
                 Task { await store.load(query, force: true) }
             }
+            if store.sort == .heat {
+                Button("改看收藏热度") {
+                    store.sort = .collects
+                }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+            }
             Link("在浏览器中查看", destination: query.browserURL)
                 .frame(maxWidth: .infinity)
         } else if store.subjects.isEmpty {
