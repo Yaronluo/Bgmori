@@ -42,6 +42,10 @@ final class AuthManager {
     init(api: APIClient, settings: AppSettings) {
         self.api = api
         self.settings = settings
+        #if DEBUG
+        // UI verification can browse public pages without accessing the user's keychain.
+        if ProcessInfo.processInfo.environment["BGMORI_GUEST_MODE"] == "1" { return }
+        #endif
         token = Keychain.read("accessToken")
         refreshToken = Keychain.read("refreshToken")
         if let interval = UserDefaults.standard.object(forKey: "tokenExpiresAt") as? Double {
