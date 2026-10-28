@@ -42,15 +42,8 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     header
                     if !app.trending.isEmpty {
-                        HomeRefreshSection(value: app.trending, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
-                            let selected = subjects.first { $0.id == hotSelection } ?? subjects.first
-                            #if os(macOS)
-                            await HomeImageWarmup.prepare(urls: [selected?.heroURL].compactMap { $0 }, maxPixel: 900)
-                            #else
-                            await HomeImageWarmup.prepare(urls: [selected?.heroURL].compactMap { $0 }, maxPixel: 1000)
-                            #endif
-                        }) { subjects, isPrevious in
-                            heroSection(subjects: subjects, isPrevious: isPrevious)
+                        HomeRefreshSection(value: app.trending, isInteracting: isInteracting) { subjects in
+                            heroSection(subjects: subjects)
                         }
                         .transition(sectionTransition)
                     }
@@ -62,37 +55,29 @@ struct HomeView: View {
                 }
 
                 if !app.todayAiring.isEmpty {
-                    HomeRefreshSection(value: app.todayAiring, sourceVersion: app.calendarContentVersion, isInteracting: isInteracting, prepare: { subjects in
-                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
-                    }) { subjects, isPrevious in
-                        todaySection(subjects: subjects, isPrevious: isPrevious)
+                    HomeRefreshSection(value: app.todayAiring, isInteracting: isInteracting) { subjects in
+                        todaySection(subjects: subjects)
                     }
                     .transition(sectionTransition)
                 }
 
                 if !app.seasonal.isEmpty {
-                    HomeRefreshSection(value: app.seasonal, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
-                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
-                    }) { subjects, isPrevious in
-                        seasonalSection(subjects: subjects, isPrevious: isPrevious)
+                    HomeRefreshSection(value: app.seasonal, isInteracting: isInteracting) { subjects in
+                        seasonalSection(subjects: subjects)
                     }
                     .transition(sectionTransition)
                 }
 
                 if !app.ranking.isEmpty {
-                    HomeRefreshSection(value: app.ranking, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
-                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
-                    }) { subjects, isPrevious in
-                        rankingSection(subjects: subjects, isPrevious: isPrevious)
+                    HomeRefreshSection(value: app.ranking, isInteracting: isInteracting) { subjects in
+                        rankingSection(subjects: subjects)
                     }
                     .transition(sectionTransition)
                 }
 
                 if !app.movies.isEmpty {
-                    HomeRefreshSection(value: app.movies, sourceVersion: app.homeContentVersion, isInteracting: isInteracting, prepare: { subjects in
-                        await HomeImageWarmup.prepare(urls: subjects.prefix(2).compactMap(\.coverURL), maxPixel: 400)
-                    }) { subjects, isPrevious in
-                        moviesSection(subjects: subjects, isPrevious: isPrevious)
+                    HomeRefreshSection(value: app.movies, isInteracting: isInteracting) { subjects in
+                        moviesSection(subjects: subjects)
                     }
                     .transition(sectionTransition)
                 }
@@ -161,16 +146,16 @@ struct HomeView: View {
 
     // MARK: - Sections
 
-    private func heroSection(subjects: [Subject], isPrevious: Bool) -> some View {
+    private func heroSection(subjects: [HomeRefreshItem<Subject>]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "最近热播", subtitle: "近 90 天 · 人气动画")
             DiscoverHero(
                 subjects: subjects,
                 seasonLabel: app.seasonLabel,
-                selection: isPrevious ? .constant(hotSelection) : $hotSelection,
-                isActive: !isPrevious && isHeroActive,
+                selection: $hotSelection,
+                isActive: isHeroActive,
                 onScrollPhaseChange: { phase in
-                    if !isPrevious { setScrolling("hero", phase: phase) }
+                    setScrolling("hero", phase: phase)
                 }
             )
         }
@@ -186,14 +171,10 @@ struct HomeView: View {
                 app.openLibrary()
             }
 
-            HomeRefreshSection(value: app.continueWatching,
-                               sourceVersion: app.homeContentVersion,
-                               isInteracting: isInteracting,
-                               prepare: { items in
-                await HomeImageWarmup.prepare(urls: items.prefix(2).compactMap(\.coverURL), maxPixel: 400)
-            }) { items, isPrevious in
-                shelf(id: "continue", isPrevious: isPrevious) {
-                    ForEach(items) { item in
+            HomeRefreshSection(value: app.continueWatching, isInteracting: isInteracting) { items in
+                shelf(id: "continue") {
+                    ForEach(items) { entry in
+                        let item = entry.value
                         NavigationLink(value: Route.subject(item.subjectId)) {
                             CoverCard(
                                 title: item.title,
@@ -201,7 +182,8 @@ struct HomeView: View {
                                 coverURL: item.coverURL,
                                 progress: item.progressFraction,
                                 tint: .subjectTint(item.subjectType),
-                                width: cardWidth
+                                width: cardWidth,
+                                imageIdentity: "subject-\(item.subjectId)"
                             )
                         }
                         .buttonStyle(.plain)
@@ -211,7 +193,7 @@ struct HomeView: View {
         }
     }
 
-    private func todaySection(subjects: [LegacySubject], isPrevious: Bool) -> some View {
+    private func todaySection(subjects: [HomeRefreshItem<LegacySubject>]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "今日放送",
@@ -221,13 +203,14 @@ struct HomeView: View {
                 app.router.openCalendar()
             }
 
-            shelf(id: "today", isPrevious: isPrevious) {
+            shelf(id: "today") {
                 ForEach(Array(subjects.prefix(12))) { item in
                     NavigationLink(value: Route.subject(item.id)) {
                         AiringCard(
-                            subject: item,
+                            subject: item.value,
                             isWatching: app.library.isWatching(item.id),
-                            width: cardWidth
+                            width: cardWidth,
+                            contentRevision: item.revision
                         )
                     }
                     .buttonStyle(.plain)
@@ -236,7 +219,7 @@ struct HomeView: View {
         }
     }
 
-    private func seasonalSection(subjects: [Subject], isPrevious: Bool) -> some View {
+    private func seasonalSection(subjects: [HomeRefreshItem<Subject>]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "本季新番",
@@ -246,10 +229,10 @@ struct HomeView: View {
                 app.openCategory(sort: .rank, tag: app.seasonTag)
             }
 
-            shelf(id: "seasonal", isPrevious: isPrevious) {
+            shelf(id: "seasonal") {
                 ForEach(subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
-                        subjectPosterCard(subject, subtitle: seriesSubtitle(subject))
+                        subjectPosterCard(subject.value, subtitle: seriesSubtitle(subject.value))
                     }
                     .buttonStyle(.plain)
                 }
@@ -257,7 +240,7 @@ struct HomeView: View {
         }
     }
 
-    private func rankingSection(subjects: [Subject], isPrevious: Bool) -> some View {
+    private func rankingSection(subjects: [HomeRefreshItem<Subject>]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "口碑佳作",
@@ -267,10 +250,10 @@ struct HomeView: View {
                 app.openCategory(sort: .rank)
             }
 
-            shelf(id: "ranking", isPrevious: isPrevious) {
+            shelf(id: "ranking") {
                 ForEach(Array(subjects.enumerated()), id: \.element.id) { index, subject in
                     NavigationLink(value: Route.subject(subject.id)) {
-                        subjectPosterCard(subject, subtitle: seriesSubtitle(subject, usesYear: true), rank: index + 1)
+                        subjectPosterCard(subject.value, subtitle: seriesSubtitle(subject.value, usesYear: true), rank: index + 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -278,7 +261,7 @@ struct HomeView: View {
         }
     }
 
-    private func moviesSection(subjects: [Subject], isPrevious: Bool) -> some View {
+    private func moviesSection(subjects: [HomeRefreshItem<Subject>]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "剧场版精选",
@@ -288,10 +271,10 @@ struct HomeView: View {
                 app.openCategory(sort: .collects, tag: "剧场版")
             }
 
-            shelf(id: "movies", isPrevious: isPrevious) {
+            shelf(id: "movies") {
                 ForEach(subjects) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
-                        subjectPosterCard(subject, subtitle: movieSubtitle(subject))
+                        subjectPosterCard(subject.value, subtitle: movieSubtitle(subject.value))
                     }
                     .buttonStyle(.plain)
                 }
@@ -389,7 +372,7 @@ struct HomeView: View {
         else { scrollingSections.insert(section) }
     }
 
-    private func shelf<Content: View>(id: String, isPrevious: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+    private func shelf<Content: View>(id: String, @ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: 16) {
                 content()
@@ -400,11 +383,11 @@ struct HomeView: View {
         }
         .scrollPosition(id: Binding<Int?>(
             get: { shelfPositions[id] },
-            set: { if !isPrevious { shelfPositions[id] = $0 } }
+            set: { shelfPositions[id] = $0 }
         ))
         .scrollIndicators(.hidden)
         .onScrollPhaseChange { _, phase in
-            if !isPrevious { setScrolling(id, phase: phase) }
+            setScrolling(id, phase: phase)
         }
     }
 
@@ -416,7 +399,8 @@ struct HomeView: View {
             badge: subject.rating.map { String(format: "%.1f", $0.score) },
             tint: .subjectTint(subject.type),
             width: cardWidth,
-            rank: rank
+            rank: rank,
+            imageIdentity: "subject-\(subject.id)"
         )
     }
 
@@ -500,116 +484,36 @@ struct HomeView: View {
     }
 }
 
-/// Keep the live subtree (and its scroll position) while fading away an inert
-/// copy of the previous data. Refreshes wait until scrolling has settled.
-private struct HomeRefreshSection<Value: Encodable, Content: View>: View {
-    let value: Value
-    private let revision: Data
-    let sourceVersion: Int
+/// Keep one stable subtree so unchanged cards retain decoded images and scroll
+/// positions. Publish new data only after the user's scrolling has settled.
+private struct HomeRefreshSection<Value: Encodable & Identifiable, Content: View>: View {
+    let incoming: [HomeRefreshItem<Value>]
     let isInteracting: Bool
-    let prepare: @MainActor (Value) async -> Void
-    @ViewBuilder let content: (Value, Bool) -> Content
+    @ViewBuilder let content: ([HomeRefreshItem<Value>]) -> Content
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var displayed: Value
-    @State private var displayedRevision: Data
-    @State private var previous: Value?
-    @State private var blend = 1.0
+    @State private var displayed: [HomeRefreshItem<Value>]
 
-    init(value: Value, sourceVersion: Int, isInteracting: Bool,
-         prepare: @escaping @MainActor (Value) async -> Void,
-         @ViewBuilder content: @escaping (Value, Bool) -> Content) {
-        self.value = value
-        self.sourceVersion = sourceVersion
-        // Subject/LegacySubject compare identity only. A sorted JSON revision
-        // also detects title, rating, image and other changes on the same IDs.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        let revision = (try? encoder.encode(value)) ?? Data(UUID().uuidString.utf8)
-        self.revision = revision
-        _displayedRevision = State(initialValue: revision)
+    init(value: [Value], isInteracting: Bool,
+         @ViewBuilder content: @escaping ([HomeRefreshItem<Value>]) -> Content) {
+        let incoming = value.map(HomeRefreshItem.init)
+        self.incoming = incoming
         self.isInteracting = isInteracting
-        self.prepare = prepare
         self.content = content
-        _displayed = State(initialValue: value)
+        _displayed = State(initialValue: incoming)
     }
 
     private struct Update: Equatable {
-        let revision: Data
+        let revisions: [Data]
         let isInteracting: Bool
-        let reduceMotion: Bool
     }
 
     var body: some View {
-        content(displayed, false)
-            .opacity(blend)
-            .overlay(alignment: .topLeading) {
-                if let previous {
-                    content(previous, true)
-                        .opacity(1 - blend)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+        content(displayed)
+            .task(id: Update(revisions: incoming.map(\.revision), isInteracting: isInteracting)) {
+                guard !isInteracting, displayed != incoming else { return }
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { displayed = incoming }
             }
-            .task(id: Update(revision: revision, isInteracting: isInteracting, reduceMotion: reduceMotion)) {
-                guard !isInteracting, displayedRevision != revision else { return }
-                // A newer update can interrupt an in-flight fade.
-                withTransaction(Transaction(animation: nil)) {
-                    previous = nil
-                    blend = 1
-                }
-                await prepare(value)
-                guard !Task.isCancelled else { return }
-                if reduceMotion {
-                    displayed = value
-                    displayedRevision = revision
-                    return
-                }
-                withTransaction(Transaction(animation: nil)) {
-                    previous = displayed
-                    displayed = value
-                    displayedRevision = revision
-                    blend = 0
-                }
-                // Give the two layers a frame before starting their crossfade.
-                do { try await Task.sleep(for: .milliseconds(16)) }
-                catch { return }
-                withAnimation(.easeInOut(duration: 0.5)) { blend = 1 }
-                do { try await Task.sleep(for: .milliseconds(520)) }
-                catch { return }
-                previous = nil
-            }
-    }
-}
-
-/// Image downloads may continue into the shared cache after the short readiness
-/// window, so a slow or missing cover never holds a content update indefinitely.
-@MainActor
-private final class HomeImageWarmup {
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    static func prepare(urls: [URL], maxPixel: Int) async {
-        guard !urls.isEmpty, !Task.isCancelled else { return }
-        let readiness = HomeImageWarmup()
-        await withCheckedContinuation { continuation in
-            readiness.continuation = continuation
-            Task {
-                await withTaskGroup(of: Void.self) { group in
-                    for url in urls {
-                        group.addTask { _ = await ImageLoader.shared.image(for: url, maxPixel: maxPixel) }
-                    }
-                }
-                readiness.finish()
-            }
-            Task {
-                try? await Task.sleep(for: .milliseconds(800))
-                readiness.finish()
-            }
-        }
-    }
-
-    private func finish() {
-        continuation?.resume()
-        continuation = nil
     }
 }

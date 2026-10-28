@@ -5,7 +5,8 @@ test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-images.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 sources=(Bgmori/Core/Models/Models.swift Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/APIClient.swift
   Bgmori/Core/API/APIError.swift Bgmori/Core/API/RateLimiter.swift
-  Bgmori/Core/Storage/DiskCache.swift Bgmori/Core/Storage/ImageLoader.swift tests/ImageLoaderTests.swift)
+  Bgmori/Core/Storage/DiskCache.swift Bgmori/Core/Storage/ImageLoader.swift
+  Bgmori/Core/Storage/ImagePresentation.swift Bgmori/Features/Home/HomeRefreshItem.swift tests/ImageLoaderTests.swift)
 xcrun swiftc -swift-version 6 -parse-as-library "${sources[@]}" -o "$test_dir/images-mac"
 "$test_dir/images-mac" "$@"
 xcrun swiftc -swift-version 6 -parse-as-library \

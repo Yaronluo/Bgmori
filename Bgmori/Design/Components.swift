@@ -6,15 +6,23 @@ struct CachedAsyncImage: View {
     var contentMode: ContentMode = .fill
     var placeholderTint: Color = .bgmSecondary
     var showsPlaceholderIcon = true
+    var imageIdentity: String? = nil
 
-    @State private var image: SendableImage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var presentation = ImagePresentation()
+
+    private var request: ImagePresentation.Request {
+        .init(url: url, maxPixel: maxPixel, identity: imageIdentity)
+    }
 
     var body: some View {
         ZStack {
-            if let image {
+            if let image = presentation.image(for: request) {
                 Image(decorative: image.cgImage, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+                    .contentTransition(.opacity)
+                    .transition(.opacity)
             } else {
                 LinearGradient(
                     colors: [placeholderTint.opacity(0.55), placeholderTint.opacity(0.22)],
@@ -31,12 +39,9 @@ struct CachedAsyncImage: View {
             }
         }
         .clipped()
-        .task(id: "\(url?.absoluteString ?? "")-\(Int(maxPixel))") {
-            image = nil
-            guard let url else { return }
-            let loaded = await ImageLoader.shared.image(for: url, maxPixel: maxPixel)
-            guard !Task.isCancelled else { return }
-            image = loaded
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: presentation.replacementVersion)
+        .task(id: request) {
+            await presentation.load(request)
         }
     }
 }
@@ -49,12 +54,14 @@ struct FocusedAsyncImage: View {
     var placeholderTint: Color = .bgmSecondary
     var focus: UnitPoint = .top
 
-    @State private var image: SendableImage?
+    @State private var presentation = ImagePresentation()
+
+    private var request: ImagePresentation.Request { .init(url: url, maxPixel: maxPixel) }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if let image {
+                if let image = presentation.image(for: request) {
                     let size = CGSize(width: CGFloat(image.cgImage.width), height: CGFloat(image.cgImage.height))
                     let scale = max(proxy.size.width / max(size.width, 1), proxy.size.height / max(size.height, 1))
                     let width = size.width * scale
@@ -83,10 +90,8 @@ struct FocusedAsyncImage: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
         }
-        .task(id: "\(url?.absoluteString ?? "")-\(Int(maxPixel))") {
-            image = nil
-            guard let url else { return }
-            image = await ImageLoader.shared.image(for: url, maxPixel: maxPixel)
+        .task(id: request) {
+            await presentation.load(request)
         }
     }
 }
@@ -103,11 +108,12 @@ struct CoverCard: View {
     var width: CGFloat? = 132
     /// A small leaderboard number shown in the artwork's leading corner.
     var rank: Int? = nil
+    var imageIdentity: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { geometry in
-                CachedAsyncImage(url: coverURL, maxPixel: Int(ceil(max(geometry.size.width, geometry.size.height) * displayScale)), placeholderTint: tint)
+                CachedAsyncImage(url: coverURL, maxPixel: Int(ceil(max(geometry.size.width, geometry.size.height) * displayScale)), placeholderTint: tint, imageIdentity: imageIdentity)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(alignment: .topLeading) {
@@ -201,7 +207,8 @@ struct SubjectSummaryCard: View {
             badge: badge,
             progress: progress,
             tint: .subjectTint(subject.type),
-            width: width
+            width: width,
+            imageIdentity: "subject-\(subject.id)"
         )
     }
 }
@@ -210,6 +217,7 @@ struct AiringCard: View {
     let subject: LegacySubject
     var isWatching = false
     var width: CGFloat = 120
+    var contentRevision: Data? = nil
 
     var body: some View {
         CoverCard(
@@ -218,7 +226,8 @@ struct AiringCard: View {
             coverURL: subject.coverURL,
             badge: subject.rating.map { String(format: "%.1f", $0.score) },
             tint: .subjectTint(subject.type),
-            width: width
+            width: width,
+            imageIdentity: "subject-\(subject.id)"
         )
     }
 }

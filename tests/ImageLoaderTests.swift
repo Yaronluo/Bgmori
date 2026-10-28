@@ -132,7 +132,86 @@ struct ImageLoaderTests {
         precondition(cleared == nil && size == 0, "Clearing must not let in-flight requests repopulate caches")
         print("PASS: clearing cancels downloads and prevents late cache writes")
 
+        await testPresentation(loader: loader, payload: payload)
+        try testHomeSnapshots()
+
         if CommandLine.arguments.contains("--live") { try await live(directory: directory.appendingPathComponent("live")) }
+    }
+
+    private static func testHomeSnapshots() throws {
+        let decoder = JSONDecoder()
+        let old = try decoder.decode(Subject.self, from: Data(#"{"id":8,"name_cn":"Old title","rating":{"score":7.0}}"#.utf8))
+        let fresh = try decoder.decode(Subject.self, from: Data(#"{"id":8,"name_cn":"New title","rating":{"score":8.0}}"#.utf8))
+        let inserted = try decoder.decode(Subject.self, from: Data(#"{"id":9,"name_cn":"Added"}"#.utf8))
+        precondition(old == fresh, "The model's ID-only equality is intentional")
+        let before = HomeRefreshItem(old)
+        let after = HomeRefreshItem(fresh)
+        precondition(before.id == after.id && before != after,
+                     "Metadata must invalidate the UI snapshot without replacing its card identity")
+        precondition(after == HomeRefreshItem(fresh))
+        let reordered = [HomeRefreshItem(inserted), after]
+        precondition(reordered[1].id == before.id && reordered[1].value.displayTitle == "New title")
+        print("PASS: same-ID title/rating changes reach the UI while reorder/insertion retain card identities")
+    }
+
+    @MainActor
+    private static func testPresentation(loader: ImageLoader, payload: Data) async {
+        await loader.clear()
+        ImageRequests.shared.reset(payload: payload)
+        let presentation = ImagePresentation()
+        let original = URL(string: "https://example.com/old-cover.png")!
+        let replacement = URL(string: "https://example.com/new-cover.png")!
+        let first = ImagePresentation.Request(url: original, maxPixel: 320, identity: "subject-8")
+        await presentation.load(first, using: loader)
+        let old = presentation.image(for: first)!.cgImage
+        let version = presentation.replacementVersion
+
+        let sharper = ImagePresentation.Request(url: original, maxPixel: 640, identity: "subject-8")
+        let upgrade = Task { await presentation.load(sharper, using: loader) }
+        await Task.yield()
+        precondition(presentation.image(for: sharper)?.cgImage === old)
+        await upgrade.value
+        precondition(presentation.image(for: sharper)?.cgImage.height == 640)
+        precondition(presentation.replacementVersion == version)
+        print("PASS: resolution changes retain the visible cover and do not restart its fade")
+
+        let visible = presentation.image(for: sharper)!.cgImage
+        let changed = ImagePresentation.Request(url: replacement, maxPixel: 640, identity: "subject-8")
+        let pending = Task { await presentation.load(changed, using: loader) }
+        while !ImageRequests.shared.recorded.contains(where: { $0.url == replacement }) { await Task.yield() }
+        precondition(presentation.image(for: changed)?.cgImage === visible,
+                     "A slow replacement must keep the existing cover visible")
+        // A later request for another subject wins even if the old request finishes last.
+        let other = ImagePresentation.Request(url: original, maxPixel: 320, identity: "subject-9")
+        precondition(presentation.image(for: other) == nil, "Reused views must not show another subject's image")
+        await presentation.load(other, using: loader)
+        await pending.value
+        precondition(presentation.image(for: other)?.cgImage === old)
+        precondition(presentation.image(for: changed) == nil)
+        print("PASS: slow replacements retain old artwork; late responses cannot overwrite a different subject")
+
+        let failedURL = URL(string: "https://example.com/missing.png")!
+        ImageRequests.shared.reset(payload: payload, rejected: [failedURL.path])
+        let failed = ImagePresentation.Request(url: failedURL, maxPixel: 320, identity: "subject-9")
+        await presentation.load(failed, using: loader)
+        precondition(presentation.image(for: failed)?.cgImage === old)
+        ImageRequests.shared.reset(payload: payload)
+        await presentation.load(failed, using: loader)
+        precondition(presentation.image(for: failed) != nil && presentation.image(for: failed)?.cgImage !== old)
+        print("PASS: failed cover replacement keeps the displayed image and can be retried")
+
+        await loader.clear()
+        ImageRequests.shared.reset(payload: payload)
+        let cancelled = Task { await presentation.load(other, using: loader) }
+        while ImageRequests.shared.recorded.isEmpty { await Task.yield() }
+        cancelled.cancel()
+        await cancelled.value
+        precondition(presentation.image(for: failed) != nil)
+        let empty = ImagePresentation.Request(url: nil, maxPixel: 320, identity: "subject-9")
+        precondition(presentation.image(for: empty) == nil)
+        await presentation.load(empty, using: loader)
+        precondition(presentation.image(for: failed) == nil)
+        print("PASS: cancelled loads preserve the visible cover; a removed image clears it")
     }
 
     private static func fixture() -> Data {

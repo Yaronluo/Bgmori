@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A continuous Discover shelf with a soft artwork backdrop and circular paging.
 struct DiscoverHero: View {
-    let subjects: [Subject]
+    let subjects: [HomeRefreshItem<Subject>]
     let seasonLabel: String
     @Binding var selection: Int?
     let isActive: Bool
@@ -13,7 +13,14 @@ struct DiscoverHero: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var scrollPhase: ScrollPhase = .idle
-    @State private var visiblePage: Int?
+    @State private var visiblePage: String?
+
+    private struct Page: Identifiable {
+        let position: Int
+        let subject: HomeRefreshItem<Subject>
+        let copy: Int
+        var id: String { "\(subject.id)-\(copy)" }
+    }
 
     private var selectedIndex: Int {
         guard let selection,
@@ -23,26 +30,29 @@ struct DiscoverHero: View {
 
     // Duplicate only the two boundary pages. Once a swipe settles on a copy,
     // move to its identical original without animation to allow the next swipe.
-    private var pages: [Int] {
+    private var pages: [Page] {
         guard !subjects.isEmpty else { return [] }
-        return subjects.count > 1 ? Array(-1...subjects.count) : [0]
+        let positions = subjects.count > 1 ? Array(-1...subjects.count) : [0]
+        return positions.map { position in
+            Page(position: position, subject: subjects[subjectIndex(for: position)],
+                 copy: position < 0 ? -1 : (position >= subjects.count ? 1 : 0))
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 0) {
-                    ForEach(pages, id: \.self) { page in
-                        let index = subjectIndex(for: page)
-                        let subject = subjects[index]
+                    ForEach(pages) { page in
+                        let index = subjectIndex(for: page.position)
+                        let subject = page.subject
                         NavigationLink(value: Route.subject(subject.id)) {
-                            HeroSubjectCard(subject: subject, seasonLabel: seasonLabel)
+                            HeroSubjectCard(content: subject, seasonLabel: seasonLabel)
                         }
                         .buttonStyle(.plain)
                         .containerRelativeFrame(.horizontal)
-                        .id(page)
-                        .accessibilityLabel("\(subject.displayTitle)，第 \(index + 1) 部，共 \(subjects.count) 部")
-                        .accessibilityIdentifier("home-hot-page-\(page)")
+                        .accessibilityLabel("\(subject.value.displayTitle)，第 \(index + 1) 部，共 \(subjects.count) 部")
+                        .accessibilityIdentifier("home-hot-page-\(page.position)")
                     }
                 }
                 .scrollTargetLayout()
@@ -84,13 +94,13 @@ struct DiscoverHero: View {
             jump(to: index)
         }
         .onChange(of: visiblePage) { _, page in
-            guard let page, !subjects.isEmpty else { return }
-            selection = subjects[subjectIndex(for: page)].id
+            guard let page = pages.first(where: { $0.id == page }) else { return }
+            selection = page.subject.id
         }
     }
 
     private var autoAdvanceKey: String {
-        "\(isActive)-\(visiblePage ?? 0)-\(subjects.map(\.id))-\(scenePhase)-\(scrollPhase)-\(reduceMotion)-\(voiceOverEnabled)"
+        "\(isActive)-\(visiblePage ?? "")-\(subjects.map(\.id))-\(scenePhase)-\(scrollPhase)-\(reduceMotion)-\(voiceOverEnabled)"
     }
 
     private var pager: some View {
@@ -134,22 +144,22 @@ struct DiscoverHero: View {
             jump(to: subjectIndex(for: page))
         } else {
             withAnimation(.snappy(duration: 0.32)) {
-                visiblePage = page
+                visiblePage = pages.first(where: { $0.position == page })?.id
             }
         }
     }
 
     private func recenterIfNeeded() {
-        guard let page = visiblePage, !subjects.isEmpty,
-              !subjects.indices.contains(page) else { return }
-        jump(to: subjectIndex(for: page))
+        guard let page = pages.first(where: { $0.id == visiblePage }),
+              page.copy != 0 else { return }
+        jump(to: subjectIndex(for: page.position))
     }
 
     private func jump(to page: Int) {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            visiblePage = page
+            visiblePage = pages.first(where: { $0.position == page })?.id
         }
     }
 }
@@ -166,7 +176,8 @@ private enum DiscoverHeroMetrics {
 }
 
 private struct HeroSubjectCard: View {
-    let subject: Subject
+    let content: HomeRefreshItem<Subject>
+    private var subject: Subject { content.value }
     let seasonLabel: String
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -202,7 +213,7 @@ private struct HeroSubjectCard: View {
 
     private var macOSContent: some View {
         HStack(alignment: .center, spacing: 30) {
-            CachedAsyncImage(url: subject.heroURL, maxPixel: 900, contentMode: .fit, placeholderTint: tint, showsPlaceholderIcon: false)
+            CachedAsyncImage(url: subject.heroURL, maxPixel: 900, contentMode: .fit, placeholderTint: tint, showsPlaceholderIcon: false, imageIdentity: "subject-\(subject.id)")
                 .mask { posterEdgeFade }
                 .frame(width: 180, height: 254)
 
@@ -266,7 +277,8 @@ private struct HeroSubjectCard: View {
                         maxPixel: 1000,
                         contentMode: .fit,
                         placeholderTint: tint,
-                        showsPlaceholderIcon: false
+                        showsPlaceholderIcon: false,
+                        imageIdentity: "subject-\(subject.id)"
                     )
                     .mask { posterEdgeFade }
                     .frame(width: (geometry.size.width - 48) * 0.48, height: coverHeight)
@@ -326,7 +338,7 @@ private struct HeroSubjectCard: View {
 
     private var artworkBackdrop: some View {
         GeometryReader { geometry in
-            CachedAsyncImage(url: subject.heroURL, maxPixel: 400, placeholderTint: tint, showsPlaceholderIcon: false)
+            CachedAsyncImage(url: subject.heroURL, maxPixel: 400, placeholderTint: tint, showsPlaceholderIcon: false, imageIdentity: "subject-\(subject.id)")
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .blur(radius: 36)
                 .opacity(0.18)
