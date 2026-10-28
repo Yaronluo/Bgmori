@@ -47,6 +47,14 @@ final class CategoryStore {
         self.api = api
     }
 
+    func subjectsForDisplay(columns: Int) -> ArraySlice<Subject> {
+        let columns = max(1, columns)
+        // Retain the unfinished row in subjects so the next page can complete
+        // it in source order. Only a terminal page may expose a partial row.
+        let count = hasMore ? subjects.count / columns * columns : subjects.count
+        return subjects.prefix(count)
+    }
+
     func query(includeNSFW: Bool) -> CategoryQuery {
         CategoryQuery(type: type, sort: sort, year: year, tag: tag, includeNSFW: includeNSFW,
                       metaTags: Array(Set(selections.values.flatMap(\.metaTags))).sorted(),

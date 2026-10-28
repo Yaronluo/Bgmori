@@ -3,6 +3,8 @@ import SwiftUI
 struct CategoryView: View {
     @Environment(AppModel.self) private var app
     @State private var showFilters = false
+    @State private var columnCount = 2
+    @State private var isNearBottom = false
 
     private var store: CategoryStore { app.categories }
     private var query: CategoryQuery { store.query(includeNSFW: app.settings.showNSFW) }
@@ -16,6 +18,12 @@ struct CategoryView: View {
             .padding(.top, 12)
             .padding(.bottom, 28)
             .bgmDesktopContent()
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let remaining = geometry.contentSize.height - geometry.visibleRect.maxY
+            return remaining < geometry.containerSize.height
+        } action: { _, nearBottom in
+            isNearBottom = nearBottom
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             filterControls
@@ -33,6 +41,10 @@ struct CategoryView: View {
         .scrollIndicators(.hidden)
         .bgmNavigationTitle("分类")
         .task(id: query) { await store.load(query) }
+        .task(id: prefetchRequest) {
+            guard prefetchRequest.isReady else { return }
+            await store.loadMore(query)
+        }
         .refreshable { await store.load(query, force: true) }
         .sheet(isPresented: $showFilters) {
             CategoryFilterSheet(store: store, includeNSFW: app.settings.showNSFW)
@@ -157,7 +169,7 @@ struct CategoryView: View {
             }
             Link("在浏览器中查看", destination: query.browserURL)
                 .frame(maxWidth: .infinity)
-        } else if store.subjects.isEmpty {
+        } else if store.subjects.isEmpty && !store.hasMore {
             EmptyStateView(icon: store.type.icon, title: "没有符合条件的作品", message: "", actionTitle: "重置筛选") {
                 store.tag = nil
                 store.selections = [:]
@@ -165,7 +177,6 @@ struct CategoryView: View {
                 store.sort = .heat
                 Task { await store.load(query, force: true) }
             }
-            if store.hasMore { pagination }
         } else {
             if store.refreshErrorText != nil {
                 RefreshFailureNotice(message: "刷新失败，显示的是缓存结果") {
@@ -174,18 +185,41 @@ struct CategoryView: View {
                 .padding(.horizontal, 20)
                 .accessibilityIdentifier("category-refresh-error")
             }
+            if store.subjectsForDisplay(columns: columnCount).isEmpty && store.pageErrorText == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 64)
+            }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                ForEach(store.subjects) { subject in
+                ForEach(store.subjectsForDisplay(columns: columnCount)) { subject in
                     NavigationLink(value: Route.subject(subject.id)) {
                         SubjectCard(subject: subject, width: nil)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("category-subject-\(subject.id)")
                 }
             }
+            .onGeometryChange(for: Int.self) { geometry in
+                max(1, Int((geometry.size.width + 16) / (150 + 16)))
+            } action: { columnCount = $0 }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("category-results")
             .padding(.horizontal, 20)
 
             if store.hasMore { pagination }
         }
+    }
+
+    private struct PrefetchRequest: Equatable {
+        let query: CategoryQuery
+        let offset: Int
+        let isReady: Bool
+    }
+
+    private var prefetchRequest: PrefetchRequest {
+        PrefetchRequest(query: query, offset: store.nextOffset,
+                        isReady: isNearBottom && store.hasMore && !store.isLoading
+                            && !store.isRefreshing && store.pageErrorText == nil)
     }
 
     private var pagination: some View {

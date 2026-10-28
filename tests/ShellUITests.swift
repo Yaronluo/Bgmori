@@ -255,6 +255,37 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testCategoryPaginationLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("categories", appearance: appearance)
+            let grid = app.descendants(matching: .any)["category-results"].firstMatch
+            XCTAssertTrue(grid.waitForExistence(timeout: 60))
+            let scroll = app.scrollViews.containing(.any, identifier: "category-results").firstMatch
+            let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "category-subject-"))
+            var seenSubjects: Set<String> = []
+            // A first server page contains at most 24 subjects. Scroll through
+            // actual content until another page is appended to the same grid.
+            for _ in 0..<18 {
+                seenSubjects.formUnion(cards.allElementsBoundByIndex.map(\.identifier))
+                if seenSubjects.count > 24 { break }
+                #if os(macOS)
+                scroll.scroll(byDeltaX: 0, deltaY: -300)
+                #else
+                scroll.swipeUp(velocity: .slow)
+                #endif
+            }
+            let appended = NSPredicate { _, _ in
+                seenSubjects.formUnion(cards.allElementsBoundByIndex.map(\.identifier))
+                return seenSubjects.count > 24
+            }
+            expectation(for: appended, evaluatedWith: app)
+            waitForExpectations(timeout: 60)
+            snapshot("category-pagination-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testTabNavigationRemainsVisible() {
         let app = launch("categories")
         #if os(iOS)
