@@ -462,6 +462,9 @@ final class ShellUITests: XCTestCase {
             XCTAssertEqual(episodes.value as? String, "已收起")
             XCTAssertEqual(episodeLinks.count, 3)
             XCTAssertTrue(episodeLinks.firstMatch.exists)
+            XCTAssertTrue(episodes.label.contains("查看其余"))
+            XCTAssertGreaterThanOrEqual(episodes.frame.minY, episodeLinks.element(boundBy: 2).frame.maxY)
+            snapshot("subject-episodes-preview-\(appearance)", app: app)
 
             toggleSubjectSection(episodes, app: app)
             XCTAssertTrue(episodeLinks.element(boundBy: 3).waitForExistence(timeout: 5))
@@ -475,6 +478,8 @@ final class ShellUITests: XCTestCase {
             XCTAssertTrue(characterLinks.firstMatch.waitForExistence(timeout: 10))
             let previewCount = characterLinks.count
             XCTAssertGreaterThan(previewCount, 0)
+            XCTAssertTrue(characters.label.contains("位角色"))
+            XCTAssertGreaterThanOrEqual(characters.frame.minY, characterLinks.element(boundBy: previewCount - 1).frame.maxY)
             #if os(iOS)
             XCTAssertEqual(previewCount, 3)
             #endif
@@ -494,7 +499,55 @@ final class ShellUITests: XCTestCase {
             XCTAssertEqual(characterLinks.count, previewCount)
             XCTAssertEqual(episodeLinks.count, 3)
             snapshot("subject-sections-preview-restored-\(appearance)", app: app)
+
+            for (section, prefix) in [("staff", "staff-link-"), ("relation", "relation-link-")] {
+                let toggle = app.buttons["\(section)-section-toggle"]
+                let links = app.descendants(matching: .any).matching(
+                    NSPredicate(format: "identifier BEGINSWITH %@", prefix)
+                )
+                revealSubjectSection(toggle, app: app)
+                XCTAssertTrue(toggle.label.contains("查看其余"))
+                let visibleCount = links.count
+                XCTAssertGreaterThan(visibleCount, 0)
+                XCTAssertGreaterThanOrEqual(toggle.frame.minY, links.element(boundBy: visibleCount - 1).frame.maxY)
+                snapshot("subject-\(section)-preview-\(appearance)", app: app)
+                toggleSubjectSection(toggle, app: app)
+                let extra = links.element(boundBy: visibleCount)
+                revealSubjectSection(extra, app: app)
+                XCTAssertTrue(extra.exists)
+                snapshot("subject-\(section)-expanded-\(appearance)", app: app)
+                toggleSubjectSection(toggle, app: app)
+                XCTAssertEqual(links.count, visibleCount)
+            }
             app.terminate()
+        }
+    }
+
+    @MainActor
+    func testPersonWorksPreviewLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let person = launch("person:17491", appearance: appearance)
+            let works = person.buttons["person-related-toggle"]
+            let workLinks = person.buttons.matching(NSPredicate(format: "identifier MATCHES %@", "person-related-[0-9]+"))
+            XCTAssertTrue(person.staticTexts["参与作品"].waitForExistence(timeout: 60))
+            revealSubjectSection(works, app: person)
+            let workPreviewCount = workLinks.count
+            XCTAssertGreaterThan(workPreviewCount, 0)
+            XCTAssertTrue(works.label.contains("部作品"))
+            XCTAssertGreaterThanOrEqual(works.frame.minY, workLinks.element(boundBy: workPreviewCount - 1).frame.maxY)
+            let workRowTop = workLinks.firstMatch.frame.minY
+            for index in 0..<workPreviewCount {
+                XCTAssertEqual(workLinks.element(boundBy: index).frame.minY, workRowTop, accuracy: 1)
+            }
+            snapshot("person-works-preview-\(appearance)", app: person)
+            toggleSubjectSection(works, app: person)
+            let extraWork = workLinks.element(boundBy: workPreviewCount)
+            revealSubjectSection(extraWork, app: person)
+            XCTAssertTrue(extraWork.exists)
+            snapshot("person-works-expanded-\(appearance)", app: person)
+            toggleSubjectSection(works, app: person)
+            XCTAssertEqual(workLinks.count, workPreviewCount)
+            person.terminate()
         }
     }
 
@@ -503,8 +556,10 @@ final class ShellUITests: XCTestCase {
         for _ in 0..<20 {
             #if os(iOS)
             // isHittable can include a header covered by the floating bottom bar.
+            let bottomEdge = app.tabBars.firstMatch.exists
+                ? app.tabBars.firstMatch.frame.minY : app.frame.maxY - 140
             if element.exists, element.isHittable,
-               element.frame.minY > 130, element.frame.maxY < app.frame.maxY - 140 { return }
+               element.frame.minY > 130, element.frame.maxY <= bottomEdge { return }
             let needsEarlierContent = element.exists && element.frame.minY <= 130
             let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: needsEarlierContent ? 0.4 : 0.7))
             let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: needsEarlierContent ? 0.65 : 0.45))
@@ -515,16 +570,19 @@ final class ShellUITests: XCTestCase {
             app.scrollViews.element(boundBy: 1).scroll(byDeltaX: 0, deltaY: needsEarlierContent ? 250 : -350)
             #endif
         }
+        snapshot("unreachable-\(element.identifier)", app: app)
         XCTFail("Subject section did not become visible: \(element.identifier)")
     }
 
     @MainActor
     private func toggleSubjectSection(_ element: XCUIElement, app: XCUIApplication) {
-        revealSubjectSection(element, app: app)
+        let collapse = app.buttons["\(element.identifier)-collapse"]
+        let target = collapse.exists ? collapse : element
+        revealSubjectSection(target, app: app)
         #if os(macOS)
-        element.click()
+        target.click()
         #else
-        element.tap()
+        target.tap()
         #endif
     }
 

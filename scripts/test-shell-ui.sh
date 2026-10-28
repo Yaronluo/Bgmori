@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mode=${1:-all}
-case "$mode" in all|ios|mac) ;; *) echo 'Usage: test-shell-ui.sh [all|ios|mac]'; exit 2 ;; esac
+case "$mode" in all|ios|mac) ;; *) echo 'Usage: test-shell-ui.sh [all|ios|mac] [testName ...]'; exit 2 ;; esac
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-shell-ui.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 # Build a snapshot in a temporary project; preserve the checkout's Xcode signing settings.
@@ -27,7 +27,9 @@ ruby -ryaml -rjson -e '
 ' project.yml "$test_dir/project.json"
 xcodegen generate --spec "$test_dir/project.json" --project "$test_dir"
 args=(-project "$test_dir/BgmoriShellVerification.xcodeproj" -scheme Bgmori -configuration Debug -parallel-testing-enabled NO)
-if [[ -n "${2:-}" ]]; then args+=("-only-testing:ShellUITests/ShellUITests/$2"); fi
+for test_name in "${@:2}"; do
+  args+=("-only-testing:ShellUITests/ShellUITests/$test_name")
+done
 result_args=()
 if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then mkdir -p "$BGMORI_UI_RESULT_DIR"; fi
 if [[ "$mode" != mac ]]; then

@@ -677,6 +677,30 @@ struct Person: Decodable, Identifiable, Hashable, Sendable {
     var coverURL: URL? { images?.thumbURL }
 }
 
+struct SubjectStaffMember: Identifiable, Sendable {
+    let person: Person
+    private(set) var roles: [String]
+    var id: Int { person.id }
+    var roleDescription: String { roles.joined(separator: " / ") }
+
+    static func grouped(_ persons: [Person]) -> [SubjectStaffMember] {
+        var result: [SubjectStaffMember] = []
+        var indices: [Int: Int] = [:]
+        for person in persons {
+            let role = person.relation.flatMap { $0.isEmpty ? nil : $0 } ?? person.career.joined(separator: " / ")
+            if let index = indices[person.id] {
+                if !role.isEmpty, !result[index].roles.contains(role) {
+                    result[index].roles.append(role)
+                }
+            } else {
+                indices[person.id] = result.count
+                result.append(SubjectStaffMember(person: person, roles: role.isEmpty ? [] : [role]))
+            }
+        }
+        return result
+    }
+}
+
 struct Character: Decodable, Identifiable, Hashable, Sendable {
     let id: Int
     let name: String
@@ -821,7 +845,7 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
     /// `/v0/characters/{id}/subjects` and `/v0/persons/{id}/subjects` return a
     /// single cover URL instead of the `images` object used by subject relations.
     let image: String?
-    let relation: String
+    private(set) var relation: String
     let type: Int
 
     enum CodingKeys: String, CodingKey {
@@ -848,6 +872,25 @@ struct RelatedSubject: Decodable, Identifiable, Hashable, Sendable {
 
     var displayTitle: String { nameCn.isEmpty ? name : nameCn }
     var coverURL: URL? { images?.gridURL ?? Images.normalized(image) }
+
+    static func groupedCredits(_ subjects: [RelatedSubject]) -> [RelatedSubject] {
+        var result: [RelatedSubject] = []
+        var indices: [Int: Int] = [:]
+        var roles: [Int: [String]] = [:]
+        for subject in subjects {
+            if let index = indices[subject.id] {
+                if !subject.relation.isEmpty, !roles[subject.id, default: []].contains(subject.relation) {
+                    roles[subject.id, default: []].append(subject.relation)
+                    result[index].relation = roles[subject.id, default: []].joined(separator: " / ")
+                }
+            } else {
+                indices[subject.id] = result.count
+                roles[subject.id] = subject.relation.isEmpty ? [] : [subject.relation]
+                result.append(subject)
+            }
+        }
+        return result
+    }
 }
 
 // MARK: - Calendar

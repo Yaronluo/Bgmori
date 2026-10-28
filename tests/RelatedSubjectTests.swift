@@ -49,6 +49,35 @@ struct RelatedSubjectTests {
                      "Subject relations must keep the images object")
         precondition(relations[0].displayTitle == "CLANNAD")
 
-        print("PASS: character/person credits decode staff + image, subject relations keep relation + images")
+        let staffJSON = """
+        [
+          {"id": 2, "name": "乙", "relation": "导演"},
+          {"id": 1, "name": "甲", "relation": "原画"},
+          {"id": 2, "name": "乙", "relation": "分镜"},
+          {"id": 2, "name": "乙", "relation": "导演"},
+          {"id": 3, "name": "丙", "relation": "", "career": ["声优"]}
+        ]
+        """
+        let staff = SubjectStaffMember.grouped(try decoder.decode([Person].self, from: Data(staffJSON.utf8)))
+        precondition(staff.map(\.id) == [2, 1, 3], "Staff order must follow the first occurrence")
+        precondition(staff[0].roles == ["导演", "分镜"], "Merge every distinct role without duplicate people")
+        precondition(staff[1].roleDescription == "原画")
+        precondition(staff[2].roleDescription == "声优", "Use careers when the relation is empty")
+        precondition(SubjectStaffMember.grouped([]).isEmpty)
+
+        let multipleCreditsJSON = """
+        [
+          {"id": 8, "name": "作品甲", "staff": "主题歌演出"},
+          {"id": 9, "name": "作品乙", "staff": "原作"},
+          {"id": 8, "name": "作品甲", "staff": "声优"},
+          {"id": 8, "name": "作品甲", "staff": "声优"}
+        ]
+        """
+        let groupedWorks = RelatedSubject.groupedCredits(try decoder.decode([RelatedSubject].self, from: Data(multipleCreditsJSON.utf8)))
+        precondition(groupedWorks.map(\.id) == [8, 9])
+        precondition(groupedWorks[0].relation == "主题歌演出 / 声优", "Keep all distinct credits for each work")
+        precondition(RelatedSubject.groupedCredits([]).isEmpty)
+
+        print("PASS: related subject decoding and complete staff role grouping")
     }
 }

@@ -30,6 +30,8 @@ struct SubjectDetailView: View {
     @State private var synopsisExpanded = false
     @State private var episodesExpanded = false
     @State private var charactersExpanded = false
+    @State private var staffExpanded = false
+    @State private var relationsExpanded = false
     @State private var expandedInfoKeys: Set<String> = []
     @State private var commentsLoading = true
     @State private var commentsError: String?
@@ -773,31 +775,11 @@ struct SubjectDetailView: View {
         }
     }
 
-    private func sectionExpansionButton<Label: View>(
-        isExpanded: Binding<Bool>, identifier: String, @ViewBuilder label: () -> Label
-    ) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
-                isExpanded.wrappedValue.toggle()
-            }
-        } label: {
-            HStack(spacing: 12) {
-                label()
-                HStack(spacing: 5) {
-                    Text(isExpanded.wrappedValue ? "收起" : "展开全部")
-                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
-                }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize()
-            }
-            .foregroundStyle(.primary)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .contentShape(Rectangle())
+    private func sectionAccessory(_ count: String, isExpanded: Binding<Bool>, identifier: String) -> some View {
+        HStack(spacing: 12) {
+            accessoryText(count)
+            SectionCollapseButton(isExpanded: isExpanded, identifier: identifier)
         }
-        .buttonStyle(.plain)
-        .accessibilityValue(isExpanded.wrappedValue ? "已展开" : "已收起")
-        .accessibilityIdentifier(identifier)
     }
 
     // MARK: - Episodes
@@ -806,13 +788,7 @@ struct SubjectDetailView: View {
     private func episodeCard(_ subject: Subject) -> some View {
         if !episodes.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                if filteredEpisodes.count > 3 {
-                    sectionExpansionButton(isExpanded: $episodesExpanded, identifier: "episode-section-toggle") {
-                        episodeHeader(subject)
-                    }
-                } else {
-                    episodeHeader(subject)
-                }
+                episodeHeader(subject)
 
                 if app.auth.isLoggedIn {
                     episodeProgress(subject)
@@ -841,6 +817,14 @@ struct SubjectDetailView: View {
                     }
                 }
                 .padding(.top, -2)
+
+                SectionExpansionFooter(
+                    isExpanded: $episodesExpanded,
+                    remainingCount: filteredEpisodes.count - 3,
+                    unit: episodeUnit(subject),
+                    sectionName: subject.type == SubjectType.music.rawValue ? "曲目" : "章节",
+                    identifier: "episode-section-toggle"
+                )
             }
             .padding(.vertical, 2)
         } else if let error = sectionErrors[.episodes] {
@@ -868,6 +852,7 @@ struct SubjectDetailView: View {
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+            SectionCollapseButton(isExpanded: $episodesExpanded, identifier: "episode-section-toggle")
         }
     }
 
@@ -1030,41 +1015,35 @@ struct SubjectDetailView: View {
 
     // MARK: - Characters & staff
 
-    private var characterColumnCount: Int {
+    private var detailGridWidth: CGFloat {
         let cardWidth = isWideLayout ? contentWidth - 340 : contentWidth - 2 * pageMargin
-        let gridWidth = max(cardWidth - 32, 82)
-        return max(1, Int((gridWidth + 12) / (82 + 12)))
+        return max(cardWidth - 32, 82)
+    }
+
+    private var characterColumnCount: Int {
+        max(1, Int((detailGridWidth + 12) / (82 + 12)))
+    }
+
+    private var staffColumnCount: Int {
+        max(1, Int((detailGridWidth + 12) / (190 + 12)))
+    }
+
+    private var relationColumnCount: Int {
+        max(1, Int((detailGridWidth + 12) / (92 + 12)))
+    }
+
+    private var relationCardWidth: CGFloat {
+        max(1, (detailGridWidth - CGFloat(relationColumnCount - 1) * 12) / CGFloat(relationColumnCount))
     }
 
     private var visibleCharacters: [Character] {
         Array(characters.prefix(charactersExpanded ? characters.count : characterColumnCount))
     }
 
-    private var characterHeader: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("角色")
-                #if os(iOS)
-                .font(.system(size: 17, weight: .semibold))
-                #else
-                .font(.system(size: 15, weight: .semibold))
-                #endif
-            Spacer(minLength: 8)
-            accessoryText("\(characters.count) 位")
-        }
-    }
-
     @ViewBuilder
     private var characterCard: some View {
         if !characters.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                if characters.count > characterColumnCount {
-                    sectionExpansionButton(isExpanded: $charactersExpanded, identifier: "character-section-toggle") {
-                        characterHeader
-                    }
-                } else {
-                    characterHeader
-                }
-
+            SectionCard("角色", accessory: AnyView(sectionAccessory("\(characters.count) 位", isExpanded: $charactersExpanded, identifier: "character-section-toggle"))) {
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(minimum: 82), spacing: 12, alignment: .top),
                                    count: characterColumnCount),
@@ -1107,11 +1086,11 @@ struct SubjectDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                SectionExpansionFooter(
+                    isExpanded: $charactersExpanded, remainingCount: characters.count - characterColumnCount,
+                    unit: "位角色", sectionName: "角色", identifier: "character-section-toggle"
+                )
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .bgmPanel(cornerRadius: 16)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         } else if let error = sectionErrors[.characters] {
             sectionErrorCard("角色", message: error) {
                 Task { await loadCharactersSection(force: true) }
@@ -1124,13 +1103,15 @@ struct SubjectDetailView: View {
     @ViewBuilder
     private var staffCard: some View {
         if !persons.isEmpty {
-            SectionCard("制作人员", accessory: AnyView(accessoryText("\(persons.count) 位"))) {
+            let members = SubjectStaffMember.grouped(persons)
+            SectionCard("制作人员", accessory: AnyView(sectionAccessory("\(members.count) 位", isExpanded: $staffExpanded, identifier: "staff-section-toggle"))) {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 190), spacing: 12, alignment: .leading)],
+                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 12, alignment: .leading), count: staffColumnCount),
                     alignment: .leading,
                     spacing: 2
                 ) {
-                    ForEach(persons.prefix(12)) { person in
+                    ForEach(members.prefix(staffExpanded ? members.count : staffColumnCount * 2)) { member in
+                        let person = member.person
                         NavigationLink(value: Route.person(person.id)) {
                             HStack(spacing: 10) {
                                 CachedAsyncImage(url: person.coverURL, maxPixel: 160, contentMode: .fit)
@@ -1141,10 +1122,10 @@ struct SubjectDetailView: View {
                                     Text(person.name)
                                         .font(.system(size: 12, weight: .medium))
                                         .lineLimit(1)
-                                    Text(person.relation ?? person.career.first ?? " ")
+                                    Text(member.roleDescription)
                                         .font(.system(size: 10))
                                         .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                        .lineLimit(staffExpanded ? nil : 1)
                                 }
 
                                 Spacer(minLength: 0)
@@ -1153,9 +1134,14 @@ struct SubjectDetailView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("staff-link-\(person.id)")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                SectionExpansionFooter(
+                    isExpanded: $staffExpanded, remainingCount: members.count - staffColumnCount * 2,
+                    unit: "位制作人员", sectionName: "制作人员", identifier: "staff-section-toggle"
+                )
             }
         } else if let error = sectionErrors[.persons] {
             sectionErrorCard("制作人员", message: error) {
@@ -1169,33 +1155,41 @@ struct SubjectDetailView: View {
     @ViewBuilder
     private var relatedCard: some View {
         if !relations.isEmpty {
-            SectionCard("关联条目", accessory: AnyView(accessoryText("\(relations.count) 部"))) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(relations) { relation in
-                            NavigationLink(value: Route.subject(relation.id)) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    CachedAsyncImage(url: relation.coverURL, maxPixel: 300, placeholderTint: .subjectTint(relation.type))
-                                        .frame(width: 92, height: 128)
-                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            SectionCard("关联条目", accessory: AnyView(sectionAccessory("\(relations.count) 部", isExpanded: $relationsExpanded, identifier: "relation-section-toggle"))) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top), count: relationColumnCount),
+                    alignment: .leading, spacing: 14
+                ) {
+                    ForEach(relations.prefix(relationsExpanded ? relations.count : relationColumnCount)) { relation in
+                        NavigationLink(value: Route.subject(relation.id)) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                CachedAsyncImage(url: relation.coverURL, maxPixel: 300, placeholderTint: .subjectTint(relation.type))
+                                    .frame(width: relationCardWidth, height: relationCardWidth * 128 / 92)
+                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                                    Text(relation.displayTitle)
-                                        .font(.system(size: 11.5, weight: .medium))
-                                        .lineLimit(2, reservesSpace: true)
-                                        .truncationMode(.tail)
-                                        .frame(width: 92, alignment: .leading)
+                                Text(relation.displayTitle)
+                                    .font(.system(size: 11.5, weight: .medium))
+                                    .lineLimit(2, reservesSpace: true)
+                                    .truncationMode(.tail)
+                                    .frame(width: relationCardWidth, alignment: .leading)
 
-                                    Text(relation.relation)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .frame(width: 92, alignment: .leading)
-                                }
+                                Text(relation.relation)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(width: relationCardWidth, alignment: .leading)
                             }
-                            .buttonStyle(.plain)
+                            .frame(width: relationCardWidth, alignment: .leading)
+                            .clipped()
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("relation-link-\(relation.id)")
                     }
                 }
+                SectionExpansionFooter(
+                    isExpanded: $relationsExpanded, remainingCount: relations.count - relationColumnCount,
+                    unit: "部关联条目", sectionName: "关联条目", identifier: "relation-section-toggle"
+                )
             }
         } else if let error = sectionErrors[.relations] {
             sectionErrorCard("关联条目", message: error) {
@@ -1392,6 +1386,8 @@ struct SubjectDetailView: View {
         synopsisExpanded = false
         episodesExpanded = false
         charactersExpanded = false
+        staffExpanded = false
+        relationsExpanded = false
     }
 
     private func load() async {

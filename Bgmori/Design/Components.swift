@@ -353,6 +353,65 @@ struct SectionCard<Content: View>: View {
     }
 }
 
+struct SectionExpansionFooter: View {
+    @Binding var isExpanded: Bool
+    let remainingCount: Int
+    let unit: String
+    let sectionName: String
+    let identifier: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if remainingCount > 0 {
+            VStack(spacing: 12) {
+                Divider().opacity(0.45)
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(isExpanded ? "收起\(sectionName)" : "查看其余 \(remainingCount) \(unit)")
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.brandPink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isExpanded ? "已展开" : "已收起")
+                .accessibilityIdentifier(identifier)
+            }
+        }
+    }
+}
+
+struct SectionCollapseButton: View {
+    @Binding var isExpanded: Bool
+    let identifier: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if isExpanded {
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                    isExpanded = false
+                }
+            } label: {
+                Label("收起", systemImage: "chevron.up")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.brandPink)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("\(identifier)-collapse")
+        }
+    }
+}
+
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8

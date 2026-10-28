@@ -22,6 +22,8 @@ struct PersonDetailView: View {
     @State private var refreshError: String?
     @State private var loadedKey: String?
     @State private var isRefreshing = false
+    @State private var relatedExpanded = false
+    @State private var relatedGridWidth: CGFloat = 0
 
     var body: some View {
         Group {
@@ -190,17 +192,23 @@ struct PersonDetailView: View {
     private var relatedSection: some View {
         if !related.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text("参与作品")
-                    .font(.bgmSection)
-                    .padding(.horizontal, 20)
+                HStack {
+                    Text("参与作品").font(.bgmSection)
+                    Spacer(minLength: 8)
+                    Text("\(related.count) 部")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    SectionCollapseButton(isExpanded: $relatedExpanded, identifier: "person-related-toggle")
+                }
+                .padding(.horizontal, 20)
                 if relatedError != nil {
                     RefreshFailureNotice(message: "参与作品更新失败，显示的是缓存内容") {
                         Task { await loadRelated(force: true) }
                     }
                     .padding(.horizontal, 20)
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 16, alignment: .top)], alignment: .leading, spacing: 20) {
-                    ForEach(related) { item in
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 16, alignment: .top), count: relatedColumnCount), alignment: .leading, spacing: 20) {
+                    ForEach(related.prefix(relatedExpanded ? related.count : relatedColumnCount)) { item in
                         NavigationLink(value: Route.subject(item.id)) {
                             CoverCard(
                                 title: item.displayTitle,
@@ -214,6 +222,12 @@ struct PersonDetailView: View {
                         .accessibilityIdentifier("person-related-\(item.id)")
                     }
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { relatedGridWidth = $0 }
+                .padding(.horizontal, 20)
+                SectionExpansionFooter(
+                    isExpanded: $relatedExpanded, remainingCount: related.count - relatedColumnCount,
+                    unit: "部作品", sectionName: "参与作品", identifier: "person-related-toggle"
+                )
                 .padding(.horizontal, 20)
             }
         } else if let relatedError {
@@ -246,6 +260,10 @@ struct PersonDetailView: View {
         }
     }
 
+    private var relatedColumnCount: Int {
+        max(1, Int((relatedGridWidth + 16) / (120 + 16)))
+    }
+
     private func infoBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.bgmSection)
@@ -261,6 +279,7 @@ struct PersonDetailView: View {
         character = nil
         person = nil
         related = []
+        relatedExpanded = false
         relatedError = nil
         refreshError = nil
         errorText = nil
@@ -337,7 +356,7 @@ struct PersonDetailView: View {
             }
             if let hit {
                 guard !Task.isCancelled, loadedKey == key else { return }
-                related = hit.value
+                related = RelatedSubject.groupedCredits(hit.value)
                 relatedError = nil
                 relatedLoading = false
                 if hit.isFresh { return }
@@ -355,6 +374,7 @@ struct PersonDetailView: View {
                 related = try await app.api.personSubjects(id)
             }
             guard !Task.isCancelled, loadedKey == key else { return }
+            related = RelatedSubject.groupedCredits(related)
             relatedError = nil
         } catch {
             guard !Task.isCancelled, !Self.isCancellation(error) else { return }
