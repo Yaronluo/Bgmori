@@ -39,6 +39,81 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testSidebarWindowRestoreLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("home", appearance: appearance)
+            XCTAssertTrue(app.buttons["home-hot-dot-0"].waitForExistence(timeout: 60))
+            #if os(macOS)
+            let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+            app.activate()
+            XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+            let iconRegions = sidebarIconRegions(app: app)
+            snapshot("sidebar-before-\(appearance)", app: app)
+            assertSidebarIcons(app: app, regions: iconRegions)
+            for iteration in 0..<3 {
+                finder.activate()
+                XCTAssertTrue(finder.wait(for: .runningForeground, timeout: 5))
+                app.activate()
+                XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+                XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+                snapshot("sidebar-restored-\(appearance)-\(iteration)", app: app)
+                assertSidebarIcons(app: app, regions: iconRegions)
+            }
+            #else
+            XCTAssertEqual(app.tabBars.buttons.count, 5)
+            snapshot("sidebar-phone-\(appearance)", app: app)
+            #endif
+            app.terminate()
+        }
+    }
+
+    #if os(macOS)
+    @MainActor
+    private func sidebarIconRegions(app: XCUIApplication) -> [String: CGRect] {
+        let windowFrame = app.windows.firstMatch.frame
+        let outlineFrame = app.outlines.firstMatch.frame
+        var regions: [String: CGRect] = [:]
+        for title in ["发现", "分类", "放送", "收藏", "搜索", "我的"] {
+            let label = app.outlines.staticTexts[title].firstMatch
+            XCTAssertTrue(label.waitForExistence(timeout: 5), "Missing sidebar row: \(title)")
+            let rowFrame = label.frame
+            regions[title] = CGRect(x: outlineFrame.minX + 6 - windowFrame.minX,
+                                    y: rowFrame.midY - 12 - windowFrame.minY,
+                                    width: 28, height: 24)
+        }
+        return regions
+    }
+
+    @MainActor
+    private func assertSidebarIcons(app: XCUIApplication, regions: [String: CGRect]) {
+        let window = app.windows.firstMatch
+        let image = window.screenshot()
+        guard let bitmap = NSBitmapImageRep(data: image.pngRepresentation) else {
+            XCTFail("Cannot inspect the sidebar screenshot")
+            return
+        }
+        let scale = CGFloat(bitmap.pixelsWide) / window.frame.width
+        // Sample fixed window-relative regions established before switching.
+        // Stage Manager may temporarily invalidate the accessibility snapshot
+        // while the rendered window is already restored.
+        for (title, box) in regions {
+            var coloredPixels = 0
+            for y in Int(box.minY * scale)..<Int(box.maxY * scale) {
+                for x in Int(box.minX * scale)..<Int(box.maxX * scale) {
+                    guard x >= 0, y >= 0, x < bitmap.pixelsWide, y < bitmap.pixelsHigh,
+                          let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                    if color.redComponent - color.greenComponent > 0.12,
+                       color.redComponent - color.blueComponent > 0.08 {
+                        coloredPixels += 1
+                    }
+                }
+            }
+            XCTAssertGreaterThan(coloredPixels, 25, "Sidebar icon disappeared after window restore: \(title)")
+        }
+    }
+    #endif
+
+    @MainActor
     func testSilentHomeRefreshLightAndDark() {
         for appearance in ["light", "dark"] {
             // First obtain a real home snapshot, then exercise the cached launch.

@@ -178,8 +178,16 @@ struct MacShell: View {
             )) {
                 Section("浏览") {
                     ForEach(AppSection.allCases) { section in
-                        Label(section.title, systemImage: section.icon)
-                            .tag(section)
+                        Label {
+                            Text(section.title)
+                                .foregroundStyle(Color.bgmInk)
+                        } icon: {
+                            Image(systemName: section.icon)
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(Color.brandPink)
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .tag(section)
                     }
                 }
             }

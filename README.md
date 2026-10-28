@@ -164,7 +164,7 @@ Bgmori/
 - 审核/公开分发需要处理 Bangumi 商标、UGC 举报与 R18 过滤；当前是私人使用版本，默认关闭 NSFW，设置里可手动开启。
 - 系统级 Widget、App Intents、Handoff、Spotlight 尚未接入；当前版本聚焦客户端本体。
 - iPhone 底栏按用户指定改为系统原生 Tab Bar。早期模拟器曾出现截图图标重影，当前以本次原生底栏截图和真机表现为准。
-- 已适配 Mac 原生窗口，但未做多窗口/Stage Manager 的专门优化。
+- 已适配 Mac 原生窗口，侧栏明确显示图标与文字并独立着色；[台前调度恢复检查](docs/screenshots/stage-manager-sidebar/README.md)。多窗口尚未做专门优化。
 
 ## 截图
 
