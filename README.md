@@ -36,7 +36,7 @@
 - [x] 我的：账号概览、继续观看、最近浏览、评分分布与收藏构成、好友、角色 / 人物收藏、时光机与社区入口；[两端浅深色截图](docs/screenshots/profile-dashboard/README.md)
 - [x] 我的评分：平均分、评分分布、按评分 / 更新 / 标题排序的短评列表
 - [x] 本地缓存：API JSON 缓存、图片磁盘/内存缓存、离线可读
-- [x] 网络与连接：API、图片和网页分别选择线路，ECH 加密直连优先、失败冷却、成功线路复用、网络变化后重新检测；镜像目录在后台更新，凭证仅发送到官方或明确配置的自定义服务；支持仅官方、自定义服务、应用内加密 DNS、脱敏诊断与三项真实连接检测；[两端浅深色与验证说明](docs/screenshots/network-connections/README.md)
+- [x] 网络与连接：API、图片和网页分别选择线路，有系统代理时优先通过代理连接官方、无代理时优先 ECH；失败冷却、成功线路复用、网络变化后重新检测；镜像目录在后台更新，凭证仅发送到官方或明确配置的自定义服务；支持仅官方、自定义服务、应用内加密 DNS、脱敏诊断与三项真实连接检测；[两端浅深色与验证说明](docs/screenshots/network-connections/README.md)
 - [x] 本地每日放送通知（完全本地计算）
 
 ### 设计
@@ -120,9 +120,11 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 ## ECH 国内加密直连
 
-自动模式优先使用 ECH 连接官方；「设置 → 网络与连接 → 加密直连（ECH）」可强制只用这条线路，失败时不会借用普通连接或镜像。ECH 请求直接连接 Cloudflare IP，使用加密握手并按真实域名验证证书，绑定物理 Wi-Fi/以太网或蜂窝接口，绕过本应用的 HTTP/SOCKS 代理和 TUN 路由，不修改其他软件的网络设置。
+自动模式检测到适用于请求地址的系统代理时，优先由系统连接官方，遵循 HTTP/HTTPS、SOCKS、PAC 和直连例外设置；无代理时优先使用 ECH，失败后尝试其他可用线路。代理启停后会重新评估优先级，不受之前成功线路或失败冷却的影响。「设置 → 网络与连接 → 加密直连（ECH）」可强制只用 ECH，失败时不会借用普通连接或镜像。仅 ECH 线路直接连接 Cloudflare IP，使用加密握手并按真实域名验证证书，绑定物理 Wi-Fi/以太网或蜂窝接口，绕过本应用的 HTTP/SOCKS 代理和 TUN 路由，不修改其他软件的网络设置。
 
 验证：`bash scripts/test-ech.sh --live`；两端严格 ECH UI：`bash scripts/test-shell-ui.sh all testECHOnlyConnectionsLightAndDark`。应同时看到握手被接受、Cloudflare `sni=encrypted` 和物理接口；[实现与国内网络验证记录](docs/screenshots/ech-direct/README.md)。
+
+系统代理验收：启用系统代理后运行 `bash scripts/test-ech.sh --live-proxy`，在 Mac 与 iPhone 17 模拟器读取真实条目、网页、封面和登录页，并检查 URLSession 的连接指标确认 API、图片和网页确实经过代理；环境未配置适用代理时会明确跳过真实代理检查。普通回归同时覆盖代理启停、旧线路与冷却失效、严格 ECH 不回退以及自定义服务优先级。
 
 账号登录在应用内完成，验证码、登录表单和令牌创建均可走 ECH；密码不会发送到社区镜像或自定义服务，临时 Cookie 不参与匿名网页浏览。
 

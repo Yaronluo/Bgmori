@@ -1,4 +1,5 @@
 import Foundation
+import CFNetwork
 
 private final class TestClock: @unchecked Sendable {
     private let lock = NSLock()
@@ -52,10 +53,20 @@ struct ConnectionTests {
     }
 
     static func main() async throws {
-        let clock = TestClock()
-        let routing = MirrorRouting(now: { clock.now() })
-        routing.update(try catalog(), etag: "test")
         let apiURL = URL(string: "https://api.bgm.tv/v0/subjects/8")!
+        let proxySettings = ["HTTPSEnable": 1, "HTTPSProxy": "127.0.0.1", "HTTPSPort": 6152] as [String: Any]
+        precondition(SystemProxyRouting.isEnabled(for: apiURL, settings: proxySettings as CFDictionary))
+        var excludedSettings = proxySettings
+        excludedSettings["ExceptionsList"] = ["*.bgm.tv"]
+        precondition(!SystemProxyRouting.isEnabled(for: apiURL, settings: excludedSettings as CFDictionary))
+        precondition(!SystemProxyRouting.isEnabled(for: apiURL, settings: [:] as CFDictionary))
+        let pac = ["ProxyAutoConfigEnable": 1, "ProxyAutoConfigURLString": "https://proxy.test/proxy.pac"] as [String: Any]
+        precondition(SystemProxyRouting.isEnabled(for: apiURL, settings: pac as CFDictionary))
+        print("PASS: system proxy detection respects HTTPS, PAC, absent proxies and per-URL direct exceptions")
+
+        let clock = TestClock()
+        let routing = MirrorRouting(now: { clock.now() }, systemProxy: { _ in false })
+        routing.update(try catalog(), etag: "test")
         let mirror = URL(string: "https://api.mirror.test/v0/subjects/8")!
         let cover = URL(string: "https://lain.bgm.tv/pic/cover/l/a.jpg")!
         precondition(routing.candidates(for: apiURL).first == apiURL)

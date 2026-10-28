@@ -1,5 +1,23 @@
 import Foundation
 import Network
+import CFNetwork
+
+enum SystemProxyRouting {
+    static func isEnabled(for url: URL) -> Bool {
+        guard let settings = CFNetworkCopySystemProxySettings()?.takeRetainedValue() else { return false }
+        return isEnabled(for: url, settings: settings)
+    }
+
+    static func isEnabled(for url: URL, settings: CFDictionary) -> Bool {
+        let proxies = CFNetworkCopyProxiesForURL(url as CFURL, settings).takeRetainedValue() as? [[String: Any]] ?? []
+        guard let type = proxies.first?[kCFProxyTypeKey as String] as? String else { return false }
+        // Let URLSession resolve PAC and apply system exceptions; never copy
+        // proxy credentials or execute a PAC script on the routing lock.
+        return [kCFProxyTypeHTTP, kCFProxyTypeHTTPS, kCFProxyTypeSOCKS,
+                kCFProxyTypeAutoConfigurationURL, kCFProxyTypeAutoConfigurationJavaScript]
+            .contains { type == $0 as String }
+    }
+}
 
 enum ConnectionMode: String, Codable, CaseIterable, Sendable {
     case automatic, official, encrypted, custom
@@ -78,6 +96,7 @@ final class MirrorRouting: @unchecked Sendable {
 
     private let lock = NSLock()
     private let persistenceURL: URL?
+    private let systemProxy: @Sendable (URL) -> Bool
     private var snapshot: Snapshot
     private struct Health {
         var failures = 0
@@ -86,6 +105,7 @@ final class MirrorRouting: @unchecked Sendable {
     }
     private var health: [String: Health] = [:]
     private var selected: [ConnectionService: (String, Date)] = [:]
+    private var proxyUsage: [String: Bool] = [:]
     private var events: [ConnectionEvent] = []
     private var generation = 0
     private let now: @Sendable () -> Date
@@ -93,8 +113,10 @@ final class MirrorRouting: @unchecked Sendable {
     private var lastPath: String?
     private var isOffline = false
 
-    init(persistenceURL: URL? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+    init(persistenceURL: URL? = nil, now: @escaping @Sendable () -> Date = { Date() },
+         systemProxy: @escaping @Sendable (URL) -> Bool = { SystemProxyRouting.isEnabled(for: $0) }) {
         self.persistenceURL = persistenceURL
+        self.systemProxy = systemProxy
         self.now = now
         if let persistenceURL, let data = try? Data(contentsOf: persistenceURL),
            let saved = try? JSONDecoder().decode(Snapshot.self, from: data) {
@@ -144,7 +166,8 @@ final class MirrorRouting: @unchecked Sendable {
     }
 
     func candidates(for url: URL, forRequest: Bool = false, credentials: Bool = false) -> [URL] {
-        lock.withLock {
+        let hasSystemProxy = systemProxy(canonicalURL(for: url))
+        return lock.withLock {
             let canonical = canonicalURL(for: url, snapshot: snapshot)
             guard ["http", "https"].contains(canonical.scheme?.lowercased() ?? ""),
                   canonical.user == nil, canonical.password == nil, canonical.port == nil,
@@ -168,10 +191,21 @@ final class MirrorRouting: @unchecked Sendable {
                     .filter(Self.validHost).map { $0.lowercased() }
             }
             let channel = Self.channel(for: service)
+            if let previous = proxyUsage[host], previous != hasSystemProxy {
+                // An official connection that failed before the proxy was
+                // enabled must be tried again immediately through URLSession.
+                health = health.filter { !$0.key.hasPrefix("\(channel.rawValue)|") }
+                selected[channel] = nil
+            }
+            proxyUsage[host] = hasSystemProxy
             if let (working, date) = selected[channel], now().timeIntervalSince(date) < 1800,
                hosts.contains(working), (!credentials || Self.isECHHost(working) || working == host) {
                 hosts.removeAll { $0 == working }
                 hosts.insert(working, at: 0)
+            }
+            if hasSystemProxy, settings.mode == .automatic || settings.mode == .official {
+                hosts.removeAll { $0 == host }
+                hosts.insert(host, at: 0)
             }
             if forRequest, !credentials {
                 let available = hosts.filter { (health["\(channel.rawValue)|\($0)"]?.until ?? .distantPast) <= now() }

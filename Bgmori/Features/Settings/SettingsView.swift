@@ -414,10 +414,10 @@ struct ConnectionSettingsView: View {
                         .foregroundStyle(Color.bgmMuted)
                 } else {
                     Text(draft.mode == .automatic
-                         ? "优先通过 ECH 加密直连官网，失败后尝试普通官网连接及镜像。账号凭证只发往官网。"
+                         ? "有系统代理时优先通过代理连接官网；无代理时优先使用 ECH。连接失败后尝试其他可用线路，账号凭证只发往官网。"
                          : (draft.mode == .encrypted
                             ? "强制使用 ECH 并绑定实际网络接口，不经过 HTTP 代理或社区镜像。无法建立加密握手时直接报错。"
-                            : "仅使用 Bangumi 官方服务，可使用 ECH 加密直连或系统普通连接。"))
+                            : "仅使用 Bangumi 官方服务，有系统代理时优先使用代理，也支持 ECH 加密直连。"))
                         .font(.caption)
                         .foregroundStyle(Color.bgmMuted)
                 }
