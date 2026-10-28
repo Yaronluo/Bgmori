@@ -42,21 +42,23 @@ struct SearchView: View {
     @State private var recent: [String] = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 26) {
-                if query.trimmed.isEmpty {
-                    landing
-                } else {
-                    resultsContent
-                }
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 28)
-            .bgmDesktopContent(maxWidth: 820)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
+        VStack(spacing: 0) {
             searchControls
                 .bgmFloatingControlMargins(maxWidth: 820)
+                .background(Color.bgmCanvas)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 26) {
+                    if query.trimmed.isEmpty {
+                        landing
+                    } else {
+                        resultsContent
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 28)
+                .bgmDesktopContent(maxWidth: 820)
+            }
+            .clipped()
         }
         .scrollIndicators(.hidden)
         .onAppear {

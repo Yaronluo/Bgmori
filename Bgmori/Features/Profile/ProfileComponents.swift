@@ -105,7 +105,7 @@ struct FriendAvatarStack: View {
 
 // MARK: - Dashboard tiles
 
-struct ProfileTileLabel: View {
+struct ProfileDestinationRow: View {
     let icon: String
     let title: String
     var subtitle: String? = nil
@@ -113,42 +113,28 @@ struct ProfileTileLabel: View {
     var accessory: AnyView? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 38, height: 38)
-                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-
-                Spacer(minLength: 4)
-
-                if let accessory {
-                    accessory
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(tint)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
             }
-
-            Spacer(minLength: 0)
-
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            .lineLimit(1)
+            Spacer(minLength: 6)
+            if let accessory { accessory }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
-        .profileCard(cornerRadius: 18)
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.bgmMuted.opacity(0.18)).frame(height: 0.5) }
     }
 }
 

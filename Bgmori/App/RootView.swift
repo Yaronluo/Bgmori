@@ -27,6 +27,11 @@ struct RootView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: app.hasFinishedStartup)
         .tint(.brandPink)
         .preferredColorScheme(app.settings.appearance.colorScheme)
+        #if DEBUG
+        .overlay {
+            if DebugLayoutPreview.isEnabled { DebugLayoutPreview() }
+        }
+        #endif
         .overlay(alignment: .top) {
             if app.hasFinishedStartup, let toast = app.toast {
                 ToastView(message: toast)

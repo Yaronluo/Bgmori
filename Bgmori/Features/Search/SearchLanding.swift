@@ -102,53 +102,27 @@ struct SearchLandingView: View {
     }
 
     private var inspirationSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SearchLandingHeader(title: "找点灵感", subtitle: "不知道搜什么？从这些开始")
-
-            LazyVGrid(columns: ideaColumns, alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+            SearchLandingHeader(title: "找点灵感")
+            LazyVGrid(columns: ideaColumns, alignment: .leading, spacing: 0) {
                 ForEach(SearchIdea.samples) { idea in
-                    Button {
-                        onSearch(idea.term)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 0) {
-                                Image(systemName: idea.type.icon)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Color.subjectTint(idea.type.rawValue))
-                                    .frame(width: 32, height: 32)
-                                    .background(
-                                        Color.subjectTint(idea.type.rawValue).opacity(0.13),
-                                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    )
-                                Spacer(minLength: 0)
-                                Image(systemName: "arrow.up.left")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
+                    Button { onSearch(idea.term) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: idea.type.icon)
+                                .font(.subheadline)
+                                .foregroundStyle(Color.subjectTint(idea.type.rawValue))
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(idea.term).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                                Text(idea.note).font(.caption).foregroundStyle(.secondary)
                             }
-
+                            .lineLimit(1)
                             Spacer(minLength: 4)
-
-                            Text(idea.term)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-
-                            Text("\(idea.type.title) · \(idea.note)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            Image(systemName: "arrow.up.left").font(.caption2).foregroundStyle(.tertiary)
                         }
-                        .padding(13)
-                        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-                        .background(
-                            Color.bgmSecondary.opacity(0.55),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.04))
-                        }
-                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                        .overlay(alignment: .bottom) { Rectangle().fill(Color.bgmMuted.opacity(0.18)).frame(height: 0.5) }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("搜索 \(idea.term)，\(idea.type.title)")
@@ -159,30 +133,24 @@ struct SearchLandingView: View {
     }
 
     private var categorySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SearchLandingHeader(title: "探索分类", subtitle: "按类型浏览全部作品")
-
-            #if os(macOS)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
-                ForEach(SubjectType.browsingTypes) { type in
-                    SearchCategoryTile(type: type) {
-                        onBrowseCategory(type)
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            #else
+        VStack(alignment: .leading, spacing: 10) {
+            SearchLandingHeader(title: "探索分类")
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 12) {
+                HStack(spacing: 20) {
                     ForEach(SubjectType.browsingTypes) { type in
-                        SearchCategoryTile(type: type, width: 146) {
-                            onBrowseCategory(type)
+                        Button { onBrowseCategory(type) } label: {
+                            Label(type.title, systemImage: type.icon)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color.subjectTint(type.rawValue))
+                                .padding(.vertical, 10)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("浏览\(type.title)分类")
                     }
                 }
                 .padding(.horizontal, 20)
             }
-            #endif
         }
     }
 
@@ -190,7 +158,7 @@ struct SearchLandingView: View {
     private var trendingSection: some View {
         if !trending.isEmpty || isLoadingTrending || trendingError != nil {
             VStack(alignment: .leading, spacing: 14) {
-                SearchLandingHeader(title: "本周热门", subtitle: "动画热度")
+                SearchLandingHeader(title: "本周热门")
 
                 if !trending.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -245,9 +213,9 @@ struct SearchLandingView: View {
             count = 1
         } else {
             #if os(macOS)
-            count = 3
-            #else
             count = 2
+            #else
+            count = 1
             #endif
         }
         return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
@@ -296,72 +264,6 @@ private struct SearchLandingHeader: View {
             }
         }
         .padding(.horizontal, 20)
-    }
-}
-
-private struct SearchCategoryTile: View {
-    let type: SubjectType
-    var width: CGFloat? = nil
-    let action: () -> Void
-
-    private var tint: Color { .subjectTint(type.rawValue) }
-
-    private var note: String {
-        switch type {
-        case .anime: "新番 · 剧场版"
-        case .book: "漫画 · 小说"
-        case .music: "专辑 · OST"
-        case .game: "主机 · 独立"
-        case .real: "日剧 · 电影"
-        }
-    }
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    Image(systemName: type.icon)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 38, height: 38)
-                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(tint.opacity(0.55))
-                }
-
-                Spacer(minLength: 2)
-
-                Text(type.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(note)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(14)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
-            .frame(width: width, alignment: .leading)
-            .frame(minHeight: 126, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [tint.opacity(0.17), tint.opacity(0.05)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(tint.opacity(0.14))
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("浏览\(type.title)分类")
     }
 }
 

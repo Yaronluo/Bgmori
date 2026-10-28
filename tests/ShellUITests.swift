@@ -255,6 +255,171 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testSearchAndLibraryHeadersLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("search", appearance: appearance)
+            let field = app.textFields["search-field"]
+            XCTAssertTrue(field.waitForExistence(timeout: 30))
+            let scope = app.buttons["角色"].firstMatch
+            XCTAssertTrue(scope.waitForExistence(timeout: 5))
+            #if os(iOS)
+            XCTAssertLessThanOrEqual(field.frame.maxY, scope.frame.minY)
+            #endif
+            snapshot("search-header-\(appearance)", app: app)
+            let scroll = app.scrollViews.firstMatch
+            for _ in 0..<3 {
+                #if os(macOS)
+                scroll.scroll(byDeltaX: 0, deltaY: -300)
+                #else
+                scroll.swipeUp()
+                #endif
+                XCTAssertTrue(field.isHittable)
+                XCTAssertTrue(scope.isHittable)
+            }
+            snapshot("search-header-scrolled-\(appearance)", app: app)
+            app.terminate()
+
+            // Exercise layout and input without needing a real account or credentials.
+            let library = XCUIApplication()
+            library.launchEnvironment["BGMORI_ROUTE"] = "library"
+            library.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            library.launchEnvironment["BGMORI_PREVIEW_LIBRARY_FILTERS"] = "1"
+            library.launchArguments = ["-appearance", appearance]
+            library.launch()
+            let search = library.textFields.firstMatch
+            let types = library.buttons["library-type-all"]
+            let summary = library.staticTexts["library-summary"]
+            XCTAssertTrue(search.waitForExistence(timeout: 30))
+            XCTAssertTrue(types.waitForExistence(timeout: 5))
+            XCTAssertLessThanOrEqual(search.frame.maxY, types.frame.minY)
+            XCTAssertLessThanOrEqual(types.frame.maxY, summary.frame.minY)
+            snapshot("library-header-\(appearance)", app: library)
+            #if os(macOS)
+            search.click()
+            #else
+            search.tap()
+            #endif
+            search.typeText("test")
+            XCTAssertEqual(search.value as? String, "test")
+            snapshot("library-header-editing-\(appearance)", app: library)
+            library.terminate()
+        }
+    }
+
+    @MainActor
+    func testStationaryPaginationDoesNotStall() {
+        let app = XCUIApplication()
+        app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+        app.launchEnvironment["BGMORI_PREVIEW_PAGINATION"] = "1"
+        app.launch()
+        let count = app.staticTexts["pagination-preview-count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 30))
+        // No scroll gestures: each completion must trigger the next visible page.
+        expectation(for: NSPredicate(format: "label == %@ OR value == %@", "3", "3"), evaluatedWith: count)
+        waitForExpectations(timeout: 15)
+        app.terminate()
+    }
+
+    @MainActor
+    func testCompactLayoutsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let search = launch("search", appearance: appearance)
+            let category = search.buttons["浏览动画分类"]
+            XCTAssertTrue(category.waitForExistence(timeout: 30))
+            let idea = search.buttons["搜索 CLANNAD，动画"]
+            XCTAssertTrue(idea.waitForExistence(timeout: 10))
+            snapshot("compact-search-\(appearance)", app: search)
+            search.terminate()
+
+            let profile = launch("profile", appearance: appearance)
+            let visibleGroups = profile.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "小组与讨论")).firstMatch
+            XCTAssertTrue(visibleGroups.waitForExistence(timeout: 30))
+            snapshot("compact-profile-\(appearance)", app: profile)
+            profile.terminate()
+
+            let library = XCUIApplication()
+            library.launchEnvironment["BGMORI_ROUTE"] = "library"
+            library.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            library.launchEnvironment["BGMORI_PREVIEW_LIBRARY_GRID"] = "1"
+            library.launchArguments = ["-appearance", appearance]
+            library.launch()
+            let cards = library.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "library-grid-"))
+            XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 30))
+            XCTAssertFalse(library.staticTexts["未评分"].exists)
+            // SwiftUI can expose both a container and its label with the same ID.
+            let first = cards.matching(identifier: "library-grid-328609").firstMatch
+            let second = cards.matching(identifier: "library-grid-27364").firstMatch
+            XCTAssertTrue(first.exists && second.exists)
+            snapshot("compact-library-grid-\(appearance)", app: library)
+            XCTAssertEqual(first.frame.minY, second.frame.minY, accuracy: 1)
+            XCTAssertEqual(first.frame.height, second.frame.height, accuracy: 1)
+            library.terminate()
+
+            #if os(macOS)
+            // Exercise the actual category toolbar on Mac; its popover anchor
+            // must remain clickable in the normal split-view hierarchy.
+            let years = launch("categories", appearance: appearance)
+            #else
+            let years = XCUIApplication()
+            years.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            years.launchEnvironment["BGMORI_PREVIEW_YEAR_PICKER"] = "1"
+            years.launchArguments = ["-appearance", appearance]
+            years.launch()
+            #endif
+            let picker = years.buttons["year-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 30))
+            #if os(macOS)
+            picker.click()
+            #else
+            picker.tap()
+            #endif
+            let current = Calendar.current.component(.year, from: Date())
+            let firstYear = years.buttons["year-option-\(current)"]
+            let secondYear = years.buttons["year-option-\(current - 1)"]
+            XCTAssertTrue(firstYear.waitForExistence(timeout: 5))
+            #if os(macOS)
+            XCTAssertLessThanOrEqual(secondYear.frame.minY - firstYear.frame.minY, 28)
+            #else
+            XCTAssertLessThanOrEqual(secondYear.frame.minY - firstYear.frame.minY, 40)
+            #endif
+            snapshot("compact-years-\(appearance)", app: years)
+            years.terminate()
+        }
+    }
+
+    @MainActor
+    func testTagPaginationLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("tag:校园", appearance: appearance)
+            let grid = app.descendants(matching: .any)["tag-results"].firstMatch
+            XCTAssertTrue(grid.waitForExistence(timeout: 60))
+            let scroll = app.scrollViews.containing(.any, identifier: "tag-results").firstMatch
+            let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "tag-subject-"))
+            var seen: Set<String> = []
+            snapshot("tag-first-page-\(appearance)", app: app)
+            for _ in 0..<18 {
+                seen.formUnion(cards.allElementsBoundByIndex.map(\.identifier))
+                if seen.count > 20 { break }
+                #if os(macOS)
+                scroll.scroll(byDeltaX: 0, deltaY: -300)
+                #else
+                scroll.swipeUp(velocity: .slow)
+                #endif
+            }
+            let appended = NSPredicate { _, _ in
+                seen.formUnion(cards.allElementsBoundByIndex.map(\.identifier))
+                return seen.count > 20
+            }
+            expectation(for: appended, evaluatedWith: app)
+            waitForExpectations(timeout: 60)
+            snapshot("tag-paginated-\(appearance)", app: app)
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "仅显示前")).firstMatch.exists)
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "已加载")).firstMatch.exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testCategoryPaginationLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch("categories", appearance: appearance)

@@ -106,6 +106,7 @@ struct CoverCard: View {
     var progress: Double? = nil
     var tint: Color = .brandPink
     var width: CGFloat? = 132
+    var showsMetadata = true
     /// A small leaderboard number shown in the artwork's leading corner.
     var rank: Int? = nil
     var imageIdentity: String? = nil
@@ -133,20 +134,22 @@ struct CoverCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("cover-card-title")
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(subtitle ?? "")
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1, reservesSpace: true)
-                Spacer(minLength: 0)
-                if let badge, !badge.isEmpty {
-                    Text(badge)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                        .foregroundStyle(Color.brandPink)
-                        .fixedSize()
+            if showsMetadata {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(subtitle ?? "")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1, reservesSpace: true)
+                    Spacer(minLength: 0)
+                    if let badge, !badge.isEmpty {
+                        Text(badge)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.brandPink)
+                            .fixedSize()
+                    }
                 }
+                .font(.caption)
             }
-            .font(.caption)
 
             if let progress {
                 ProgressView(value: max(0, min(progress, 1)))
@@ -639,12 +642,12 @@ struct YearPickerButton<Label: View>: View {
             .accessibilityLabel("年份：\(selection.map(String.init) ?? "全部年份")")
             .accessibilityIdentifier("year-picker")
             .popover(isPresented: $isPresented, arrowEdge: .top) {
-                VStack(spacing: 4) {
+                VStack(spacing: 2) {
                     option(nil)
                     Divider()
                     ScrollViewReader { proxy in
                         ScrollView(.vertical) {
-                            LazyVStack(spacing: 2) {
+                            LazyVStack(spacing: 0) {
                                 ForEach(years, id: \.self) { year in
                                     option(year).id(year)
                                 }
@@ -658,11 +661,11 @@ struct YearPickerButton<Label: View>: View {
                         }
                     }
                 }
-                .padding(8)
+                .padding(6)
                 #if os(macOS)
-                .frame(width: 180, height: 320)
+                .frame(width: 150, height: 248)
                 #else
-                .frame(width: 210, height: 360)
+                .frame(width: 180, height: 292)
                 #endif
                 .foregroundStyle(.primary)
                 .accessibilityElement(children: .contain)
@@ -676,7 +679,7 @@ struct YearPickerButton<Label: View>: View {
             selection = year
             isPresented = false
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 Image(systemName: "checkmark")
                     .font(.caption.weight(.semibold))
                     .frame(width: 16)
@@ -685,11 +688,11 @@ struct YearPickerButton<Label: View>: View {
                     .font(.subheadline)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             #if os(macOS)
-            .frame(minHeight: 32)
+            .frame(minHeight: 26)
             #else
-            .frame(minHeight: 44)
+            .frame(minHeight: 38)
             #endif
             .background(selection == year ? Color.bgmSecondary : Color.clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
@@ -840,5 +843,30 @@ struct RefreshFailureNotice: View {
         .padding(.vertical, 8)
         .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A search input that participates in the header layout on both platforms.
+struct InlineSearchField: View {
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField(prompt, text: $text)
+                .textFieldStyle(.plain)
+                .submitLabel(.search)
+            if !text.isEmpty {
+                Button("清除", systemImage: "xmark.circle.fill") { text = "" }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.body)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 44)
+        .background(Color.bgmSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
     }
 }

@@ -137,7 +137,6 @@ struct ProfileView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
-                        .background(Color.primary.opacity(0.055), in: Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -151,17 +150,14 @@ struct ProfileView: View {
 
     private func primaryAction(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                Image(systemName: systemImage).font(.subheadline)
+                Text(title).font(.subheadline.weight(.medium))
+                Image(systemName: "chevron.right").font(.caption2)
             }
-            .foregroundStyle(Color.bgmCanvas)
-            .padding(.horizontal, 19)
-            .frame(minHeight: 42)
-            .background(Color.brandPink, in: Capsule())
-            .contentShape(Capsule())
+            .foregroundStyle(Color.brandPink)
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -591,10 +587,10 @@ struct ProfileView: View {
                 subtitle: isSignedIn ? "好友、小组与我的记录" : "发现同好"
             )
 
-            LazyVGrid(columns: featureColumns, spacing: 12) {
+            LazyVGrid(columns: featureColumns, spacing: 0) {
                 if isSignedIn, let username = app.auth.username {
                     NavigationLink(value: Route.friends(username)) {
-                        ProfileTileLabel(
+                        ProfileDestinationRow(
                             icon: "person.2.fill",
                             title: "好友",
                             subtitle: friendSubtitle,
@@ -608,7 +604,7 @@ struct ProfileView: View {
                 NavigationLink {
                     GroupListView()
                 } label: {
-                    ProfileTileLabel(
+                    ProfileDestinationRow(
                         icon: "person.3.fill",
                         title: "小组与讨论",
                         subtitle: "热门小组与话题",
@@ -618,7 +614,7 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
 
                 NavigationLink(value: Route.blogs) {
-                    ProfileTileLabel(
+                    ProfileDestinationRow(
                         icon: "text.book.closed.fill",
                         title: "日志",
                         subtitle: "作品之外的文字",
@@ -629,7 +625,7 @@ struct ProfileView: View {
 
                 if isSignedIn, let username = app.auth.username {
                     NavigationLink(value: Route.timeline(username)) {
-                        ProfileTileLabel(
+                        ProfileDestinationRow(
                             icon: "clock.arrow.circlepath",
                             title: "时光机",
                             subtitle: "我的收藏动态",
@@ -649,10 +645,10 @@ struct ProfileView: View {
                 subtitle: isSignedIn ? "人物收藏与工具" : "工具与设置"
             )
 
-            LazyVGrid(columns: featureColumns, spacing: 12) {
+            LazyVGrid(columns: featureColumns, spacing: 0) {
                 if isSignedIn, let username = app.auth.username {
                     NavigationLink(value: Route.people(username)) {
-                        ProfileTileLabel(
+                        ProfileDestinationRow(
                             icon: "person.crop.rectangle.stack.fill",
                             title: "人物收藏",
                             subtitle: peopleSubtitle,
@@ -663,7 +659,7 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 } else {
                     Button { app.router.openSearch() } label: {
-                        ProfileTileLabel(
+                        ProfileDestinationRow(
                             icon: "magnifyingglass",
                             title: "搜索",
                             subtitle: "找作品、角色与人物",
@@ -674,7 +670,7 @@ struct ProfileView: View {
                 }
 
                 Button { showIndexLookup = true } label: {
-                    ProfileTileLabel(
+                    ProfileDestinationRow(
                         icon: "list.bullet.rectangle.portrait",
                         title: "查看目录",
                         subtitle: "打开一份作品清单",
@@ -684,7 +680,7 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
 
                 Button { app.router.openCalendar() } label: {
-                    ProfileTileLabel(
+                    ProfileDestinationRow(
                         icon: "calendar",
                         title: "每日放送",
                         subtitle: "今天的放送表",
@@ -694,7 +690,7 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
 
                 Button { app.showSettings = true } label: {
-                    ProfileTileLabel(
+                    ProfileDestinationRow(
                         icon: "slider.horizontal.3",
                         title: "偏好设置",
                         subtitle: "界面、内容与通知",
@@ -721,9 +717,9 @@ struct ProfileView: View {
 
     private var featureColumns: [GridItem] {
         #if os(macOS)
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+        Array(repeating: GridItem(.flexible(), spacing: 28), count: 2)
         #else
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+        Array(repeating: GridItem(.flexible(), spacing: 0), count: 1)
         #endif
     }
 

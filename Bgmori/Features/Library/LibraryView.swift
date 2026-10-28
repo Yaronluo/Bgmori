@@ -66,6 +66,8 @@ struct LibraryView: View {
                     filterControls
                     Spacer()
                 }
+            } else if isGridPreview {
+                content
             } else if app.isGuest {
                 LoginPromptView(
                     title: "登录后查看收藏",
@@ -78,6 +80,7 @@ struct LibraryView: View {
                 content
             }
         }
+        .onAppear { if isGridPreview { isGrid = true } }
         .background(Color.bgmBackground)
         .bgmLargeNavigationTitle("收藏")
         .modifier(CollectionRemovalFlow(
@@ -86,8 +89,16 @@ struct LibraryView: View {
             isPresented: $showRemoval
         ))
         .task {
-            if !isFilterPreview { await app.library.loadIfNeeded() }
+            if !isFilterPreview && !isGridPreview { await app.library.loadIfNeeded() }
         }
+    }
+
+    private var isGridPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["BGMORI_PREVIEW_LIBRARY_GRID"] == "1"
+        #else
+        false
+        #endif
     }
 
     private var isFilterPreview: Bool {
@@ -99,79 +110,79 @@ struct LibraryView: View {
     }
 
     private var content: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                if let error = app.library.lastError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(error, systemImage: "exclamationmark.circle")
-                            .font(.footnote)
-                        Button("重试同步") {
-                            Task {
-                                if let username = app.auth.username {
-                                    await app.library.loadAll(username: username, force: true)
+        VStack(spacing: 0) {
+            filterControls
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if let error = app.library.lastError {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(error, systemImage: "exclamationmark.circle")
+                                .font(.footnote)
+                            Button("重试同步") {
+                                Task {
+                                    if let username = app.auth.username {
+                                        await app.library.loadAll(username: username, force: true)
+                                    }
                                 }
                             }
                         }
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
-                }
-                if filtered.isEmpty {
-                    if app.library.isLoading {
-                        ProgressView("同步收藏…")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 60)
-                    } else {
-                        EmptyStateView(
-                            icon: "books.vertical",
-                            title: app.library.collections.isEmpty ? "还没有收藏" : "没有符合条件的条目",
-                            message: ""
-                        )
-                    }
-                } else if isGrid {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16, alignment: .top)], alignment: .leading, spacing: 20) {
-                        ForEach(filtered) { item in
-                            VStack(alignment: .leading, spacing: 8) {
+                    if filtered.isEmpty {
+                        if app.library.isLoading {
+                            ProgressView("同步收藏…")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 60)
+                        } else {
+                            EmptyStateView(
+                                icon: "books.vertical",
+                                title: app.library.collections.isEmpty ? "还没有收藏" : "没有符合条件的条目",
+                                message: ""
+                            )
+                        }
+                    } else if isGrid {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 180), spacing: 20, alignment: .top)], alignment: .leading, spacing: 20) {
+                            ForEach(filtered) { item in
                                 NavigationLink(value: Route.subject(item.subjectId)) {
                                     collectionCard(item)
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu { contextMenu(for: item) }
-                                HStack {
-                                    Spacer(minLength: 0)
+                                .overlay(alignment: .topTrailing) {
+                                    actionsMenu(for: item, compact: true)
+                                        .background(Color.bgmSurface.opacity(0.94), in: Circle())
+                                        .padding(5)
+                                }
+                                .accessibilityIdentifier("library-grid-\(item.subjectId)")
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(filtered) { item in
+                                HStack(alignment: .top, spacing: 8) {
+                                    NavigationLink(value: Route.subject(item.subjectId)) {
+                                        CollectionReviewRow(item: item)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("library-row-\(item.subjectId)")
+                                    .contextMenu { contextMenu(for: item) }
                                     actionsMenu(for: item)
                                 }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 16)
+                                Divider().padding(.horizontal, 20)
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(filtered) { item in
-                            HStack(alignment: .top, spacing: 8) {
-                                NavigationLink(value: Route.subject(item.subjectId)) {
-                                    CollectionReviewRow(item: item)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("library-row-\(item.subjectId)")
-                                .contextMenu { contextMenu(for: item) }
-                                actionsMenu(for: item)
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 16)
-                            Divider().padding(.horizontal, 20)
-                        }
-                    }
+                    Color.clear.frame(height: 20)
                 }
-                Color.clear.frame(height: 20)
+                .padding(.top, 8)
             }
-            .padding(.top, 8)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            filterControls
+            .clipped()
         }
         .scrollIndicators(.hidden)
-        .bgmSearchable(text: $searchText, prompt: "在收藏中搜索")
         .refreshable {
             if let username = app.auth.username {
                 await app.library.loadAll(username: username, force: true)
@@ -202,7 +213,9 @@ struct LibraryView: View {
     }
 
     private var filterControls: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
+            InlineSearchField(text: $searchText, prompt: "在收藏中搜索")
+                .accessibilityIdentifier("library-search-field")
             #if os(macOS)
             HStack(spacing: 24) {
                 LibraryTypePicker(selection: $subjectType)
@@ -273,21 +286,29 @@ struct LibraryView: View {
     }
 
     private func collectionCard(_ item: UserSubjectCollection) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            CoverCard(
-                title: item.title,
-                subtitle: item.collectionType.title,
-                coverURL: item.coverURL,
-                badge: item.collectionType == .doing && !item.progressText.isEmpty ? item.progressText : nil,
-                progress: item.progressFraction,
-                tint: .subjectTint(item.subjectType),
-                width: nil
-            )
-            CollectionPersonalRating(rate: item.rate)
-            if let review = item.reviewText {
-                CollectionReviewText(text: review)
-                    .lineLimit(4)
+        VStack(alignment: .leading, spacing: 6) {
+            CoverCard(title: item.title, coverURL: item.coverURL, tint: .subjectTint(item.subjectType), width: nil, showsMetadata: false)
+            HStack(spacing: 4) {
+                Text(item.collectionType.title).foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                if item.rate > 0 {
+                    Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(Color.brandPink)
+                    Text("\(item.rate)").foregroundStyle(Color.brandPink).monospacedDigit()
+                }
+                if item.collectionType == .doing, !item.progressText.isEmpty {
+                    Text(item.progressText).foregroundStyle(.secondary).monospacedDigit()
+                }
             }
+            .font(.caption)
+            Text(item.reviewText ?? " ")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1, reservesSpace: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(item.reviewText == nil)
+                #if os(macOS)
+                .help(item.reviewText ?? "")
+                #endif
         }
     }
 
@@ -308,13 +329,13 @@ struct LibraryView: View {
         }
     }
 
-    private func actionsMenu(for item: UserSubjectCollection) -> some View {
+    private func actionsMenu(for item: UserSubjectCollection, compact: Bool = false) -> some View {
         Menu {
             contextMenu(for: item)
         } label: {
             Image(systemName: "ellipsis")
-                .font(.body.weight(.medium))
-                .frame(width: 44, height: 44)
+                .font(compact ? .caption.weight(.semibold) : .body.weight(.medium))
+                .frame(width: compact ? 30 : 44, height: compact ? 30 : 44)
                 .contentShape(Rectangle())
         }
         .menuIndicator(.hidden)
@@ -322,6 +343,7 @@ struct LibraryView: View {
         .fixedSize()
         .accessibilityLabel("\(item.title)的收藏操作")
         .accessibilityIdentifier("library-actions-\(item.subjectId)")
+        .disabled(isGridPreview)
     }
 
     private var filtered: [UserSubjectCollection] {
@@ -346,6 +368,11 @@ struct LibraryView: View {
     }
 
     private var typedCollections: [UserSubjectCollection] {
-        app.library.collections.values.filter { subjectType == nil || $0.subjectType == subjectType }
+        #if DEBUG
+        if isGridPreview {
+            return DebugCollectionFixtures.collections.filter { subjectType == nil || $0.subjectType == subjectType }
+        }
+        #endif
+        return app.library.collections.values.filter { subjectType == nil || $0.subjectType == subjectType }
     }
 }
