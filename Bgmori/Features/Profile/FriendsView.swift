@@ -22,7 +22,7 @@ struct FriendsView: View {
                     EmptyStateView(
                         icon: errorText == nil ? "person.2" : "wifi.exclamationmark",
                         title: errorText == nil ? "还没有好友" : "好友加载失败",
-                        message: errorText ?? "在 Bangumi 网页添加好友后，会显示在这里。",
+                        message: errorText ?? "添加好友后，会显示在这里。",
                         actionTitle: errorText == nil ? nil : "重试"
                     ) {
                         Task { await load(force: true) }
@@ -51,7 +51,7 @@ struct FriendsView: View {
         .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
         .bgmNavigationTitle("好友")
-        .bgmWebFallback(url)
+        .bgmWebFallback(url, isPresented: errorText != nil)
         .task(id: username) { await load() }
         .refreshable { await load(force: true) }
     }
@@ -63,9 +63,9 @@ struct FriendsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(friends.isEmpty ? "Bangumi 同好" : "\(friends.count) 位好友")
+                Text(friends.isEmpty ? "同好" : "\(friends.count) 位好友")
                     .font(.system(size: 24, weight: .bold))
-                Text("在 Bangumi 认识的朋友")
+                Text("我的好友")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

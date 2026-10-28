@@ -25,7 +25,7 @@ struct PeopleCollectionView: View {
                     EmptyStateView(
                         icon: errorText == nil ? "person.crop.rectangle.stack" : "wifi.exclamationmark",
                         title: errorText == nil ? "还没有人物收藏" : "人物收藏加载失败",
-                        message: errorText ?? "在 Bangumi 网页收藏角色或人物后，会显示在这里。",
+                        message: errorText ?? "收藏角色或人物后，会显示在这里。",
                         actionTitle: errorText == nil ? nil : "重试"
                     ) {
                         Task { await load(force: true) }
@@ -69,7 +69,7 @@ struct PeopleCollectionView: View {
         .background(Color.bgmBackground)
         .scrollIndicators(.hidden)
         .bgmNavigationTitle("人物收藏")
-        .bgmWebFallback(URL(string: "https://bgm.tv/user/\(username)/mono")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/user/\(username)/mono")!, isPresented: errorText != nil)
         .task(id: username) { await load() }
         .refreshable { await load(force: true) }
     }

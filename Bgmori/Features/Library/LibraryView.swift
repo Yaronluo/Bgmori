@@ -306,7 +306,6 @@ struct LibraryView: View {
             removalTarget = item
             showRemoval = true
         }
-        Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/subject/\(item.subjectId)")!)
     }
 
     private func actionsMenu(for item: UserSubjectCollection) -> some View {

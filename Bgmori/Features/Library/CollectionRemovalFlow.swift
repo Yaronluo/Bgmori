@@ -18,7 +18,7 @@ struct CollectionRemovalFlow: ViewModifier {
     func body(content: Content) -> some View {
         content
             .confirmationDialog("移除《\(title)》的收藏", isPresented: $isPresented, titleVisibility: .visible) {
-                Button("前往 Bangumi 移除") {
+                Button("前往移除") {
                     openURL(URL(string: "https://bgm.tv/subject/\(subjectID)")!) { accepted in
                         awaitingReturn = accepted
                         if !accepted { app.showToast("无法打开浏览器，请稍后重试。", isError: true) }
@@ -26,7 +26,7 @@ struct CollectionRemovalFlow: ViewModifier {
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("Bangumi 暂未开放删除收藏接口。请在网页中登录同一账号，在收藏区域选择移除；返回后会自动同步。")
+                Text("暂未开放删除收藏接口。请在网页中登录同一账号，在收藏区域选择移除；返回后会自动同步。")
             }
             .alert("收藏同步失败", isPresented: Binding(
                 get: { errorText != nil },
@@ -52,7 +52,7 @@ struct CollectionRemovalFlow: ViewModifier {
     private func refresh() async {
         guard !isRefreshing else { return }
         guard let username = app.auth.username else {
-            errorText = "请先登录 Bangumi，再下拉刷新收藏。"
+            errorText = "请先登录，再下拉刷新收藏。"
             return
         }
         isRefreshing = true

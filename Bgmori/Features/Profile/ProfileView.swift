@@ -123,7 +123,7 @@ struct ProfileView: View {
     private var actionsRow: some View {
         HStack(spacing: 10) {
             if app.isGuest {
-                primaryAction("登录 Bangumi", systemImage: "person.crop.circle.badge.checkmark") {
+                primaryAction("登录", systemImage: "person.crop.circle.badge.checkmark") {
                     app.showLogin = true
                 }
                 .accessibilityIdentifier("profile-login")
@@ -201,7 +201,7 @@ struct ProfileView: View {
     }
 
     private var displayName: String {
-        if app.isGuest { return "我的 Bangumi" }
+        if app.isGuest { return "我的" }
         return app.auth.user?.displayName ?? app.auth.displayName
     }
 
@@ -588,7 +588,7 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 14) {
             ProfileSectionHeader(
                 title: "社区",
-                subtitle: isSignedIn ? "好友、小组与我的记录" : "在 Bangumi 发现同好"
+                subtitle: isSignedIn ? "好友、小组与我的记录" : "发现同好"
             )
 
             LazyVGrid(columns: featureColumns, spacing: 12) {

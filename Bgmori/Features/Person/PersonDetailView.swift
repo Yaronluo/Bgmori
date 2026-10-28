@@ -55,7 +55,7 @@ struct PersonDetailView: View {
                 .disabled(isSaving)
             }
         }
-        .bgmWebFallback(URL(string: "https://bgm.tv/\(kind == .character ? "character" : "person")/\(id)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/\(kind == .character ? "character" : "person")/\(id)")!, isPresented: errorText != nil || relatedError != nil)
         .task(id: "\(kind.rawValue)-\(id)") {
             prepareIfNeeded()
             await load()

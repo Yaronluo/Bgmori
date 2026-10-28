@@ -28,7 +28,7 @@ struct SettingsView: View {
                         icon: "character.book.closed.fill",
                         tint: .collectionTint(1),
                         title: "优先显示中文名",
-                        subtitle: "标题优先使用 Bangumi 中文名"
+                        subtitle: "标题优先使用中文名"
                     ) {
                         Toggle("优先显示中文名", isOn: $settings.preferChineseName)
                             .labelsHidden()
@@ -370,6 +370,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Bgmori 是非官方第三方客户端，与 Bangumi 官方无关联。所有条目、评分、评论版权归 Bangumi 及原作者所有。")
+                Text("播放时刻由 bgmlist 提供，数据来自 bangumi-data（CC BY 4.0）。")
                 Text("镜像仅用于数据、图片和网页访问；登录与收藏凭证只发送到官方或明确配置的自定义服务。")
             }
             .font(.caption)
@@ -417,13 +418,13 @@ struct ConnectionSettingsView: View {
                          ? "有系统代理时优先通过代理连接官网；无代理时优先使用 ECH。连接失败后尝试其他可用线路，账号凭证只发往官网。"
                          : (draft.mode == .encrypted
                             ? "强制使用 ECH 并绑定实际网络接口，不经过 HTTP 代理或社区镜像。无法建立加密握手时直接报错。"
-                            : "仅使用 Bangumi 官方服务，有系统代理时优先使用代理，也支持 ECH 加密直连。"))
+                            : "仅使用官方服务，有系统代理时优先使用代理，也支持 ECH 加密直连。"))
                         .font(.caption)
                         .foregroundStyle(Color.bgmMuted)
                 }
                 Toggle("加密 DNS（实验）", isOn: $draft.encryptedDNS)
                     .accessibilityIdentifier("connection-encrypted-dns")
-                Text("此开关仅影响普通连接。ECH 直连会独立获取加密握手配置，不依赖 Bangumi 的系统 DNS 解析。")
+                Text("此开关仅影响普通连接。ECH 直连会独立获取加密握手配置，不依赖服务域名的系统 DNS 解析。")
                     .font(.caption)
                     .foregroundStyle(Color.bgmMuted)
                 Button(isSaving ? "正在保存…" : "保存连接设置") {

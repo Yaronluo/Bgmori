@@ -202,7 +202,7 @@ struct MacShell: View {
                             Text(app.isGuest ? "游客模式" : app.displayName)
                                 .font(.subheadline.weight(.medium))
                             if app.isGuest {
-                                Button("登录 Bangumi") { app.showLogin = true }
+                                Button("登录") { app.showLogin = true }
                                     .buttonStyle(.link)
                                     .font(.caption)
                             }

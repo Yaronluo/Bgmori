@@ -93,7 +93,7 @@ struct EpisodeDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/ep/\(episodeID)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/ep/\(episodeID)")!, isPresented: errorText != nil || commentsError != nil)
         .task(id: episodeID) {
             prepareIfNeeded()
             await load()

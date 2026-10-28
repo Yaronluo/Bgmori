@@ -23,7 +23,7 @@ struct RatingsView: View {
     var body: some View {
         Group {
             if app.isGuest {
-                LoginPromptView(title: "登录后查看评分", message: "评分与短评会跟随你的 Bangumi 账号同步。") {
+                LoginPromptView(title: "登录后查看评分", message: "评分与短评会跟随你的账号同步。") {
                     app.showLogin = true
                 }
             } else {

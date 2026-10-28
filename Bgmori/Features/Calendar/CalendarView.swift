@@ -126,10 +126,7 @@ struct CalendarView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if filteredItems.contains(where: { app.calendarAirings[$0.id] != nil }) {
-                    HStack(spacing: 5) {
-                        Text("北京时间 ·")
-                        Link("bgmlist", destination: URL(string: "https://bgmlist.com")!)
-                    }
+                    Text("北京时间")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }

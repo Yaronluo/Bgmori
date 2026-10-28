@@ -190,7 +190,7 @@ struct SearchLandingView: View {
     private var trendingSection: some View {
         if !trending.isEmpty || isLoadingTrending || trendingError != nil {
             VStack(alignment: .leading, spacing: 14) {
-                SearchLandingHeader(title: "本周热门", subtitle: "Bangumi 动画热度")
+                SearchLandingHeader(title: "本周热门", subtitle: "动画热度")
 
                 if !trending.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {

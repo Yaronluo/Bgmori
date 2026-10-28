@@ -32,7 +32,7 @@ final class AuthManager {
     }
 
     var isLoggedIn: Bool { token?.isEmpty == false }
-    var displayName: String { user?.displayName ?? "Bangumi 用户" }
+    var displayName: String { user?.displayName ?? "用户" }
     var username: String? { user?.username }
 
     func restore() async {
@@ -49,7 +49,7 @@ final class AuthManager {
         catch APIError.unauthorized {
             signOut()
             errorMessage = "登录已失效，请重新登录"
-        } catch { errorMessage = "暂时无法连接 Bangumi，已保留登录状态" }
+        } catch { errorMessage = "暂时无法连接服务，已保留登录状态" }
     }
 
     func prepareLogin() async {

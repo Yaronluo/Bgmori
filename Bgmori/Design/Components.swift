@@ -458,7 +458,7 @@ struct FlowLayout: Layout {
 struct LoginPromptView: View {
     let title: String
     let message: String
-    var actionTitle = "登录 Bangumi"
+    var actionTitle = "登录"
     var action: () -> Void
 
     var body: some View {
@@ -802,11 +802,13 @@ struct PaginationFooter: View {
 }
 
 extension View {
-    func bgmWebFallback(_ url: URL) -> some View {
+    func bgmWebFallback(_ url: URL, isPresented: Bool) -> some View {
         toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu("更多", systemImage: "ellipsis") {
-                    Link("在 Safari 中打开", destination: url)
+            if isPresented {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu("更多", systemImage: "ellipsis") {
+                        Link("在浏览器中查看", destination: url)
+                    }
                 }
             }
         }

@@ -117,8 +117,6 @@ struct CategoryView: View {
                     }
                 }
                 .pickerStyle(.inline)
-                Divider()
-                Link("在浏览器中查看", destination: query.browserURL)
             } label: {
                 filterLabel(store.sort.title, icon: "arrow.up.arrow.down")
             }
@@ -360,9 +358,6 @@ private struct CategoryFilterSheet: View {
         Menu {
             Button("同步官网分类", systemImage: "arrow.clockwise") {
                 Task { await store.loadFilters(for: store.type, force: true) }
-            }
-            Link(destination: store.type.browserURL) {
-                Label("在浏览器中查看", systemImage: "safari")
             }
         } label: {
             Image(systemName: "ellipsis")

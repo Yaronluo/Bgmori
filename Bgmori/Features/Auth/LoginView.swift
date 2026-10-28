@@ -31,7 +31,7 @@ struct LoginView: View {
                             .resizable().scaledToFit().frame(width: 68, height: 68)
                             .clipShape(RoundedRectangle(cornerRadius: 17))
                             .accessibilityHidden(true)
-                        Text("登录 Bangumi").font(.title2.bold())
+                        Text("登录").font(.title2.bold())
                         Text("同步你的收藏、评分与观看进度")
                             .font(.subheadline).foregroundStyle(Color.bgmMuted)
                     }
@@ -90,8 +90,6 @@ struct LoginView: View {
                             .font(.footnote).foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("login-error")
-                        Link("查看 Bangumi 官网", destination: URL(string: "https://bgm.tv/login")!)
-                            .font(.footnote)
                     }
                 }
 

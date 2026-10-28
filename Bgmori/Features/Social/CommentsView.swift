@@ -43,7 +43,6 @@ struct CommentsView: View {
                                     } label: {
                                         Label("屏蔽 \(comment.name)", systemImage: "person.crop.circle.badge.xmark")
                                     }
-                                    Link("在 Bangumi 查看", destination: URL(string: "https://bgm.tv/subject/\(subjectID)/comments")!)
                                 }
                             Divider().padding(.leading, 62)
                         }
@@ -63,7 +62,7 @@ struct CommentsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: episodeID.map { "https://bgm.tv/ep/\($0)" } ?? "https://bgm.tv/subject/\(subjectID)/comments")!)
+        .bgmWebFallback(URL(string: episodeID.map { "https://bgm.tv/ep/\($0)" } ?? "https://bgm.tv/subject/\(subjectID)/comments")!, isPresented: errorText != nil)
         .task {
             await load(page: 1)
         }

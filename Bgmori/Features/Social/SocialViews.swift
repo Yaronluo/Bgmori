@@ -87,7 +87,7 @@ struct GroupListView: View {
                     }
 
                     if home.groups.isEmpty && home.topics.isEmpty {
-                        EmptyStateView(icon: "person.3", title: "暂无内容", message: "可从右上角菜单打开网页。")
+                        EmptyStateView(icon: "person.3", title: "暂无内容", message: "")
                     }
                 } else if isLoading {
                     ProgressView("加载小组…")
@@ -109,7 +109,7 @@ struct GroupListView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/group")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/group")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -168,7 +168,7 @@ struct GroupDetailView: View {
                     .padding(.top, 10)
 
                     if detail.topics.isEmpty {
-                        EmptyStateView(icon: "text.bubble", title: "暂无话题", message: "可从右上角菜单打开网页。")
+                        EmptyStateView(icon: "text.bubble", title: "暂无话题", message: "")
                     } else {
                         VStack(spacing: 0) {
                             ForEach(detail.topics) { topic in
@@ -216,7 +216,7 @@ struct GroupDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/group/\(groupName)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/group/\(groupName)")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -315,7 +315,7 @@ struct TopicDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/group/topic/\(topicID)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/group/topic/\(topicID)")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -410,7 +410,7 @@ struct BlogListView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/blog")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/blog")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -498,7 +498,7 @@ struct BlogDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/blog/\(blogID)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/blog/\(blogID)")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -573,7 +573,7 @@ struct TimelineView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/user/\(username)/timeline")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/user/\(username)/timeline")!, isPresented: errorText != nil)
         .task { await load() }
     }
 

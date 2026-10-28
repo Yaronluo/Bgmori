@@ -244,7 +244,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(
                 title: "口碑佳作",
-                subtitle: "Bangumi 动画排行榜",
+                subtitle: "动画排行榜",
                 actionTitle: "完整榜单"
             ) {
                 app.openCategory(sort: .rank)
@@ -294,7 +294,7 @@ struct HomeView: View {
                     .background(Color.brandPink.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("登录 Bangumi")
+                    Text("登录")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text("同步收藏、观看进度与每日放送提醒")

@@ -73,7 +73,7 @@ struct IndexDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/index/\(indexID)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/index/\(indexID)")!, isPresented: errorText != nil)
         .task { await load() }
     }
 
@@ -146,7 +146,7 @@ struct RevisionsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .bgmWebFallback(URL(string: "https://bgm.tv/subject/\(subjectID)")!)
+        .bgmWebFallback(URL(string: "https://bgm.tv/subject/\(subjectID)")!, isPresented: errorText != nil)
         .task { await load() }
     }
 

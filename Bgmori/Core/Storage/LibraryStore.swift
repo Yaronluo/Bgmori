@@ -217,7 +217,7 @@ final class LibraryStore {
 
     func setEpisode(subject: Subject, episode: Episode, type: Int) async {
         guard auth.isLoggedIn, let username = auth.username else {
-            lastError = "请先登录 Bangumi"
+            lastError = "请先登录"
             return
         }
         let oldType = episodeTypes[subject.id]?[episode.id] ?? 0
@@ -260,7 +260,7 @@ final class LibraryStore {
 
     func setProgress(subject: Subject, episodes: [Episode], watchedCount: Int) async {
         guard auth.isLoggedIn, let username = auth.username else {
-            lastError = "请先登录 Bangumi"
+            lastError = "请先登录"
             return
         }
         let mainEpisodes = episodes.filter { $0.type == 0 }.sorted { $0.sort < $1.sort }

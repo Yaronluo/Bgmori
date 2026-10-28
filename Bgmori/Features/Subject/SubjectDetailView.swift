@@ -111,7 +111,6 @@ struct SubjectDetailView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Link("在 Safari 打开", destination: subject.url ?? URL(string: "https://bgm.tv/subject/\(subjectID)")!)
                         Button {
                             app.router.push(.revisions(subjectID))
                         } label: {
@@ -174,7 +173,6 @@ struct SubjectDetailView: View {
 
                     tagsRow(subject)
                     cards(subject)
-                    footer(subject)
                 }
                 .padding(.horizontal, pageMargin)
                 .padding(.top, pageTopPadding)
@@ -470,7 +468,7 @@ struct SubjectDetailView: View {
     private func ratingDetailText(_ rating: Rating) -> String {
         var parts = ["\(rating.total.formatted()) 人评分"]
         if let rank = rating.rank, rank > 0 {
-            parts.append("Bangumi 排名 #\(rank.formatted())")
+            parts.append("排名 #\(rank.formatted())")
         }
         return parts.joined(separator: " · ")
     }
@@ -1244,10 +1242,10 @@ struct SubjectDetailView: View {
 
     @ViewBuilder
     private var commentAccessory: some View {
-        if comments.isEmpty {
+        if comments.isEmpty && commentsError != nil {
             Link("在网页查看", destination: URL(string: "https://bgm.tv/subject/\(subjectID)/comments")!)
                 .font(.system(size: 11, weight: .medium))
-        } else {
+        } else if !comments.isEmpty {
             NavigationLink(value: Route.comments(subjectID)) {
                 HStack(spacing: 2) {
                     Text("查看全部")
@@ -1258,20 +1256,6 @@ struct SubjectDetailView: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    private func footer(_ subject: Subject) -> some View {
-        HStack(spacing: 8) {
-            Link(destination: subject.url ?? URL(string: "https://bgm.tv/subject/\(subjectID)")!) {
-                Label("在 Bangumi 查看", systemImage: "arrow.up.right.square")
-            }
-            Spacer()
-            Text("ID \(subject.id)")
-                .monospacedDigit()
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .padding(.top, 2)
     }
 
     // MARK: - Bottom bar

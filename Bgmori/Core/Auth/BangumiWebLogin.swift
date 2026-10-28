@@ -5,7 +5,7 @@ enum BangumiLoginError: LocalizedError {
     case websiteChanged, rejected(String), tokenCreation, accountCheck
     var errorDescription: String? {
         switch self {
-        case .websiteChanged: "Bangumi 登录页面暂时无法识别，请稍后重试或查看官网"
+        case .websiteChanged: "登录页面暂时无法识别，请稍后重试"
         case .rejected(let message): message
         case .tokenCreation: "已登录官网，但生成登录凭证未完成，请重试"
         case .accountCheck: "登录凭证暂时无法验证，请重试"
@@ -97,7 +97,7 @@ actor BangumiWebLogin {
         startingID = id
         session = nil
         let routes = await api.webLoginRoutes()
-        var lastError: Error = APIError.network("无法连接 Bangumi 登录服务，请检查网络后重试")
+        var lastError: Error = APIError.network("无法连接登录服务，请检查网络后重试")
         for route in routes {
             let candidate = Session(id: id, route: route)
             do {
