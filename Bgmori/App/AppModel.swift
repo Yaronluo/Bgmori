@@ -18,6 +18,10 @@ final class AppModel {
     var isLoadingCalendar = false
     var hasLoadedCalendar = false
     var calendarError: String?
+    private(set) var calendarAirings: [Int: BgmlistAiring] = [:]
+    private(set) var calendarTimesError: String?
+    private var calendarTimesTask: Task<Void, Never>?
+    private var didLoadCalendarTimes = false
     private(set) var homeContentVersion = 0
     var ranking: [Subject] = []
     var seasonal: [Subject] = []
@@ -301,6 +305,45 @@ final class AppModel {
         #endif
     }
     #endif
+
+    func loadCalendarTimes(force: Bool = false) async {
+        if let calendarTimesTask {
+            await calendarTimesTask.value
+            if !force { return }
+        }
+        guard force || !didLoadCalendarTimes else { return }
+        // The Mac navigation shell can replace its initial CalendarView task.
+        // Own this supplementary read until it finishes instead of losing its clock data.
+        let task = Task {
+            await self.fetchCalendarTimes(force: force)
+            self.calendarTimesTask = nil
+        }
+        calendarTimesTask = task
+        await task.value
+    }
+
+    private func fetchCalendarTimes(force: Bool) async {
+        didLoadCalendarTimes = true
+        calendarTimesError = nil
+
+        if !force, let hit = await api.cachedBgmlistSchedule() {
+            calendarAirings = hit.value.airings()
+            if hit.isFresh { return }
+            guard await api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 300) else { return }
+        }
+        do {
+            calendarAirings = try await api.bgmlistSchedule(force: force).airings()
+        } catch {
+            guard !Task.isCancelled else { return }
+            calendarTimesError = "播放时刻更新失败，已保留现有内容"
+        }
+    }
+
+    func refreshCalendar() async {
+        async let list: Void = loadCalendar(force: true)
+        async let times: Void = loadCalendarTimes(force: true)
+        _ = await (list, times)
+    }
 
     func loadCalendar(force: Bool = false, silently: Bool = false) async {
         guard force || !didLoadCalendar else { return }

@@ -24,6 +24,15 @@ struct CalendarView: View {
                         }
                         scheduleHeader
                             .id("calendar-top")
+                        if let error = app.calendarTimesError {
+                            VStack(alignment: .leading, spacing: 6) {
+                                RefreshFailureNotice(message: error) {
+                                    Task { await app.loadCalendarTimes(force: true) }
+                                }
+                                Link("在网页查看播放时刻", destination: URL(string: "https://bgmlist.com")!)
+                                    .font(.caption)
+                            }
+                        }
                         scheduleContent
                     }
                     .frame(width: contentWidth, alignment: .leading)
@@ -33,7 +42,7 @@ struct CalendarView: View {
                 }
                 .scrollIndicators(.hidden)
                 .refreshable {
-                    await app.loadCalendar(force: true)
+                    await app.refreshCalendar()
                 }
                 .onChange(of: selectedWeekday) { _, _ in
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
@@ -68,7 +77,7 @@ struct CalendarView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task {
-                        await app.loadCalendar(force: true)
+                        await app.refreshCalendar()
                         await app.updateDailyReminder()
                     }
                 } label: {
@@ -79,9 +88,11 @@ struct CalendarView: View {
             }
         }
         .task {
+            async let times: Void = app.loadCalendarTimes()
             if app.calendar.isEmpty {
                 await app.loadCalendar()
             }
+            await times
         }
     }
 
@@ -114,6 +125,14 @@ struct CalendarView: View {
                 Text(daySummary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if filteredItems.contains(where: { app.calendarAirings[$0.id] != nil }) {
+                    HStack(spacing: 5) {
+                        Text("北京时间 ·")
+                        Link("bgmlist", destination: URL(string: "https://bgmlist.com")!)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
             if selectedWeekday != app.todayWeekday {
@@ -247,7 +266,9 @@ struct CalendarView: View {
                 NavigationLink(value: Route.subject(item.id)) {
                     CalendarAiringRow(
                         item: item,
-                        collection: app.library.collection(for: item.id)
+                        collection: app.library.collection(for: item.id),
+                        airing: app.calendarAirings[item.id],
+                        calendarWeekday: selectedWeekday
                     )
                 }
                 .buttonStyle(.plain)
@@ -346,6 +367,8 @@ private struct WeekdayChip: View {
 private struct CalendarAiringRow: View {
     let item: LegacySubject
     let collection: UserSubjectCollection?
+    let airing: BgmlistAiring?
+    let calendarWeekday: Int
 
     private var isWatching: Bool {
         collection?.collectionType == .doing
@@ -378,6 +401,13 @@ private struct CalendarAiringRow: View {
                     .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let airing {
+                    Text(airing.label(for: calendarWeekday))
+                        .font(metaFont.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color.brandPink)
+                        .accessibilityIdentifier("calendar-airtime-\(item.id)")
+                }
 
                 HStack(spacing: 6) {
                     if isWatching {

@@ -326,6 +326,30 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testCalendarAiringTimesLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("calendar", appearance: appearance)
+            let wednesday = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "星期三，")).firstMatch
+            XCTAssertTrue(wednesday.waitForExistence(timeout: 60))
+            #if os(macOS)
+            wednesday.click()
+            #else
+            wednesday.tap()
+            #endif
+            let detective = app.buttons["calendar-row-393010"].firstMatch
+            let clock = NSPredicate(format: "label CONTAINS %@", "21:30 播出")
+            expectation(for: clock, evaluatedWith: detective)
+            waitForExpectations(timeout: 40)
+            XCTAssertTrue(app.staticTexts["北京时间 ·"].exists)
+            XCTAssertTrue(detective.label.contains("10月7日开播"), "Keep the premiere date alongside the clock")
+            XCTAssertFalse(app.buttons["calendar-row-975"].firstMatch.label.contains("播出"),
+                           "An unmatched catalogue entry must not receive an invented clock")
+            snapshot("calendar-airing-times-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testCalendarTabLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch("calendar", appearance: appearance)

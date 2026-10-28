@@ -334,6 +334,33 @@ actor APIClient {
         }
     }
 
+    // MARK: - Public airing clock (no Bangumi credentials or mirror substitution)
+
+    func cachedBgmlistSchedule() async -> CacheHit<BgmlistSchedule>? {
+        await cachedValue(cacheKey: BgmlistSchedule.cacheKey, ttl: BgmlistSchedule.ttl,
+                          maxStale: BgmlistSchedule.maxStale, as: BgmlistSchedule.self)
+    }
+
+    func bgmlistSchedule(force: Bool = false) async throws -> BgmlistSchedule {
+        if Task.isCancelled { throw APIError.cancelled }
+        if !force, let hit = await cachedBgmlistSchedule(), hit.isFresh { return hit.value }
+        do {
+            let data = try await requestData(
+                path: "/api/v1/bangumi/onair", method: "GET", query: [], body: nil,
+                auth: false, coalesce: !force, resetBackoff: force,
+                base: URL(string: "https://bgmlist.com")!
+            )
+            if Task.isCancelled { throw APIError.cancelled }
+            let value = try decode(BgmlistSchedule.self, from: data)
+            await cache.write(BgmlistSchedule.cacheKey, data: data)
+            return value
+        } catch {
+            if Task.isCancelled || Self.isCancellation(error) { throw APIError.cancelled }
+            if !force, let hit = await cachedBgmlistSchedule() { return hit.value }
+            throw error
+        }
+    }
+
     // MARK: - Mutations
 
     func post<B: Encodable & Sendable, T: Decodable & Sendable>(

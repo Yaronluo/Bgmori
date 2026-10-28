@@ -875,6 +875,68 @@ struct Weekday: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+/// The on-air feed supplies a weekly clock, not a per-episode release guarantee.
+struct BgmlistSchedule: Decodable, Sendable {
+    struct Item: Decodable, Sendable {
+        struct Site: Decodable, Sendable {
+            let site: String
+            let id: String
+        }
+        let broadcast: String?
+        let end: String?
+        let sites: [Site]
+    }
+
+    let items: [Item]
+    static let cacheKey = "bgmlist-onair-v1"
+    static let ttl: TimeInterval = 21_600
+    static let maxStale: TimeInterval = 172_800
+
+    func airings(asOf date: Date = .now) -> [Int: BgmlistAiring] {
+        var result: [Int: BgmlistAiring] = [:]
+        for item in items {
+            if let end = item.end, let ended = Self.parseDate(end), ended <= date { continue }
+            guard let broadcast = item.broadcast else { continue }
+            let parts = broadcast.split(separator: "/", omittingEmptySubsequences: false)
+            // Never infer a repeating clock from a premiere date or an unknown cadence.
+            guard parts.count == 3, parts[0] == "R", parts[2] == "P7D",
+                  let anchor = Self.parseDate(String(parts[1])) else { continue }
+            for site in item.sites where site.site == "bangumi" {
+                guard let id = Int(site.id), id > 0 else { continue }
+                if let previous = result[id], previous.anchor > anchor { continue }
+                result[id] = BgmlistAiring(anchor: anchor)
+            }
+        }
+        return result
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
+}
+
+struct BgmlistAiring: Equatable, Sendable {
+    let anchor: Date
+
+    private var components: DateComponents {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar.dateComponents([.weekday, .hour, .minute], from: anchor)
+    }
+
+    var weekday: Int { ((components.weekday! + 5) % 7) + 1 }
+    var clockTime: String { String(format: "%02d:%02d", components.hour!, components.minute!) }
+
+    func label(for calendarWeekday: Int) -> String {
+        let day = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][weekday - 1]
+        return weekday == calendarWeekday ? "\(clockTime) 播出" : "\(day) \(clockTime) 播出"
+    }
+}
+
 struct CalendarDay: Codable, Identifiable, Sendable {
     let weekday: Weekday
     let items: [LegacySubject]
