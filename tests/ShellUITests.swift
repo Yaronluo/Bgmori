@@ -422,6 +422,89 @@ final class ShellUITests: XCTestCase {
         snapshot("episode-comments", app: app)
     }
     @MainActor
+    func testSubjectSectionPreviewsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("subject:8", appearance: appearance)
+            let episodes = app.buttons["episode-section-toggle"]
+            let characters = app.buttons["character-section-toggle"]
+            let episodeLinks = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "episode-link-")
+            )
+            let characterLinks = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "character-link-")
+            )
+            XCTAssertTrue(app.staticTexts["简介"].waitForExistence(timeout: 60))
+            revealSubjectSection(episodes, app: app)
+            XCTAssertEqual(episodes.value as? String, "已收起")
+            XCTAssertEqual(episodeLinks.count, 3)
+            XCTAssertTrue(episodeLinks.firstMatch.exists)
+
+            toggleSubjectSection(episodes, app: app)
+            XCTAssertTrue(episodeLinks.element(boundBy: 3).waitForExistence(timeout: 5))
+            XCTAssertEqual(episodes.value as? String, "已展开")
+            XCTAssertEqual(characters.value as? String, "已收起")
+            snapshot("subject-episodes-expanded-\(appearance)", app: app)
+            toggleSubjectSection(episodes, app: app)
+            XCTAssertEqual(episodeLinks.count, 3)
+
+            revealSubjectSection(characters, app: app)
+            XCTAssertTrue(characterLinks.firstMatch.waitForExistence(timeout: 10))
+            let previewCount = characterLinks.count
+            XCTAssertGreaterThan(previewCount, 0)
+            #if os(iOS)
+            XCTAssertEqual(previewCount, 3)
+            #endif
+            let firstRowTop = characterLinks.firstMatch.frame.minY
+            for index in 0..<previewCount {
+                XCTAssertEqual(characterLinks.element(boundBy: index).frame.minY, firstRowTop, accuracy: 1)
+            }
+            snapshot("subject-sections-preview-\(appearance)", app: app)
+            toggleSubjectSection(characters, app: app)
+            let extraCharacter = characterLinks.element(boundBy: previewCount)
+            revealSubjectSection(extraCharacter, app: app)
+            XCTAssertTrue(extraCharacter.exists)
+            XCTAssertEqual(characters.value as? String, "已展开")
+            XCTAssertEqual(episodes.value as? String, "已收起")
+            snapshot("subject-characters-expanded-\(appearance)", app: app)
+            toggleSubjectSection(characters, app: app)
+            XCTAssertEqual(characterLinks.count, previewCount)
+            XCTAssertEqual(episodeLinks.count, 3)
+            snapshot("subject-sections-preview-restored-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func revealSubjectSection(_ element: XCUIElement, app: XCUIApplication) {
+        for _ in 0..<20 {
+            #if os(iOS)
+            // isHittable can include a header covered by the floating bottom bar.
+            if element.exists, element.isHittable,
+               element.frame.minY > 130, element.frame.maxY < app.frame.maxY - 140 { return }
+            let needsEarlierContent = element.exists && element.frame.minY <= 130
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: needsEarlierContent ? 0.4 : 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: needsEarlierContent ? 0.65 : 0.45))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            #else
+            if element.isHittable { return }
+            let needsEarlierContent = element.exists && element.frame.minY < app.windows.firstMatch.frame.minY + 80
+            app.scrollViews.element(boundBy: 1).scroll(byDeltaX: 0, deltaY: needsEarlierContent ? 250 : -350)
+            #endif
+        }
+        XCTFail("Subject section did not become visible: \(element.identifier)")
+    }
+
+    @MainActor
+    private func toggleSubjectSection(_ element: XCUIElement, app: XCUIApplication) {
+        revealSubjectSection(element, app: app)
+        #if os(macOS)
+        element.click()
+        #else
+        element.tap()
+        #endif
+    }
+
+    @MainActor
     func testSubjectCommentsPreview() {
         let app = launch("subject:317613")
         let comment = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "comment-text-317613-")).firstMatch

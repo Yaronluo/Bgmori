@@ -28,6 +28,8 @@ struct SubjectDetailView: View {
     @State private var selectedEpisodeType = 0
     @State private var showCollectionEditor = false
     @State private var synopsisExpanded = false
+    @State private var episodesExpanded = false
+    @State private var charactersExpanded = false
     @State private var expandedInfoKeys: Set<String> = []
     @State private var commentsLoading = true
     @State private var commentsError: String?
@@ -39,6 +41,7 @@ struct SubjectDetailView: View {
     @State private var loadedSubjectID: Int?
     @State private var commentsSubjectID: Int?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isWideLayout: Bool {
         #if os(macOS)
@@ -770,13 +773,50 @@ struct SubjectDetailView: View {
         }
     }
 
+    private func sectionExpansionButton<Label: View>(
+        isExpanded: Binding<Bool>, identifier: String, @ViewBuilder label: () -> Label
+    ) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                isExpanded.wrappedValue.toggle()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                label()
+                HStack(spacing: 5) {
+                    Text(isExpanded.wrappedValue ? "收起" : "展开全部")
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            }
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isExpanded.wrappedValue ? "已展开" : "已收起")
+        .accessibilityIdentifier(identifier)
+    }
+
     // MARK: - Episodes
 
     @ViewBuilder
     private func episodeCard(_ subject: Subject) -> some View {
         if !episodes.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                episodeHeader(subject)
+                if filteredEpisodes.count > 3 {
+                    sectionExpansionButton(isExpanded: $episodesExpanded, identifier: "episode-section-toggle") {
+                        episodeHeader(subject)
+                    }
+                } else {
+                    episodeHeader(subject)
+                }
+
+                if app.auth.isLoggedIn {
+                    episodeProgress(subject)
+                }
 
                 if episodeTypeOptions.count > 1 {
                     TextTabs(
@@ -790,24 +830,19 @@ struct SubjectDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if app.auth.isLoggedIn {
-                    episodeProgress(subject)
-                }
-
                 VStack(spacing: 0) {
-                    ForEach(Array(filteredEpisodes.indices), id: \.self) { index in
+                    ForEach(Array(visibleEpisodes.enumerated()), id: \.element.id) { index, episode in
                         if index > 0 {
                             Divider()
                                 .opacity(0.45)
                                 .padding(.leading, 62)
                         }
-                        episodeRow(subject, episode: filteredEpisodes[index])
+                        episodeRow(subject, episode: episode)
                     }
                 }
                 .padding(.top, -2)
             }
             .padding(.vertical, 2)
-            .accessibilityIdentifier("episode-section")
         } else if let error = sectionErrors[.episodes] {
             sectionErrorCard("章节", message: error) {
                 Task { await loadEpisodesSection(force: true) }
@@ -883,6 +918,7 @@ struct SubjectDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("episode-link-\(episode.id)")
         }
         #if os(iOS)
         .frame(minHeight: 44)
@@ -966,6 +1002,10 @@ struct SubjectDetailView: View {
         Array(Set(episodes.map(\.type))).sorted()
     }
 
+    private var visibleEpisodes: [Episode] {
+        Array(filteredEpisodes.prefix(episodesExpanded ? filteredEpisodes.count : 3))
+    }
+
     private var filteredEpisodes: [Episode] {
         episodes.filter { $0.type == selectedEpisodeType }.sorted { $0.sort < $1.sort }
     }
@@ -990,16 +1030,48 @@ struct SubjectDetailView: View {
 
     // MARK: - Characters & staff
 
+    private var characterColumnCount: Int {
+        let cardWidth = isWideLayout ? contentWidth - 340 : contentWidth - 2 * pageMargin
+        let gridWidth = max(cardWidth - 32, 82)
+        return max(1, Int((gridWidth + 12) / (82 + 12)))
+    }
+
+    private var visibleCharacters: [Character] {
+        Array(characters.prefix(charactersExpanded ? characters.count : characterColumnCount))
+    }
+
+    private var characterHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("角色")
+                #if os(iOS)
+                .font(.system(size: 17, weight: .semibold))
+                #else
+                .font(.system(size: 15, weight: .semibold))
+                #endif
+            Spacer(minLength: 8)
+            accessoryText("\(characters.count) 位")
+        }
+    }
+
     @ViewBuilder
     private var characterCard: some View {
         if !characters.isEmpty {
-            SectionCard("角色", accessory: AnyView(accessoryText("\(characters.count) 位"))) {
+            VStack(alignment: .leading, spacing: 12) {
+                if characters.count > characterColumnCount {
+                    sectionExpansionButton(isExpanded: $charactersExpanded, identifier: "character-section-toggle") {
+                        characterHeader
+                    }
+                } else {
+                    characterHeader
+                }
+
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 82), spacing: 12, alignment: .top)],
+                    columns: Array(repeating: GridItem(.flexible(minimum: 82), spacing: 12, alignment: .top),
+                                   count: characterColumnCount),
                     alignment: .leading,
                     spacing: 14
                 ) {
-                    ForEach(characters) { character in
+                    ForEach(visibleCharacters) { character in
                         NavigationLink(value: Route.character(character.id)) {
                             VStack(alignment: .leading, spacing: 6) {
                                 Color.bgmSecondary.opacity(0.6)
@@ -1031,10 +1103,15 @@ struct SubjectDetailView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("character-link-\(character.id)")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .bgmPanel(cornerRadius: 16)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         } else if let error = sectionErrors[.characters] {
             sectionErrorCard("角色", message: error) {
                 Task { await loadCharactersSection(force: true) }
@@ -1313,6 +1390,8 @@ struct SubjectDetailView: View {
         selectedEpisodeType = 0
         showCollectionEditor = false
         synopsisExpanded = false
+        episodesExpanded = false
+        charactersExpanded = false
     }
 
     private func load() async {
