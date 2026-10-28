@@ -572,7 +572,7 @@ struct SubjectDetailView: View {
                     #if os(macOS)
                     .help("查看标签「\(tag.name)」")
                     #endif
-                    .accessibilityLabel("标签 \(tag.name)，\(tag.count) 部作品")
+                    .accessibilityLabel("标签 \(tag.name)，\(tag.count) 位用户标记本作")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1673,7 +1673,7 @@ private struct SubjectTagChip: View {
                 .font(.system(size: 11.5, weight: .medium))
                 #endif
                 .foregroundStyle(.primary.opacity(0.8))
-            Text("\(count)")
+            Text("\(count) 人")
                 .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                 .foregroundStyle(.tertiary)
         }

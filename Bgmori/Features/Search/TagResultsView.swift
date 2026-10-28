@@ -1,166 +1,96 @@
 import SwiftUI
 
-/// Browse every subject carrying a tag. Opened from the tag chips on a subject page.
 struct TagResultsView: View {
     @Environment(AppModel.self) private var app
     let tag: String
+    @State private var store = TagResultsStore()
+    @State private var columnCount = 3
+    @State private var isNearBottom = false
 
-    @State private var subjects: [Subject] = []
-    @State private var total = 0
-    @State private var isLoading = true
-    @State private var errorText: String?
-
-    private var cardWidth: CGFloat {
-        #if os(iOS)
-        104
-        #else
-        132
-        #endif
-    }
-
-    private var pageMargin: CGFloat {
-        #if os(iOS)
-        18
-        #else
-        0
-        #endif
-    }
-
-    private var webURL: URL {
-        let encoded = tag.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tag
-        return URL(string: "https://bgm.tv/tag/\(encoded)")!
-    }
+    private let cardWidth: CGFloat = 104
+    private var query: TagResultsQuery { TagResultsQuery(tag: tag, includeNSFW: app.settings.showNSFW) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: 18) {
                 header
-
-                if isLoading {
+                if store.isLoading && store.subjects.isEmpty {
                     ProgressView("加载标签…")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 72)
-                } else if let errorText {
-                    EmptyStateView(
-                        icon: "wifi.exclamationmark",
-                        title: "标签加载失败",
-                        message: errorText,
-                        actionTitle: "重试"
-                    ) {
-                        Task { await load() }
+                        .frame(maxWidth: .infinity).padding(.vertical, 72)
+                } else if let error = store.errorText, store.subjects.isEmpty {
+                    EmptyStateView(icon: "wifi.exclamationmark", title: "标签加载失败", message: error, actionTitle: "重试") {
+                        Task { await store.load(query, api: app.api, force: true) }
                     }
-                } else if subjects.isEmpty {
-                    EmptyStateView(
-                        icon: "tag.slash",
-                        title: "没有找到作品",
-                        message: "这个标签下暂时没有公开作品。"
-                    )
+                } else if store.subjects.isEmpty && !store.hasMore {
+                    EmptyStateView(icon: "tag.slash", title: "没有找到作品", message: "这个标签下暂时没有公开作品。")
                 } else {
+                    if store.errorText != nil {
+                        RefreshFailureNotice(message: "刷新失败，请重试") {
+                            Task { await store.load(query, api: app.api, force: true) }
+                        }
+                    }
                     grid
+                    if store.hasMore {
+                        PaginationFooter(offset: store.nextOffset, isLoading: store.isLoadingMore, error: store.pageErrorText,
+                                         retry: { await store.loadMore(query, api: app.api, force: true) }) {
+                            await store.loadMore(query, api: app.api)
+                        }
+                        .id(query.tag + String(query.includeNSFW))
+                    }
                 }
-
-                footer
             }
-            .padding(.horizontal, pageMargin)
+            .padding(.horizontal, 18)
             .padding(.top, 10)
             .padding(.bottom, 28)
             .bgmDesktopContent(maxWidth: 1000)
         }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.height - geometry.visibleRect.maxY < geometry.containerSize.height
+        } action: { _, nearBottom in isNearBottom = nearBottom }
         .scrollIndicators(.hidden)
-        .background(pageBackground)
-        .navigationTitle(navigationTitle)
+        .background(Color.bgmCanvas)
+        .navigationTitle("标签")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .task(id: tag) { await load() }
-    }
-
-    private var navigationTitle: String {
-        #if os(iOS)
-        "标签"
-        #else
-        tag
-        #endif
-    }
-
-    private var pageBackground: Color {
-        #if os(iOS)
-        .bgmBackground
-        #else
-        .bgmCanvas
-        #endif
+        .task(id: query) { await store.load(query, api: app.api) }
+        .onChange(of: prefetchRequest, initial: true) { _, request in
+            guard request.isReady else { return }
+            Task { await store.loadMore(request.query, api: app.api) }
+        }
+        .refreshable { await store.load(query, api: app.api, force: true) }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
-            #if os(iOS)
-            Text(tag)
-                .font(.system(size: 26, weight: .bold))
-                .lineLimit(2)
-                .textSelection(.enabled)
-            #endif
-
-            if total > 0 {
-                Text("共 \(total.formatted()) 部作品")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
+            Text(tag).font(.system(size: 26, weight: .bold)).lineLimit(2).textSelection(.enabled)
         }
     }
 
     private var grid: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 16, alignment: .top)],
-            alignment: .leading,
-            spacing: 22
-        ) {
-            ForEach(subjects) { subject in
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 16, alignment: .top)], alignment: .leading, spacing: 22) {
+            ForEach(store.subjectsForDisplay(columns: columnCount)) { subject in
                 NavigationLink(value: Route.subject(subject.id)) {
-                    SubjectCard(subject: subject, width: cardWidth)
+                    SubjectCard(subject: subject, width: nil)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("tag-subject-\(subject.id)")
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: Int.self) { geometry in
+            max(1, Int((geometry.size.width + 16) / (cardWidth + 16)))
+        } action: { columnCount = $0 }
+        .accessibilityIdentifier("tag-results")
     }
 
-    private var footer: some View {
-        HStack(spacing: 8) {
-            Link(destination: webURL) {
-                Label("在 Bangumi 查看该标签", systemImage: "arrow.up.right.square")
-            }
-            Spacer()
-            if total > subjects.count {
-                Text("仅显示前 \(subjects.count) 部")
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .padding(.top, 2)
+    private struct PrefetchRequest: Equatable {
+        let query: TagResultsQuery
+        let offset: Int
+        let isReady: Bool
     }
 
-    private func load() async {
-        isLoading = true
-        errorText = nil
-        defer { isLoading = false }
-
-        do {
-            var filter = SubjectSearchFilter()
-            filter.tag = [tag]
-            filter.nsfw = app.settings.showNSFW ? nil : false
-            let page = try await app.api.searchSubjects(
-                keyword: "",
-                sort: "heat",
-                filter: filter,
-                limit: 60
-            )
-            subjects = page.data
-            total = page.total
-        } catch {
-            subjects = []
-            total = 0
-            errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
+    private var prefetchRequest: PrefetchRequest {
+        PrefetchRequest(query: query, offset: store.nextOffset,
+                        isReady: isNearBottom && store.hasMore && !store.isLoadingMore && !store.isLoading && store.pageErrorText == nil)
     }
 }

@@ -41,9 +41,9 @@ struct CategoryView: View {
         .scrollIndicators(.hidden)
         .bgmNavigationTitle("分类")
         .task(id: query) { await store.load(query) }
-        .task(id: prefetchRequest) {
-            guard prefetchRequest.isReady else { return }
-            await store.loadMore(query)
+        .onChange(of: prefetchRequest, initial: true) { _, request in
+            guard request.isReady else { return }
+            Task { await store.loadMore(request.query) }
         }
         .refreshable { await store.load(query, force: true) }
         .sheet(isPresented: $showFilters) {
@@ -218,7 +218,7 @@ struct CategoryView: View {
 
     private var prefetchRequest: PrefetchRequest {
         PrefetchRequest(query: query, offset: store.nextOffset,
-                        isReady: isNearBottom && store.hasMore && !store.isLoading
+                        isReady: isNearBottom && store.hasMore && !store.isLoadingMore && !store.isLoading
                             && !store.isRefreshing && store.pageErrorText == nil)
     }
 

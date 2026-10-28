@@ -126,6 +126,15 @@ extension APIClient {
         )
     }
 
+    func tagSubjects(tag: String, includeNSFW: Bool, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
+        var filter = SubjectSearchFilter()
+        filter.tag = [tag]
+        filter.nsfw = includeNSFW ? nil : false
+        let key = "tag-results-v1-\(tag)-\(includeNSFW)-\(offset)"
+        return try await searchSubjects(keyword: "", sort: "heat", filter: filter,
+                                        limit: 24, offset: offset, cacheKey: key, ttl: 1800, force: force)
+    }
+
     func categorySubjects(query: CategoryQuery, limit: Int = 24, offset: Int = 0, force: Bool = false) async throws -> Paged<Subject> {
         if query.sort == .date {
             return try await categoryDateSubjects(query: query, limit: limit, offset: offset, force: force)

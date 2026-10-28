@@ -769,23 +769,34 @@ struct PaginationFooter: View {
     let load: () async -> Void
     @State private var isVisible = false
 
+    private struct Request: Equatable {
+        let offset: Int
+        let isVisible: Bool
+        let isLoading: Bool
+        let error: String?
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary)
                 Button("重试") { Task { await (retry ?? load)() } }
-            } else if isLoading {
-                ProgressView()
             } else {
-                Color.clear.frame(height: 1)
+                ProgressView()
+                    .accessibilityLabel("加载更多")
             }
         }
         .frame(maxWidth: .infinity, minHeight: 44)
         .padding(.vertical, 12)
-        .onScrollVisibilityChange(threshold: 0.1) { isVisible = $0 }
-        .task(id: "\(offset)-\(isVisible)") {
-            guard isVisible, error == nil else { return }
-            await load()
+        .onGeometryChange(for: Bool.self) { geometry in
+            guard let viewport = geometry.bounds(of: .scrollView(axis: .vertical)) else { return false }
+            return CGRect(origin: .zero, size: geometry.size).intersects(viewport)
+        } action: { isVisible = $0 }
+        .onChange(of: Request(offset: offset, isVisible: isVisible, isLoading: isLoading, error: error), initial: true) { _, request in
+            guard request.isVisible, !request.isLoading, request.error == nil else { return }
+            // Do not cancel an in-flight page when its offset or busy state changes.
+            // Recheck after completion even if the footer never leaves the viewport.
+            Task { await load() }
         }
     }
 }

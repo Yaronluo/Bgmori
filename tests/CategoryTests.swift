@@ -90,6 +90,18 @@ private final class TestServer: @unchecked Sendable {
                 return StubResponse(data: data, status: 200, delay: 0.01)
             }
             precondition(filter["nsfw"] as? Bool == false)
+            if filter["type"] == nil {
+                let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                let offset = Int(items.first { $0.name == "offset" }!.value!)!
+                offsets.append(offset)
+                let failed = fail || (offset > 0 && failNextPage)
+                if offset > 0 { failNextPage = false }
+                // The live service caps a requested 24 to 20, and can include duplicates/NSFW rows.
+                let ids = offset == 0 ? Array(1...18) + [1, 19] : [18, 20, 21]
+                let rows: [[String: Any]] = ids.map { ["id": $0, "type": 2, "nsfw": $0 == 19] }
+                let data = try! JSONSerialization.data(withJSONObject: ["data": rows, "total": 23, "limit": 20, "offset": offset])
+                return StubResponse(data: data, status: failed ? 503 : 200, delay: 0.01)
+            }
             let type = (filter["type"] as! [Int])[0]
             precondition(["rank", "heat"].contains(payload["sort"] as! String), "Website sorts must not be sent to search")
             let tag = (filter["tag"] as! [String])[0]
@@ -168,6 +180,25 @@ struct CategoryTests {
         configuration.protocolClasses = [CategoryProtocol.self]
         let cache = DiskCache(namespace: "BgmoriCategoryTests")
         let api = APIClient(session: URLSession(configuration: configuration), cache: cache, routing: MirrorRouting(), discoverMirrors: false)
+        let tags = TagResultsStore()
+        let tagQuery = TagResultsQuery(tag: UUID().uuidString, includeNSFW: false)
+        await tags.load(tagQuery, api: api)
+        precondition(tags.subjects.count == 18 && tags.nextOffset == 20 && tags.hasMore)
+        precondition(tags.subjectsForDisplay(columns: 4).count == 16)
+        CategoryProtocol.server.failOnePage()
+        await tags.loadMore(tagQuery, api: api)
+        precondition(tags.subjects.count == 18 && tags.nextOffset == 20 && tags.pageErrorText != nil)
+        await tags.loadMore(tagQuery, api: api, force: true)
+        precondition(tags.subjects.map(\.id) == Array(1...18) + [20, 21] && !tags.hasMore)
+        precondition(tags.subjectsForDisplay(columns: 3).count == 20)
+        CategoryProtocol.server.setFailure(true)
+        await tags.load(tagQuery, api: api, force: true)
+        precondition(tags.subjects.count == 20 && tags.errorText != nil)
+        let otherTag = TagResultsQuery(tag: UUID().uuidString, includeNSFW: false)
+        await tags.load(otherTag, api: api, force: true)
+        precondition(tags.subjects.isEmpty && tags.errorText != nil)
+        CategoryProtocol.server.setFailure(false)
+        print("PASS: tag clamped page size, offsets, complete rows, filtering, deduplication, retry and refresh preservation")
         let store = CategoryStore(api: api)
         let run = UUID().uuidString
         let query = CategoryQuery(type: .anime, sort: .rank, year: 2020, tag: "\(run)-filters")

@@ -110,6 +110,7 @@ final class CategoryStore {
         let queryChanged = query != currentQuery
         let id = UUID()
         requestID = id
+        isLoadingMore = false
         currentQuery = query
         defer {
             if requestID == id {
