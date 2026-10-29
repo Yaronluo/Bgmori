@@ -13,18 +13,26 @@ private final class TestServer: @unchecked Sendable {
     private var failNextPage = false
     private var emptyResults = false
     private var offsets: [Int] = []
+    private var blockBrowser = false
+    private var browserRequests = 0
 
     var count: Int { lock.withLock { requests } }
     var requestedOffsets: [Int] { lock.withLock { offsets } }
+    var browserCount: Int { lock.withLock { browserRequests } }
 
     func setFailure(_ value: Bool) { lock.withLock { fail = value } }
     func failOnePage() { lock.withLock { failNextPage = true } }
     func setEmptyResults(_ value: Bool) { lock.withLock { emptyResults = value } }
+    func setBrowserBlocked(_ value: Bool) { lock.withLock { blockBrowser = value } }
 
     func response(for request: URLRequest) -> StubResponse {
         lock.withLock {
             requests += 1
             if request.url?.host == "bgm.tv", request.url?.query?.contains("page=") == true {
+                browserRequests += 1
+                if blockBrowser {
+                    return StubResponse(data: Data("<html><title>Just a moment</title>cf-chl-test</html>".utf8), status: 403, delay: 0.01)
+                }
                 let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
                 let page = Int(items.first { $0.name == "page" }!.value!)!
                 if request.url?.path == "/book/browser" {
@@ -136,7 +144,8 @@ private final class TestServer: @unchecked Sendable {
                     ["id": type * 100 + 4, "type": type, "nsfw": false]
                 ]
             }
-            let data = try! JSONSerialization.data(withJSONObject: ["data": rows, "total": 6, "limit": 24, "offset": offset])
+            let datedRows = rows.map { $0.merging(["date": "2020-01-01", "meta_tags": ["TV", "科幻"]]) { _, new in new } }
+            let data = try! JSONSerialization.data(withJSONObject: ["data": datedRows, "total": 6, "limit": 24, "offset": offset])
             return StubResponse(data: data, status: failed ? 503 : 200, delay: (tag.contains("race") || tag.contains("slow")) && type == 2 ? 0.6 : 0.01)
         }
     }
@@ -174,6 +183,10 @@ struct CategoryTests {
         try checkWebsiteSorting()
         if CommandLine.arguments.contains("--live") {
             try await checkLiveData()
+            return
+        }
+        if CommandLine.arguments.contains("--live-filtered") {
+            try await checkLiveFilteredData()
             return
         }
         let configuration = URLSessionConfiguration.ephemeral
@@ -348,6 +361,59 @@ struct CategoryTests {
         await store.load(staleBrowserQuery)
         precondition(store.subjects.map(\.id) == [901] && store.errorText == nil && !store.hasMore)
         print("PASS: a stale website ID is skipped instead of failing the whole category page")
+        CategoryProtocol.server.setBrowserBlocked(true)
+        let blocked = CategoryQuery(type: .anime, sort: .heat, year: 2020, tag: "\(run)-metadata-fallback", metaTags: ["TV", "科幻"])
+        await store.load(blocked, force: true)
+        precondition(store.subjects.map(\.id) == [201] && store.errorText == nil && store.fallbackSort == .collects)
+        precondition(store.sortNotice != nil && store.nextOffset == 4 && store.hasMore)
+        let browserCount = CategoryProtocol.server.browserCount
+        CategoryProtocol.server.failOnePage()
+        await store.loadMore(blocked, force: true)
+        precondition(store.subjects.map(\.id) == [201] && store.pageErrorText != nil && store.nextOffset == 4)
+        await store.loadMore(blocked, force: true)
+        precondition(store.subjects.map(\.id) == [201, 204] && !store.hasMore && store.pageErrorText == nil)
+        precondition(CategoryProtocol.server.browserCount == browserCount, "Fallback pagination must stay on search, including retries")
+        let restored = CategoryStore(api: api)
+        await restored.load(blocked)
+        precondition(restored.subjects.map(\.id) == [201] && restored.fallbackSort == .collects)
+        CategoryProtocol.server.setFailure(true)
+        await restored.load(blocked, force: true)
+        precondition(restored.subjects.map(\.id) == [201] && restored.fallbackSort == .collects && restored.refreshErrorText != nil)
+        CategoryProtocol.server.setFailure(false)
+        CategoryProtocol.server.setBrowserBlocked(false)
+        await store.load(blocked, force: true)
+        precondition(store.fallbackSort == nil && store.sortNotice == nil && store.subjects.contains { $0.id == 701 })
+        print("PASS: verification fallback preserves combined filters, search cursors, retries, cached sort and original-order recovery")
+        await cache.clear()
+    }
+
+    @MainActor
+    private static func checkLiveFilteredData() async throws {
+        let cache = DiskCache(namespace: "BgmoriCategoryFilteredLiveTests-\(UUID().uuidString)")
+        let api = APIClient(cache: cache)
+        let store = CategoryStore(api: api)
+        for query in [
+            CategoryQuery(type: .anime, year: 2020),
+            CategoryQuery(type: .anime, metaTags: ["TV"]),
+            CategoryQuery(type: .anime, year: 2020, metaTags: ["TV", "科幻"]),
+            CategoryQuery(type: .anime, sort: .title, year: 2020, metaTags: ["TV"])
+        ] {
+            await store.load(query, force: true)
+            precondition(store.errorText == nil && !store.subjects.isEmpty, "Filtered categories failed: \(store.errorText ?? "empty")")
+            precondition(store.subjects.allSatisfy(query.matches))
+            let firstIDs = Set(store.subjects.map(\.id))
+            let firstOffset = store.nextOffset
+            if store.hasMore {
+                await store.loadMore(query, force: true)
+                precondition(store.pageErrorText == nil && store.nextOffset > firstOffset, "Pagination failed: \(store.pageErrorText ?? "no cursor advance")")
+                precondition(store.subjects.count > firstIDs.count && Set(store.subjects.map(\.id)).count == store.subjects.count)
+            } else {
+                await store.loadMore(query, force: true)
+                precondition(store.nextOffset == firstOffset && Set(store.subjects.map(\.id)) == firstIDs)
+            }
+            precondition(store.subjects.allSatisfy(query.matches))
+            print("PASS live filtered \(query.sort.title), year \(query.year.map(String.init) ?? "all"), tags \(query.metaTags): \(store.subjects.count) subjects, fallback \(store.fallbackSort?.title ?? "none")")
+        }
         await cache.clear()
     }
 

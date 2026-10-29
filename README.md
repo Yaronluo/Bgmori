@@ -132,6 +132,8 @@ xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
 
 分类页的官网分类解析、组合筛选、翻页、缓存和切换保护可用 `bash scripts/test-categories.sh` 验证；加上 `--live` 会读取五类官网筛选目录，并用真实 API 检查公共标签组合与翻页。官网分类目录缓存一天，也可在筛选面板的菜单中手动同步；同步失败时支持重试或在浏览器中查看。
 
+官网热度或名称排序遇到网页验证时，分类页会保留年份、标签和分类组合，自动改用公开 API 的收藏排序并提示；后续翻页保持该排序，刷新时重新尝试官网排序。可用 `bash scripts/test-categories.sh --live-filtered` 检查真实年份、分类组合和连续翻页。
+
 导航回归检查：`bash scripts/test-navigation.sh`，分别运行 Mac 与 iPhone 17 模拟器上的搜索、放送、日志详情和返回路径检查。
 
 界面回归检查：`bash scripts/test-shell-ui.sh`（也可指定 `ios` 或 `mac`），使用临时工程验证栏目切换、搜索历史、详情返回、后台返回和真实吐槽的浅深色显示，不改动仓库工程与签名设置；[修复说明与两端截图](docs/screenshots/navigation-comments-fix/README.md)。

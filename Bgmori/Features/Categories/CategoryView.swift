@@ -196,6 +196,13 @@ struct CategoryView: View {
                 Task { await store.load(query, force: true) }
             }
         } else {
+            if let notice = store.sortNotice {
+                Label(notice, systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 20)
+                    .accessibilityIdentifier("category-sort-notice")
+            }
             if store.refreshErrorText != nil {
                 RefreshFailureNotice(message: "刷新失败，显示的是缓存结果") {
                     Task { await store.load(query, force: true) }

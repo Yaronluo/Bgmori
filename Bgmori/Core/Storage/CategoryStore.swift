@@ -24,6 +24,12 @@ final class CategoryStore {
     private(set) var refreshErrorText: String?
     private(set) var pageErrorText: String?
     private(set) var nextOffset = 0
+    private(set) var fallbackSort: CategorySort?
+
+    var sortNotice: String? {
+        guard let fallbackSort else { return nil }
+        return "官网\(sort.title)排序暂不可用，已按\(fallbackSort.title)排序显示，筛选条件保持不变。"
+    }
 
     private let api: APIClient
     private let pageSize = 24
@@ -41,6 +47,7 @@ final class CategoryStore {
         let nextOffset: Int
         let hasMore: Bool
         let savedAt: Date
+        let fallbackSort: CategorySort?
     }
 
     init(api: APIClient) {
@@ -123,6 +130,7 @@ final class CategoryStore {
             subjects = []
             nextOffset = 0
             hasMore = false
+            fallbackSort = nil
             isLoading = true
         }
         pageErrorText = nil
@@ -140,6 +148,7 @@ final class CategoryStore {
                 subjects = page.subjects
                 nextOffset = page.nextOffset
                 hasMore = page.hasMore
+                fallbackSort = page.fallbackSort
             } else {
                 guard requestID == id, currentQuery == query else { return }
                 subjects = []
@@ -152,9 +161,10 @@ final class CategoryStore {
         isRefreshing = !subjects.isEmpty
 
         do {
-            let page = try await api.categorySubjects(query: query, limit: pageSize, force: force)
+            let (page, resolvedSort) = try await initialPage(query, force: force)
             guard requestID == id, currentQuery == query, !Task.isCancelled else { return }
             replace(page, query: query)
+            fallbackSort = resolvedSort
             errorText = nil
             refreshErrorText = nil
             await saveSnapshot(for: key, query: query)
@@ -175,7 +185,9 @@ final class CategoryStore {
         pageErrorText = nil
         defer { if requestID == id { isLoadingMore = false } }
         do {
-            let page = try await api.categorySubjects(query: query, limit: pageSize, offset: nextOffset, force: force)
+            var sourceQuery = query
+            sourceQuery.sort = fallbackSort ?? query.sort
+            let page = try await api.categorySubjects(query: sourceQuery, limit: pageSize, offset: nextOffset, force: force)
             guard requestID == id, !Task.isCancelled else { return }
             append(page, query: query)
             if let key = contentKey {
@@ -189,8 +201,26 @@ final class CategoryStore {
 
     // MARK: - Cached result pages
 
+    private func initialPage(_ query: CategoryQuery, force: Bool) async throws -> (Paged<Subject>, CategorySort?) {
+        do {
+            return (try await api.categorySubjects(query: query, limit: pageSize, force: force), nil)
+        } catch let error as APIError {
+            // Only restart at offset zero: website and search cursors refer to
+            // different orders and must never be joined into the same list.
+            guard query.sort == .heat || query.sort == .title else { throw error }
+            switch error {
+            case .verificationRequired, .forbidden, .unauthorized: break
+            default: throw error
+            }
+            try Task.checkCancellation()
+            var fallback = query
+            fallback.sort = .collects
+            return (try await api.categorySubjects(query: fallback, limit: pageSize, force: force), .collects)
+        }
+    }
+
     private func cacheKey(for query: CategoryQuery, source: String) -> String {
-        "category-page-v1-\(source)-\(pageSize)-\(query.cacheKey)"
+        "category-page-v2-\(source)-\(pageSize)-\(query.cacheKey)"
     }
 
     private func cachedPage(for key: String) async -> CachedPage? {
@@ -202,7 +232,7 @@ final class CategoryStore {
     }
 
     private func saveSnapshot(for key: String, query: CategoryQuery) async {
-        let page = CachedPage(subjects: subjects, nextOffset: nextOffset, hasMore: hasMore, savedAt: Date())
+        let page = CachedPage(subjects: subjects, nextOffset: nextOffset, hasMore: hasMore, savedAt: Date(), fallbackSort: fallbackSort)
         remember(page, for: key)
         guard let data = try? JSONEncoder().encode(page) else { return }
         await api.cache.write(key, data: data)

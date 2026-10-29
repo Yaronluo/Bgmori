@@ -1,6 +1,6 @@
 import Foundation
 
-enum CategorySort: String, CaseIterable, Identifiable, Sendable {
+enum CategorySort: String, Codable, CaseIterable, Identifiable, Sendable {
     case rank
     case heat = "trends"
     case collects

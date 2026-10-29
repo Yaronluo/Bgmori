@@ -589,6 +589,55 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testCategoryFilteredResultsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("categories", appearance: appearance)
+            let filters = app.buttons["category-filters"]
+            XCTAssertTrue(filters.waitForExistence(timeout: 30))
+            #if os(iOS)
+            filters.tap()
+            #endif
+            let picker = app.buttons["year-picker"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 10))
+            #if os(macOS)
+            picker.click()
+            #else
+            picker.tap()
+            #endif
+            let year = Calendar.current.component(.year, from: Date()) - 1
+            let option = app.buttons["year-option-\(year)"]
+            XCTAssertTrue(option.waitForExistence(timeout: 10))
+            #if os(macOS)
+            option.click()
+            #else
+            option.tap()
+            app.buttons["filters-done"].tap()
+            #endif
+            let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "category-subject-"))
+            XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 90), "Year filtering must load actual results")
+            snapshot("category-year-\(appearance)", app: app)
+            #if os(macOS)
+            filters.click()
+            #else
+            filters.tap()
+            #endif
+            let tv = app.buttons["category-option-分类-tv"]
+            XCTAssertTrue(tv.waitForExistence(timeout: 40))
+            #if os(macOS)
+            tv.click()
+            app.buttons["filters-done"].click()
+            #else
+            tv.tap()
+            app.buttons["filters-done"].tap()
+            #endif
+            XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 90), "Combined year and TV filtering must load results")
+            XCTAssertFalse(app.staticTexts["暂时无法加载"].exists)
+            snapshot("category-year-tv-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testCategoryPaginationLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch("categories", appearance: appearance)
