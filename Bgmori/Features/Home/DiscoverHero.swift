@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A continuous Discover shelf with a soft artwork backdrop and circular paging.
+/// A continuous Discover shelf with crisp posters and circular paging.
 struct DiscoverHero: View {
     let subjects: [HomeRefreshItem<Subject>]
     let seasonLabel: String
@@ -14,6 +14,14 @@ struct DiscoverHero: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var scrollPhase: ScrollPhase = .idle
     @State private var visiblePage: String?
+    #if os(macOS)
+    @State private var scrollMetrics = ScrollMetrics()
+
+    private struct ScrollMetrics: Equatable {
+        var offset: CGFloat = 0
+        var width: CGFloat = 0
+    }
+    #endif
 
     private struct Page: Identifiable {
         let position: Int
@@ -28,18 +36,45 @@ struct DiscoverHero: View {
         return index
     }
 
-    // Duplicate only the two boundary pages. Once a swipe settles on a copy,
-    // move to its identical original without animation to allow the next swipe.
+    // Keep a full copy on either side so trackpad momentum has room to settle.
+    // Recenter after both the phase and the visible target have reached idle.
     private var pages: [Page] {
         guard !subjects.isEmpty else { return [] }
-        let positions = subjects.count > 1 ? Array(-1...subjects.count) : [0]
-        return positions.map { position in
-            Page(position: position, subject: subjects[subjectIndex(for: position)],
-                 copy: position < 0 ? -1 : (position >= subjects.count ? 1 : 0))
+        let copies = subjects.count > 1 ? Array(-1...1) : [0]
+        return copies.flatMap { copy in
+            subjects.indices.map { index in
+                Page(position: copy * subjects.count + index, subject: subjects[index], copy: copy)
+            }
         }
     }
 
     var body: some View {
+        #if os(macOS)
+        ScrollViewReader { proxy in
+            content
+                .task(id: "\(scrollMetrics)-\(scrollPhase)") {
+                    guard scrollPhase == .idle else { return }
+                    // Mouse wheels can deliver unphased events: macOS never enters
+                    // decelerating and native paging leaves a partially visible card.
+                    do { try await Task.sleep(for: .milliseconds(160)) }
+                    catch { return }
+                    guard !Task.isCancelled, scrollPhase == .idle else { return }
+                    settleMacScroll(using: proxy)
+                }
+        }
+        #else
+        content
+            .task(id: "\(visiblePage ?? "")-\(scrollPhase)") {
+                guard scrollPhase == .idle else { return }
+                // SwiftUI can publish the final target after the idle callback.
+                await Task.yield()
+                guard !Task.isCancelled, scrollPhase == .idle else { return }
+                recenterIfNeeded()
+            }
+        #endif
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 4) {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 0) {
@@ -51,6 +86,7 @@ struct DiscoverHero: View {
                         }
                         .buttonStyle(.plain)
                         .containerRelativeFrame(.horizontal)
+                        .id(page.id)
                         .accessibilityLabel("\(subject.value.displayTitle)，第 \(index + 1) 部，共 \(subjects.count) 部")
                         .accessibilityIdentifier("home-hot-page-\(page.position)")
                     }
@@ -61,11 +97,19 @@ struct DiscoverHero: View {
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $visiblePage)
+            .accessibilityIdentifier("home-hot-carousel")
             .onScrollPhaseChange { _, phase in
                 scrollPhase = phase
                 onScrollPhaseChange(phase)
-                if phase == .idle { recenterIfNeeded() }
             }
+            #if os(macOS)
+            .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
+                ScrollMetrics(offset: geometry.contentOffset.x + geometry.contentInsets.leading,
+                              width: geometry.containerSize.width)
+            } action: { _, metrics in
+                scrollMetrics = metrics
+            }
+            #endif
             .padding(.horizontal, 20)
 
             if subjects.count > 1 {
@@ -130,7 +174,7 @@ struct DiscoverHero: View {
     }
 
     private func subjectIndex(for page: Int) -> Int {
-        (page + subjects.count) % subjects.count
+        ((page % subjects.count) + subjects.count) % subjects.count
     }
 
     private func advance(by delta: Int) {
@@ -154,6 +198,27 @@ struct DiscoverHero: View {
               page.copy != 0 else { return }
         jump(to: subjectIndex(for: page.position))
     }
+
+    #if os(macOS)
+    private func settleMacScroll(using proxy: ScrollViewProxy) {
+        guard scrollMetrics.width > 0, !pages.isEmpty else { return }
+        let slot = max(0, min(pages.count - 1, Int((scrollMetrics.offset / scrollMetrics.width).rounded())))
+        let page = pages[slot]
+        let distance = abs(scrollMetrics.offset - CGFloat(slot) * scrollMetrics.width)
+        if distance > 1 {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
+                proxy.scrollTo(page.id, anchor: .leading)
+            }
+        } else if page.copy != 0,
+                  let original = pages.first(where: { $0.position == subjectIndex(for: page.position) }) {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(original.id, anchor: .leading)
+            }
+        }
+    }
+    #endif
 
     private func jump(to page: Int) {
         var transaction = Transaction()
@@ -213,9 +278,9 @@ private struct HeroSubjectCard: View {
 
     private var macOSContent: some View {
         HStack(alignment: .center, spacing: 30) {
-            CachedAsyncImage(url: subject.heroURL, maxPixel: 900, contentMode: .fit, placeholderTint: tint, showsPlaceholderIcon: false, imageIdentity: "subject-\(subject.id)")
-                .mask { posterEdgeFade }
+            CachedAsyncImage(url: subject.heroURL, maxPixel: 900, contentMode: .fit, placeholderTint: tint, showsPlaceholderIcon: false, imageIdentity: "subject-\(subject.id)", animatesChanges: false)
                 .frame(width: 180, height: 254)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 11) {
                 Text(subjectDateLabel)
@@ -242,28 +307,20 @@ private struct HeroSubjectCard: View {
                 }
 
                 if !heroTags.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(heroTags) { tag in
-                            Text(tag.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4)
-                                .background(Color.primary.opacity(0.05), in: Capsule())
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("标签：\(heroTags.map(\.name).joined(separator: "，"))")
+                    Text(heroTags.map(\.name).joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityLabel("标签：\(heroTags.map(\.name).joined(separator: "，"))")
                 }
             }
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(26)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 6)
         .frame(height: DiscoverHeroMetrics.height(for: dynamicTypeSize))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background { artworkBackdrop }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -278,10 +335,11 @@ private struct HeroSubjectCard: View {
                         contentMode: .fit,
                         placeholderTint: tint,
                         showsPlaceholderIcon: false,
-                        imageIdentity: "subject-\(subject.id)"
+                        imageIdentity: "subject-\(subject.id)",
+                        animatesChanges: false
                     )
-                    .mask { posterEdgeFade }
                     .frame(width: (geometry.size.width - 48) * 0.48, height: coverHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text(subjectDateLabel)
@@ -328,52 +386,12 @@ private struct HeroSubjectCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(16)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 4)
         }
         .frame(height: DiscoverHeroMetrics.height(for: dynamicTypeSize))
-        .background { artworkBackdrop }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-
-    private var artworkBackdrop: some View {
-        GeometryReader { geometry in
-            CachedAsyncImage(url: subject.heroURL, maxPixel: 400, placeholderTint: tint, showsPlaceholderIcon: false, imageIdentity: "subject-\(subject.id)")
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .blur(radius: 36)
-                .opacity(0.18)
-                .mask {
-                    LinearGradient(
-                        stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.18),
-                                .init(color: .white, location: 0.62), .init(color: .clear, location: 1)],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                    .mask {
-                        LinearGradient(
-                            stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.12),
-                                    .init(color: .white, location: 0.55), .init(color: .clear, location: 1)],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    }
-                }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private var posterEdgeFade: some View {
-        LinearGradient(
-            stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.035),
-                    .init(color: .white, location: 0.965), .init(color: .clear, location: 1)],
-            startPoint: .leading, endPoint: .trailing
-        )
-        .mask {
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0), .init(color: .white, location: 0.025),
-                        .init(color: .white, location: 0.975), .init(color: .clear, location: 1)],
-                startPoint: .top, endPoint: .bottom
-            )
-        }
     }
 
     private var coverHeight: CGFloat {

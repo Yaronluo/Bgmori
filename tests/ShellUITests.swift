@@ -153,6 +153,78 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeCarouselLoopsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("home", appearance: appearance)
+            XCTAssertTrue(app.buttons["home-hot-dot-0"].waitForExistence(timeout: 60))
+            let dots = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home-hot-dot-"))
+            let count = dots.count
+            XCTAssertGreaterThan(count, 1)
+            let carousel = app.scrollViews["home-hot-carousel"]
+            XCTAssertTrue(carousel.exists)
+            let first = app.buttons["home-hot-dot-0"]
+            #if os(macOS)
+            first.click()
+            #else
+            first.tap()
+            #endif
+            var index = 0
+            // Cross each boundary more than once with real gestures. Merely
+            // tapping the dots doesn't exercise the scroll target/idle race.
+            for direction in [-1, 1] {
+                for _ in 0..<(count * 2 + 1) {
+                    #if os(macOS)
+                    let pageWidth = carousel.frame.width
+                    carousel.scroll(byDeltaX: direction == 1 ? -pageWidth : pageWidth, deltaY: 0)
+                    // Wheel events may have no momentum phase. Give the
+                    // idle alignment time to finish before the next gesture.
+                    _ = XCTWaiter.wait(for: [XCTestExpectation(description: "wheel idle alignment")], timeout: 0.45)
+                    #else
+                    if direction == 1 { carousel.swipeLeft(velocity: .slow) }
+                    else { carousel.swipeRight(velocity: .slow) }
+                    #endif
+                    index = (index + direction + count) % count
+                    let selected = app.buttons["home-hot-dot-\(index)"]
+                    XCTAssertTrue(NSPredicate(format: "selected == true").evaluate(with: selected)
+                        || XCTWaiter.wait(for: [expectationForSelected(selected)], timeout: 3) == .completed,
+                        "Carousel stopped or skipped a page at \(index), direction \(direction)")
+                }
+            }
+            snapshot("home-crisp-carousel-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    private func expectationForSelected(_ element: XCUIElement) -> XCTestExpectation {
+        XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: element)
+    }
+
+    #if os(macOS)
+    @MainActor
+    func testHomeWheelSettlesAtLoopBoundary() {
+        let app = launch("home")
+        let first = app.buttons["home-hot-dot-0"]
+        XCTAssertTrue(first.waitForExistence(timeout: 60))
+        let count = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home-hot-dot-")).count
+        let carousel = app.scrollViews["home-hot-carousel"]
+        first.click()
+        var index = 0
+        for direction in [-1, 1, -1, 1] {
+            let delta = carousel.frame.width * 0.65
+            carousel.scroll(byDeltaX: direction == 1 ? -delta : delta, deltaY: 0)
+            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "partial wheel alignment")], timeout: 0.8)
+            index = (index + direction + count) % count
+            XCTAssertTrue(app.buttons["home-hot-dot-\(index)"].isSelected)
+            let page = app.buttons["home-hot-page-\(index)"]
+            XCTAssertTrue(page.exists, "Boundary copies must return to the original page")
+            XCTAssertEqual(page.frame.minX, carousel.frame.minX, accuracy: 2,
+                           "A partial wheel movement must settle on a whole card")
+        }
+        app.terminate()
+    }
+    #endif
+
+    @MainActor
     func testPeoplePortraitsLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch("people:yaron", appearance: appearance)

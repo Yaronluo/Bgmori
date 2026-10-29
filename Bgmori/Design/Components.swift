@@ -7,6 +7,7 @@ struct CachedAsyncImage: View {
     var placeholderTint: Color = .bgmSecondary
     var showsPlaceholderIcon = true
     var imageIdentity: String? = nil
+    var animatesChanges = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentation = ImagePresentation()
@@ -21,8 +22,8 @@ struct CachedAsyncImage: View {
                 Image(decorative: image.cgImage, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
-                    .contentTransition(.opacity)
-                    .transition(.opacity)
+                    .contentTransition(animatesChanges ? .opacity : .identity)
+                    .transition(animatesChanges ? .opacity : .identity)
             } else {
                 LinearGradient(
                     colors: [placeholderTint.opacity(0.55), placeholderTint.opacity(0.22)],
@@ -39,7 +40,7 @@ struct CachedAsyncImage: View {
             }
         }
         .clipped()
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: presentation.replacementVersion)
+        .animation(reduceMotion || !animatesChanges ? nil : .easeInOut(duration: 0.18), value: presentation.replacementVersion)
         .task(id: request) {
             await presentation.load(request)
         }
