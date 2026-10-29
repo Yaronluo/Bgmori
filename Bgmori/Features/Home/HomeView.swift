@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var isVisible = false
     @State private var scrollingSections: Set<String> = []
     @State private var shelfPositions: [String: Int] = [:]
+    @State private var collectionError: String?
 
     private var isInteracting: Bool { !scrollingSections.isEmpty }
 
@@ -105,6 +106,14 @@ struct HomeView: View {
         .onScrollPhaseChange { _, phase in setScrolling("page", phase: phase) }
         .refreshable { await app.refreshAll() }
         .bgmLargeNavigationTitle("发现")
+        .alert("更新收藏失败", isPresented: Binding(
+            get: { collectionError != nil },
+            set: { if !$0 { collectionError = nil } }
+        )) {
+            Button("好", role: .cancel) { collectionError = nil }
+        } message: {
+            Text(collectionError ?? "请稍后重试")
+        }
         .onAppear { isVisible = true }
         .onDisappear {
             isVisible = false
@@ -178,15 +187,25 @@ struct HomeView: View {
                         NavigationLink(value: Route.subject(item.subjectId)) {
                             CoverCard(
                                 title: item.title,
-                                subtitle: continueProgressText(item),
+                                subtitle: app.settings.showWatchingProgress ? continueProgressText(item) : nil,
                                 coverURL: item.coverURL,
-                                progress: item.progressFraction,
+                                progress: app.settings.showWatchingProgress ? item.progressFraction : nil,
                                 tint: .subjectTint(item.subjectType),
                                 width: cardWidth,
+                                showsMetadata: app.settings.showWatchingProgress,
                                 imageIdentity: "subject-\(item.subjectId)"
                             )
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("标记为看过", systemImage: "checkmark.circle") {
+                                Task {
+                                    app.library.lastError = nil
+                                    await app.library.setType(subjectID: item.subjectId, type: .done)
+                                    collectionError = app.library.lastError
+                                }
+                            }
+                        }
                     }
                 }
             }

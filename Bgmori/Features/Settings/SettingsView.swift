@@ -25,6 +25,21 @@ struct SettingsView: View {
 
                 settingsSection("内容") {
                     settingRow(
+                        icon: "chart.bar.xaxis",
+                        tint: .brandPink,
+                        title: "显示观看进度",
+                        subtitle: "在发现和我的页显示已看话数与进度条"
+                    ) {
+                        Toggle("显示观看进度", isOn: $settings.showWatchingProgress)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(.brandPink)
+                            .accessibilityIdentifier("settings-watching-progress")
+                    }
+
+                    rowDivider
+
+                    settingRow(
                         icon: "character.book.closed.fill",
                         tint: .collectionTint(1),
                         title: "优先显示中文名",

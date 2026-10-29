@@ -324,11 +324,12 @@ struct ProfileView: View {
                         NavigationLink(value: Route.subject(item.subjectId)) {
                             CoverCard(
                                 title: item.title,
-                                subtitle: item.epStatus > 0 ? "看到 \(item.epStatus) 话" : "在看",
+                                subtitle: app.settings.showWatchingProgress ? (item.epStatus > 0 ? "看到 \(item.epStatus) 话" : "在看") : nil,
                                 coverURL: item.coverURL,
-                                progress: item.progressFraction,
+                                progress: app.settings.showWatchingProgress ? item.progressFraction : nil,
                                 tint: .subjectTint(item.subjectType),
-                                width: 132
+                                width: 132,
+                                showsMetadata: app.settings.showWatchingProgress
                             )
                         }
                         .buttonStyle(.plain)
