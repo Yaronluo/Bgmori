@@ -48,6 +48,7 @@
 - [x] 搜索落地页：紧凑图标文字分类入口、行式灵感列表、最近浏览与热门书架；[两端浅深色截图](docs/screenshots/compact-browsing/README.md)
 - [x] 年份选择使用紧凑滚动列表，弹窗缩窄、年份行距收紧，封面标题固定预留两行并在超长时省略；[两端浅深色截图](docs/screenshots/compact-browsing/README.md)
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
+- [x] 吐槽筛选按内容收紧，Mac 使用原生工具栏、iPhone 保留紧凑玻璃控件；登录表单左对齐、按钮与表单等宽，移除多余灰底容器；[两端浅深色截图](docs/screenshots/login-comments-polish/README.md)
 - [x] Mac 分类、收藏类型、搜索范围、周历和吐槽筛选使用原生工具栏的玻璃背景；收藏搜索使用较矮的普通输入框并限制宽度，账号导航使用轻量胶囊；[两端浅深色截图与窗口恢复检查](docs/screenshots/glass-hierarchy-restore/README.md)
 - [x] 发现快捷入口与标题对齐，分类使用紧凑文字导航，放送使用轻量周历；手机分类筛选合并为一行，年份和排序收进筛选面板；[两端浅深色截图](docs/screenshots/page-navigation/README.md)
 - [x] Liquid Glass：原生 Tab Bar / 导航栏、顶部搜索与筛选、分类与收藏切换、放送周历、吐槽筛选和收藏/进度等主要操作；正文、内联跳转、展开收起、分页圆点与次要操作保持轻量样式；[两端浅深色截图](docs/screenshots/glass-hierarchy-restore/README.md)

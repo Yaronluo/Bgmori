@@ -1,5 +1,5 @@
-import SwiftUI
 import ImageIO
+import SwiftUI
 
 struct LoginView: View {
     @Environment(AppModel.self) private var app
@@ -18,110 +18,136 @@ struct LoginView: View {
     }
     private var captchaImage: CGImage? {
         guard let data = app.auth.captchaData,
-              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+            let source = CGImageSourceCreateWithData(data as CFData, nil)
+        else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    VStack(spacing: 10) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    HStack(spacing: 14) {
                         Image("BrandIcon")
-                            .resizable().scaledToFit().frame(width: 68, height: 68)
-                            .clipShape(RoundedRectangle(cornerRadius: 17))
+                            .resizable().scaledToFit().frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                             .accessibilityHidden(true)
-                        Text("登录").font(.title2.bold())
-                        Text("同步你的收藏、评分与观看进度")
-                            .font(.subheadline).foregroundStyle(Color.bgmMuted)
-                    }
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .listRowBackground(Color.clear)
-                }
-                Section {
-                    TextField("邮箱", text: $email)
-                        .textContentType(.username)
-                        .focused($focus, equals: .email)
-                        .accessibilityIdentifier("login-email")
-                        #if os(iOS)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                    SecureField("密码", text: $password)
-                        .textContentType(.password)
-                        .focused($focus, equals: .password)
-                        .accessibilityIdentifier("login-password")
-                    HStack(spacing: 16) {
-                        TextField("验证码", text: $captcha)
-                            .focused($focus, equals: .captcha)
-                            .accessibilityIdentifier("login-captcha")
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            #endif
-                            .autocorrectionDisabled()
-                        Button(action: reloadCaptcha) {
-                            Group {
-                                if let image = captchaImage {
-                                    Image(decorative: image, scale: 1).resizable().scaledToFit()
-                                } else if app.auth.isLoadingCaptcha {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Label("重新获取", systemImage: "arrow.clockwise").font(.caption)
-                                }
-                            }
-                            .frame(width: 124, height: 44)
-                            .contentShape(Rectangle())
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("登录").font(.title2.bold())
+                            Text("同步你的收藏、评分与观看进度")
+                                .font(.subheadline).foregroundStyle(Color.bgmMuted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(app.auth.captchaData == nil ? "获取验证码" : "更换验证码")
-                        .accessibilityIdentifier("login-captcha-image")
-                        .disabled(busy)
+                        Spacer(minLength: 0)
                     }
-                    .accessibilityElement(children: .contain)
-                } footer: {
-                    Text("点击图片更换验证码。邮箱和密码仅用于本次登录，不会保存。")
-                }
-                .disabled(app.auth.isSigningIn || app.auth.isCompletingLogin)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
 
-                if let error = app.auth.errorMessage {
-                    Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                fieldLabel("邮箱")
+                                TextField("Bangumi 邮箱", text: $email)
+                                    .textContentType(.username)
+                                    .focused($focus, equals: .email)
+                                    .accessibilityIdentifier("login-email")
+                                    #if os(iOS)
+                                        .keyboardType(.emailAddress)
+                                        .textInputAutocapitalization(.never)
+                                    #endif
+                                    .autocorrectionDisabled()
+                            }
+                            .padding(16)
+                            Divider().padding(.horizontal, 16)
+                            VStack(alignment: .leading, spacing: 6) {
+                                fieldLabel("密码")
+                                SecureField("输入密码", text: $password)
+                                    .textContentType(.password)
+                                    .focused($focus, equals: .password)
+                                    .accessibilityIdentifier("login-password")
+                            }
+                            .padding(16)
+                            Divider().padding(.horizontal, 16)
+                            HStack(spacing: 16) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    fieldLabel("验证码")
+                                    TextField("输入图片中的字符", text: $captcha)
+                                        .focused($focus, equals: .captcha)
+                                        .accessibilityIdentifier("login-captcha")
+                                        #if os(iOS)
+                                            .textInputAutocapitalization(.never)
+                                        #endif
+                                        .autocorrectionDisabled()
+                                }
+                                Button(action: reloadCaptcha) {
+                                    Group {
+                                        if let image = captchaImage {
+                                            Image(decorative: image, scale: 1).resizable().scaledToFit()
+                                        } else if app.auth.isLoadingCaptcha {
+                                            ProgressView().controlSize(.small)
+                                        } else {
+                                            Label("重新获取", systemImage: "arrow.clockwise").font(.caption)
+                                        }
+                                    }
+                                    .frame(width: 124, height: 44)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(app.auth.captchaData == nil ? "获取验证码" : "更换验证码")
+                                .accessibilityIdentifier("login-captcha-image")
+                                .disabled(busy)
+                            }
+                            .padding(16)
+                            .accessibilityElement(children: .contain)
+                        }
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.leading)
+                        .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16).strokeBorder(Color.bgmSecondary, lineWidth: 1)
+                        }
+                        .disabled(app.auth.isSigningIn || app.auth.isCompletingLogin)
+                        Text("点击图片更换验证码。邮箱和密码仅用于本次登录，不会保存。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
+                    }
+
+                    if let error = app.auth.errorMessage {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("login-error")
                     }
-                }
 
-                Section {
                     Button(action: submit) {
                         HStack(spacing: 8) {
                             if app.auth.isSigningIn { ProgressView().controlSize(.small) }
                             Text(app.auth.isSigningIn ? "正在登录…" : app.auth.isCompletingLogin ? "重试登录" : "登录并同步")
                         }
-                        #if os(iOS)
-                        .frame(maxWidth: .infinity)
-                        #else
-                        .frame(width: 180)
-                        #endif
+                        .frame(maxWidth: .infinity, minHeight: 28)
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 12))
                     .controlSize(.large)
                     .tint(.brandPink)
                     .disabled(!canSubmit)
                     .accessibilityIdentifier("login-submit")
                     #if os(macOS)
-                    .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(.defaultAction)
                     #endif
                 }
-                .listRowBackground(Color.clear)
+                .frame(maxWidth: 420)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity)
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(Color.bgmBackground)
             #if os(iOS)
-            .listSectionSpacing(.compact)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
             #endif
             .navigationTitle("账户")
             .toolbar {
@@ -146,11 +172,15 @@ struct LoginView: View {
             }
         }
         #if os(macOS)
-        .frame(width: 500, height: 570)
+            .frame(width: 480, height: 580)
         #else
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         #endif
+    }
+
+    private func fieldLabel(_ title: String) -> some View {
+        Text(title).font(.caption).foregroundStyle(.secondary)
     }
 
     private func reloadCaptcha() {

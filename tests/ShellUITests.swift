@@ -258,6 +258,12 @@ final class ShellUITests: XCTestCase {
             XCTAssertFalse(app.staticTexts["OAuth 应用"].exists)
             XCTAssertFalse(app.staticTexts["已有 Access Token"].exists)
             XCTAssertFalse(app.staticTexts["login-error"].exists)
+            let email = app.textFields["login-email"]
+            let password = app.secureTextFields["login-password"]
+            let submit = app.buttons["login-submit"]
+            XCTAssertEqual(email.frame.minX, password.frame.minX, accuracy: 2)
+            XCTAssertGreaterThanOrEqual(submit.frame.width, email.frame.width)
+            XCTAssertTrue(submit.isHittable)
             snapshot("direct-login-\(appearance)", app: app)
             #if os(macOS)
             app.activate()
@@ -810,6 +816,35 @@ final class ShellUITests: XCTestCase {
             XCTAssertTrue(app.tabBars.buttons["发现"].exists)
             #endif
             snapshot("comments-\(appearance)", app: app)
+            let filters = app.descendants(matching: .any)["comments-filters"].firstMatch
+            let state = app.descendants(matching: .any)["comments-state-filter"].firstMatch
+            let sort = app.descendants(matching: .any)["comments-sort-filter"].firstMatch
+            let rating = app.descendants(matching: .any)["comments-rating-filter"].firstMatch
+            XCTAssertTrue(sort.isHittable && rating.isHittable && state.isHittable)
+            #if os(macOS)
+            // The native toolbar exposes its horizontal insets in the group's
+            // accessibility frame, while menu frames describe their contents.
+            let containerInsets: CGFloat = 40
+            #else
+            let containerInsets: CGFloat = 8
+            #endif
+            XCTAssertLessThanOrEqual(filters.frame.width, rating.frame.maxX - state.frame.minX + containerInsets)
+            XCTAssertLessThanOrEqual(filters.frame.height, 44)
+            #if os(macOS)
+            sort.click()
+            app.menuItems["最新"].click()
+            #else
+            sort.tap()
+            app.buttons["最新"].tap()
+            #endif
+            let reset = app.buttons["comments-filter-reset"]
+            XCTAssertTrue(reset.waitForExistence(timeout: 5))
+            snapshot("comments-filtered-\(appearance)", app: app)
+            #if os(macOS)
+            reset.click()
+            #else
+            reset.tap()
+            #endif
             app.terminate()
         }
     }

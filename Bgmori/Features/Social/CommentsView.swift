@@ -62,7 +62,7 @@ struct CommentsView: View {
         .toolbar {
             if episodeID == nil && !comments.isEmpty {
                 ToolbarItem(placement: .principal) {
-                    filterBar.frame(width: 460, height: 44)
+                    filterBar.fixedSize()
                 }
                 .sharedBackgroundVisibility(.visible)
             }
@@ -83,93 +83,101 @@ struct CommentsView: View {
     // MARK: - Filters
 
     private var filterBar: some View {
+        #if os(macOS)
+        filterMenus
+        #else
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Menu {
-                    Button {
-                        stateFilter = nil
-                    } label: {
-                        menuOption("全部状态", selected: stateFilter == nil)
-                    }
-                    Divider()
-                    ForEach(CollectionType.allCases) { type in
-                        Button {
-                            stateFilter = type
-                        } label: {
-                            menuOption(type.title, selected: stateFilter == type)
-                        }
-                    }
-                } label: {
-                    filterChip(
-                        stateFilter?.title ?? "全部状态",
-                        systemImage: "line.3.horizontal.decrease",
-                        isActive: stateFilter != nil
-                    )
-                }
-                .menuIndicator(.hidden)
-                .accessibilityIdentifier("comments-state-filter")
-
-                Menu {
-                    ForEach(CommentSort.allCases) { option in
-                        Button {
-                            sort = option
-                        } label: {
-                            menuOption(option.title, selected: sort == option)
-                        }
-                    }
-                } label: {
-                    filterChip(sort.title, systemImage: "arrow.up.arrow.down", isActive: sort != .comprehensive)
-                }
-                .menuIndicator(.hidden)
-                .accessibilityIdentifier("comments-sort-filter")
-
-                Menu {
-                    ForEach(CommentRatingFilter.allCases) { option in
-                        Button {
-                            ratingFilter = option
-                        } label: {
-                            menuOption(option.title, selected: ratingFilter == option)
-                        }
-                    }
-                } label: {
-                    filterChip(ratingFilter.title, systemImage: "star", isActive: ratingFilter != .all)
-                }
-                .menuIndicator(.hidden)
-                .accessibilityIdentifier("comments-rating-filter")
-
-                if hasActiveFilters {
-                    Button("重置") {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            stateFilter = nil
-                            sort = .comprehensive
-                            ratingFilter = .all
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.brandPink)
-                    .padding(.horizontal, 4)
-                    .frame(height: 32)
-                    .padding(.vertical, 5)
-                    .accessibilityIdentifier("comments-filter-reset")
-                }
-            }
-            #if os(macOS)
-            .menuStyle(.button)
-            #endif
-            .buttonStyle(.plain)
-            .padding(.horizontal, 4)
-            .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
-            .padding(.horizontal, 20)
+            filterMenus
+                .padding(.horizontal, 4)
+                .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
+                .padding(.horizontal, 20)
         }
+        .frame(height: 44)
         .scrollClipDisabled()
-        .padding(.top, 4)
-        .padding(.bottom, 10)
+        .padding(.vertical, 6)
+        #endif
     }
 
-    private func filterChip(_ title: String, systemImage: String, isActive: Bool) -> some View {
+    private var filterMenus: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button {
+                    stateFilter = nil
+                } label: {
+                    menuOption("全部状态", selected: stateFilter == nil)
+                }
+                Divider()
+                ForEach(CollectionType.allCases) { type in
+                    Button {
+                        stateFilter = type
+                    } label: {
+                        menuOption(type.title, selected: stateFilter == type)
+                    }
+                }
+            } label: {
+                filterChip(
+                    stateFilter?.title ?? "全部状态",
+                    isActive: stateFilter != nil
+                )
+            }
+            .menuIndicator(.hidden)
+            .accessibilityIdentifier("comments-state-filter")
+
+            Menu {
+                ForEach(CommentSort.allCases) { option in
+                    Button {
+                        sort = option
+                    } label: {
+                        menuOption(option.title, selected: sort == option)
+                    }
+                }
+            } label: {
+                filterChip(sort.title, isActive: sort != .comprehensive)
+            }
+            .menuIndicator(.hidden)
+            .accessibilityIdentifier("comments-sort-filter")
+
+            Menu {
+                ForEach(CommentRatingFilter.allCases) { option in
+                    Button {
+                        ratingFilter = option
+                    } label: {
+                        menuOption(option.title, selected: ratingFilter == option)
+                    }
+                }
+            } label: {
+                filterChip(ratingFilter.title, isActive: ratingFilter != .all)
+            }
+            .menuIndicator(.hidden)
+            .accessibilityIdentifier("comments-rating-filter")
+
+            if hasActiveFilters {
+                Button("重置") {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        stateFilter = nil
+                        sort = .comprehensive
+                        ratingFilter = .all
+                    }
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.brandPink)
+                .padding(.horizontal, 4)
+                .frame(height: 32)
+                .padding(.vertical, 5)
+                .accessibilityIdentifier("comments-filter-reset")
+            }
+        }
+        #if os(macOS)
+        .menuStyle(.button)
+        #endif
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("comments-filters")
+    }
+
+    private func filterChip(_ title: String, isActive: Bool) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.system(size: 10, weight: .semibold))
             Text(title)
                 .lineLimit(1)
             Image(systemName: "chevron.down")
@@ -177,11 +185,13 @@ struct CommentsView: View {
                 .opacity(0.65)
         }
         .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(isActive ? Color.bgmCanvas : Color.primary.opacity(0.82))
-        .padding(.horizontal, 12)
-        .frame(height: 32)
-        .background(isActive ? Color.brandPink : Color.clear, in: Capsule())
-        .padding(.vertical, 5)
+        .foregroundStyle(isActive ? Color.brandPink : Color.primary.opacity(0.82))
+        .padding(.horizontal, 10)
+        #if os(macOS)
+        .frame(minHeight: 32)
+        #else
+        .frame(minHeight: 44)
+        #endif
         .contentShape(Rectangle())
     }
 
