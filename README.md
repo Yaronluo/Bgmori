@@ -80,6 +80,29 @@ bash scripts/build-install-ios.sh --route subject:8 --screenshot /tmp/bgmori.png
 
 脚本把 DerivedData 固定为当前 checkout 的 `build/DerivedData-ios`。DerivedData 目录名由工程绝对路径决定，每个 checkout / git worktree 各一份，而副本的 Bundle ID 都是 `com.yaron.bgmori`；用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-* … | head -1` 猜路径很容易把主工作树的旧安装包装进模拟器。脚本安装后会比对二进制哈希与构建号，构建号同时显示在「设置 → 关于软件」的版本里。
 
+### 开发文件自动保留规则
+
+构建、安装和 UI 测试脚本需要 Python 3（仅使用标准库），并在运行时自动回收过期开发产物：
+
+| 文件 | 保留规则 |
+| --- | --- |
+| Mac 旧应用备份 | 最新 2 份，成功安装后再次回收 |
+| UI 测试报告 `build/ui-results/` | 最多 3 次、合计 1 GiB、最多 7 天；超大单次报告同样会回收 |
+| iPhone / Mac 编译缓存 | 分别复用固定目录；合计超过 4 GiB 时，在没有构建运行的维护点回收旧缓存 |
+| 受管理的临时构建目录 `build/tmp/` | 正常退出时删除；遗留 7 天后回收，活跃任务保留 |
+| 安装构建日志 `build/logs/` | 两端分别覆盖自己的最新日志 |
+
+自动回收直接删除以上过期文件，不会移入废纸篓继续占用空间。执行中的构建和测试可能暂时超限；维护在下次运行这些脚本时触发，不是后台磁盘配额服务。源码、正式截图、应用数据、已安装应用、全局工具缓存和模拟器系统不在自动清理范围。
+
+可随时预览或执行相同规则：
+
+```bash
+python3 scripts/maintain-dev-storage.py          # 仅预览
+python3 scripts/maintain-dev-storage.py --apply  # 永久回收过期开发产物
+```
+
+UI 测试默认自动创建 `build/ui-results/<时间戳>/`。如需命名，`BGMORI_UI_RESULT_DIR` 必须指定该目录下尚不存在的直接子目录；需要长期保留的少量截图应复制到 `docs/screenshots/`。
+
 工程文件由 XcodeGen 生成、不入库；新 clone 或新工作树里没有 `Bgmori.xcodeproj` 是正常的（`scripts/build-install-*.sh` 会自动生成）。
 
 ```bash
@@ -99,11 +122,12 @@ open Bgmori.xcodeproj
 # iOS 模拟器
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
+  -derivedDataPath build/DerivedData-ios \
   CODE_SIGNING_ALLOWED=NO build
 
 # macOS
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
-  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData-mac CODE_SIGNING_ALLOWED=NO build
 ```
 
 分类页的官网分类解析、组合筛选、翻页、缓存和切换保护可用 `bash scripts/test-categories.sh` 验证；加上 `--live` 会读取五类官网筛选目录，并用真实 API 检查公共标签组合与翻页。官网分类目录缓存一天，也可在筛选面板的菜单中手动同步；同步失败时支持重试或在浏览器中查看。

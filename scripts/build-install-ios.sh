@@ -36,11 +36,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+python3 scripts/maintain-dev-storage.py --apply
 bash scripts/check-project-sync.sh
 
 derived="$repo_dir/build/DerivedData-ios"
 log_dir="$repo_dir/build/logs"
-mkdir -p "$log_dir"
+mkdir -p "$log_dir" "$derived"
+echo "$$" > "$derived/.active"
+trap 'rm -f "$derived/.active"' EXIT
 build_log="$log_dir/ios-build.log"
 stamp=$(date +%Y%m%d%H%M)
 

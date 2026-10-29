@@ -2,10 +2,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+python3 scripts/maintain-dev-storage.py --apply
 bash scripts/check-project-sync.sh
 
 installed_app=/Applications/Bgmori.app
-task_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-install.XXXXXX")
+derived="$PWD/build/DerivedData-mac"
+mkdir -p build/tmp build/logs "$derived"
+echo "$$" > "$derived/.active"
+task_dir=$(mktemp -d "$PWD/build/tmp/bgmori-install.XXXXXX")
+touch "$task_dir/.bgmori-temporary"
+echo "$$" > "$task_dir/.active"
 stage_dir=""
 backup_app=""
 cleanup() {
@@ -14,16 +20,18 @@ cleanup() {
   fi
   [[ -z "$stage_dir" ]] || rm -rf "$stage_dir"
   rm -rf "$task_dir"
+  rm -f "$derived/.active"
 }
 trap cleanup EXIT
 
 # 构建号取时间戳，装好后能在「设置 → 关于软件」里直接看出是不是本次构建。
 stamp=$(date +%Y%m%d%H%M)
 build_args=(-project Bgmori.xcodeproj -scheme Bgmori -configuration Debug
+  -derivedDataPath "$derived"
   -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
   CURRENT_PROJECT_VERSION="$stamp")
-if ! xcodebuild "${build_args[@]}" build > "$task_dir/build.log" 2>&1; then
-  tail -80 "$task_dir/build.log"
+if ! xcodebuild "${build_args[@]}" build > build/logs/mac-build.log 2>&1; then
+  tail -80 build/logs/mac-build.log
   exit 1
 fi
 xcodebuild "${build_args[@]}" -showBuildSettings -json > "$task_dir/settings.json"
@@ -59,3 +67,4 @@ diff -qr "$built_app" "$installed_app"
 open "$installed_app"
 echo "已构建（构建号 ${stamp}）、安装并打开：$installed_app"
 [[ -z "$backup_app" ]] || echo "旧应用备份：$backup_app"
+python3 scripts/maintain-dev-storage.py --apply

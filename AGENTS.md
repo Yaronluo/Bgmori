@@ -21,6 +21,15 @@
 - 后续开发、布局验收、性能检查和截图均以上述范围为准；未经用户另行要求，不扩展机型矩阵，不创建其他 iPhone 模拟器或下载新运行时。
 - 本约束是当前验收范围，不改变 iOS 27 / macOS 27 deployment target、Bundle ID 或已有功能。历史设计文档中的其他测试机型不代表当前要求。
 
+## 开发磁盘占用约束
+
+- 日常构建/安装统一使用 `scripts/build-install-ios.sh` 和 `scripts/build-install-macos.sh`，分别复用 `build/DerivedData-ios`、`build/DerivedData-mac`。临时构建不得在全局 DerivedData 或 `build/` 下反复新建永久构建目录。
+- 两个安装脚本与 UI 测试脚本自动执行 `python3 scripts/maintain-dev-storage.py --apply`。它直接删除过期的可再生产物，不移入废纸篓：Mac 应用备份只留最新 2 份；受管理的 UI 报告最多 3 次、合计 1 GiB、最长 7 天；两端固定构建缓存合计超过 4 GiB 时，在无构建任务运行的维护点回收较旧缓存；带所有权标记且遗留 7 天的临时目录回收。活跃任务保留，执行中的临时峰值不属于磁盘配额保证。
+- UI 报告仅保存到 `build/ui-results/<本次名称>/`，`BGMORI_UI_RESULT_DIR` 只能指定该目录下尚不存在的直接子目录。需要长期留存的少量验收截图及时复制到 `docs/screenshots/`；禁止在 `build/任意名称` 或 `/tmp/bgmori*` 长期堆积测试报告、连续帧、录像。超出 1 GiB 的单次报告也会被回收。
+- 临时文件应放在 `build/tmp/`，创建时注册 `EXIT` 清理；需要崩溃后自动回收时增加 `.bgmori-temporary` 和写入任务 PID 的 `.active`。临时连续帧与录像在检查后删除，不作为交付物长期保留。
+- 自动回收只允许操作脚本明确管理的产物，不能删除源码、Git 历史、正式文档/截图、用户数据、已安装应用、钥匙串、全局 Go/Xcode 缓存或系统模拟器运行时；不能跟随符号链接。模拟器继续只使用 iPhone 17 / iOS 27.0，不自行创建其他机型或下载额外运行时。
+- `python3 scripts/maintain-dev-storage.py` 仅预览；`--apply` 执行上述范围内的永久回收。不安装后台清理任务，不清空用户废纸篓。没有改代码时不要为了清理磁盘重新构建。
+
 ## 常用命令
 
 ```bash
@@ -31,12 +40,13 @@ xcodegen generate --spec project.yml --project .
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -configuration Debug \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
+  -derivedDataPath build/DerivedData-ios \
   CODE_SIGNING_ALLOWED=NO build
 
 # macOS 构建
 xcodebuild -project Bgmori.xcodeproj -scheme Bgmori \
   -configuration Debug \
-  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData-mac CODE_SIGNING_ALLOWED=NO build
 ```
 
 模拟器调试（构建 → 安装 → 启动 → 截图，在要测试的 checkout 里执行）：

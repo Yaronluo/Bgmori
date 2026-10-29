@@ -3,8 +3,38 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mode=${1:-all}
 case "$mode" in all|ios|mac) ;; *) echo 'Usage: test-shell-ui.sh [all|ios|mac] [testName ...]'; exit 2 ;; esac
-test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-shell-ui.XXXXXX")
-trap 'rm -rf "$test_dir"' EXIT
+python3 scripts/maintain-dev-storage.py --apply
+mkdir -p build/tmp build/ui-results
+result_root="$PWD/build/ui-results"
+if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then
+  # Only newly created direct children of the managed root may be expired later.
+  result_dir=$(python3 - "$result_root" "$BGMORI_UI_RESULT_DIR" <<'PY'
+import sys
+from pathlib import Path
+root, path = map(lambda s: Path(s).absolute(), sys.argv[1:])
+if path.parent != root or path.exists() or path.is_symlink() or root.resolve() != root:
+    raise SystemExit('BGMORI_UI_RESULT_DIR must be a new direct child of build/ui-results/')
+path.mkdir()
+print(path)
+PY
+  )
+else
+  result_dir=$(mktemp -d "$result_root/$(date +%Y%m%d-%H%M%S).XXXXXX")
+fi
+touch "$result_dir/.bgmori-ui-run"
+echo "$$" > "$result_dir/.active"
+test_dir=$(mktemp -d "$PWD/build/tmp/bgmori-shell-ui.XXXXXX")
+touch "$test_dir/.bgmori-temporary"
+echo "$$" > "$test_dir/.active"
+cleanup() {
+  status=$?
+  rm -rf "$test_dir"
+  rm -f "$result_dir/.active"
+  python3 scripts/maintain-dev-storage.py --apply || { [[ $status -ne 0 ]] || status=1; }
+  [[ ! -d "$result_dir" ]] || echo "UI 测试报告：${result_dir}（最多 3 次 / 1 GiB / 7 天）"
+  exit "$status"
+}
+trap cleanup EXIT
 # Build a snapshot in a temporary project; preserve the checkout's Xcode signing settings.
 ditto Bgmori "$test_dir/Bgmori"
 ditto Native "$test_dir/Native"
@@ -30,13 +60,9 @@ args=(-project "$test_dir/BgmoriShellVerification.xcodeproj" -scheme Bgmori -con
 for test_name in "${@:2}"; do
   args+=("-only-testing:ShellUITests/ShellUITests/$test_name")
 done
-result_args=()
-if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then mkdir -p "$BGMORI_UI_RESULT_DIR"; fi
 if [[ "$mode" != mac ]]; then
-  if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then result_args=(-resultBundlePath "$BGMORI_UI_RESULT_DIR/ios.xcresult"); fi
-  xcodebuild "${args[@]}" "${result_args[@]}" -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath "$test_dir/ios" CODE_SIGNING_ALLOWED=NO test
+  xcodebuild "${args[@]}" -resultBundlePath "$result_dir/ios.xcresult" -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath "$test_dir/ios" CODE_SIGNING_ALLOWED=NO test
 fi
 if [[ "$mode" != ios ]]; then
-  if [[ -n "${BGMORI_UI_RESULT_DIR:-}" ]]; then result_args=(-resultBundlePath "$BGMORI_UI_RESULT_DIR/mac.xcresult"); fi
-  xcodebuild "${args[@]}" "${result_args[@]}" -destination 'platform=macOS,arch=arm64' -derivedDataPath "$test_dir/mac" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
+  xcodebuild "${args[@]}" -resultBundlePath "$result_dir/mac.xcresult" -destination 'platform=macOS,arch=arm64' -derivedDataPath "$test_dir/mac" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
 fi
