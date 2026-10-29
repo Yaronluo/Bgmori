@@ -674,7 +674,7 @@ struct Person: Decodable, Identifiable, Hashable, Sendable {
     static func == (lhs: Person, rhs: Person) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
-    var coverURL: URL? { images?.thumbURL }
+    var coverURL: URL? { images?.gridURL }
 }
 
 struct SubjectStaffMember: Identifiable, Sendable {
@@ -726,7 +726,7 @@ struct Character: Decodable, Identifiable, Hashable, Sendable {
     static func == (lhs: Character, rhs: Character) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
-    var coverURL: URL? { images?.thumbURL }
+    var coverURL: URL? { images?.gridURL }
 }
 
 struct UserCharacterCollection: Decodable, Identifiable, Sendable {
@@ -750,7 +750,7 @@ struct UserCharacterCollection: Decodable, Identifiable, Sendable {
         createdAt = try? c.decode(String.self, forKey: .createdAt)
     }
 
-    var coverURL: URL? { images?.thumbURL }
+    var coverURL: URL? { images?.gridURL }
     var typeName: String {
         switch type {
         case 2: "机体"
@@ -784,7 +784,7 @@ struct UserPersonCollection: Decodable, Identifiable, Sendable {
         createdAt = try? c.decode(String.self, forKey: .createdAt)
     }
 
-    var coverURL: URL? { images?.thumbURL }
+    var coverURL: URL? { images?.gridURL }
     var typeName: String {
         switch type {
         case 2: "公司"

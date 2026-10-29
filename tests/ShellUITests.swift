@@ -153,6 +153,20 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testPeoplePortraitsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = launch("people:yaron", appearance: appearance)
+            XCTAssertTrue(app.buttons["people-character-466"].waitForExistence(timeout: 40))
+            XCTAssertTrue(app.buttons["people-person-17491"].exists)
+            XCTAssertTrue(app.buttons["people-person-5001"].exists)
+            // Allow the real image requests to complete before capturing.
+            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "portrait loading")], timeout: 4)
+            snapshot("people-large-portraits-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testDirectLoginLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()

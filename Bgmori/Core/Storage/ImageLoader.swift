@@ -81,14 +81,14 @@ actor ImageLoader {
         }
     }
 
-    /// Only resize Bangumi's original cover paths. Avatars and external images keep their URLs.
+    /// Resize original posters and portraits. User avatars and external images keep their URLs.
     static func requestURL(for url: URL, maxPixel: Int) -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.host == "lain.bgm.tv",
               components.query == nil,
               let width = [200, 400, 600, 800, 1200].first(where: { $0 >= maxPixel }) else { return url }
         let path = components.path.replacingOccurrences(of: #"^/r/\d+/"#, with: "/", options: .regularExpression)
-        guard path.hasPrefix("/pic/cover/l/") else { return url }
+        guard path.hasPrefix("/pic/cover/l/") || path.hasPrefix("/pic/crt/l/") else { return url }
         // The CDN bounds width, so using the requested longest edge never undersizes a cover.
         components.scheme = "https"
         components.path = "/r/\(width)" + path

@@ -71,7 +71,23 @@ struct ImageLoaderTests {
             precondition(ImageLoader.requestURL(for: url, maxPixel: 400) == url)
         }
         precondition(ImageLoader.requestURL(for: original, maxPixel: 1600) == original)
+        let portrait = URL(string: "https://lain.bgm.tv/pic/crt/l/test/portrait.jpg")!
+        precondition(ImageLoader.requestURL(for: portrait, maxPixel: 597).path == "/r/600/pic/crt/l/test/portrait.jpg")
         print("PASS: cover sizing uses bounded CDN widths and preserves other image URLs")
+
+        // The API's small portrait is only 100px; increasing the decode limit
+        // cannot recover detail unless every portrait model selects a large source.
+        let portraitJSON = Data(#"{"id":466,"images":{"small":"https://lain.bgm.tv/r/100/pic/crt/l/test.jpg","large":"https://lain.bgm.tv/pic/crt/l/test.jpg"}}"#.utf8)
+        let decoder = JSONDecoder()
+        let portraitURLs = [
+            try decoder.decode(Character.self, from: portraitJSON).coverURL,
+            try decoder.decode(Person.self, from: portraitJSON).coverURL,
+            try decoder.decode(UserCharacterCollection.self, from: portraitJSON).coverURL,
+            try decoder.decode(UserPersonCollection.self, from: portraitJSON).coverURL
+        ]
+        precondition(portraitURLs.allSatisfy { $0?.path == "/pic/crt/l/test.jpg" })
+        precondition(Images(small: "https://example.com/small.jpg", large: "").gridURL?.path == "/small.jpg")
+        print("PASS: character/person cards and collections use large portraits with thumbnail fallback")
 
         let payload = fixture()
         ImageRequests.shared.reset(payload: payload)
@@ -243,5 +259,21 @@ struct ImageLoaderTests {
         let image = await loader.image(for: url, maxPixel: 597)
         precondition(image?.cgImage.height == 597 && sizes[1] < sizes[0])
         print("PASS live: original \(sizes[0]) bytes -> resized \(sizes[1]) bytes; decoded \(image!.cgImage.width)x\(image!.cgImage.height)")
+
+        for endpoint in ["characters/466", "persons/17491", "persons/5001"] {
+            var request = URLRequest(url: URL(string: "https://api.bgm.tv/v0/\(endpoint)")!)
+            request.assumesHTTP3Capable = false
+            request.setValue(APIClient.userAgent, forHTTPHeaderField: "User-Agent")
+            let (data, _) = try await session.data(for: request)
+            let object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            let images = try JSONDecoder().decode(Images.self, from: JSONSerialization.data(withJSONObject: object["images"]!))
+            let small = await loader.image(for: images.thumbURL!, maxPixel: 600)
+            let large = await loader.image(for: images.gridURL!, maxPixel: 600)
+            precondition(large != nil && small != nil)
+            let smallEdge = max(small!.cgImage.width, small!.cgImage.height)
+            let largeEdge = max(large!.cgImage.width, large!.cgImage.height)
+            precondition(largeEdge > smallEdge, "Real portrait cards must receive more detail than the 100px thumbnail")
+            print("PASS live: \(endpoint) thumbnail \(smallEdge)px -> portrait \(largeEdge)px")
+        }
     }
 }

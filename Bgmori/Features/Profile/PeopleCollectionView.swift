@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PeopleCollectionView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.displayScale) private var displayScale
     let username: String
 
     @State private var characters: [UserCharacterCollection] = []
@@ -38,6 +39,7 @@ struct PeopleCollectionView: View {
                                     characterCard(item)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("people-character-\(item.id)")
                             }
                         }
                     }
@@ -49,6 +51,7 @@ struct PeopleCollectionView: View {
                                     personCard(item)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("people-person-\(item.id)")
                             }
                         }
                     }
@@ -110,10 +113,7 @@ struct PeopleCollectionView: View {
 
     private func characterCard(_ item: UserCharacterCollection) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            FocusedAsyncImage(url: item.coverURL, maxPixel: 360, placeholderTint: .brandPink, focus: .top)
-                .aspectRatio(0.78, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            portrait(url: item.coverURL, tint: .brandPink)
 
             Text(item.name)
                 .font(.caption.weight(.semibold))
@@ -134,10 +134,7 @@ struct PeopleCollectionView: View {
 
     private func personCard(_ item: UserPersonCollection) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            FocusedAsyncImage(url: item.coverURL, maxPixel: 360, placeholderTint: .collectionTint(1), focus: .top)
-                .aspectRatio(0.78, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            portrait(url: item.coverURL, tint: .collectionTint(1))
 
             Text(item.name)
                 .font(.caption.weight(.semibold))
@@ -154,6 +151,20 @@ struct PeopleCollectionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityLabel("\(item.name)，\(item.typeName)")
+    }
+
+    private func portrait(url: URL?, tint: Color) -> some View {
+        GeometryReader { geometry in
+            FocusedAsyncImage(
+                url: url,
+                maxPixel: Int(ceil(max(geometry.size.width, geometry.size.height) * displayScale)),
+                placeholderTint: tint,
+                focus: .top
+            )
+        }
+        .aspectRatio(0.78, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func load(force: Bool = false) async {
