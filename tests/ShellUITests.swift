@@ -27,6 +27,33 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    private func segment(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        #if os(macOS)
+        app.radioButtons[identifier].firstMatch
+        #else
+        app.buttons[identifier].firstMatch
+        #endif
+    }
+
+    @MainActor
+    private func assertSelectedSegment(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        #if os(macOS)
+        XCTAssertEqual(String(describing: element.value ?? ""), "1", file: file, line: line)
+        #else
+        XCTAssertTrue(element.isSelected, file: file, line: line)
+        #endif
+    }
+
+    @MainActor
+    private func displayedText(_ element: XCUIElement) -> String {
+        #if os(macOS)
+        element.value as? String ?? ""
+        #else
+        element.label
+        #endif
+    }
+
+    @MainActor
     private func snapshot(_ name: String, app: XCUIApplication) {
         #if os(macOS)
         let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
@@ -352,7 +379,7 @@ final class ShellUITests: XCTestCase {
             let app = launch("search", appearance: appearance)
             let field = app.textFields["search-field"]
             XCTAssertTrue(field.waitForExistence(timeout: 30))
-            let scope = app.buttons["角色"].firstMatch
+            let scope = segment("角色", in: app)
             XCTAssertTrue(scope.waitForExistence(timeout: 5))
             #if os(iOS)
             XCTAssertLessThanOrEqual(field.frame.maxY, scope.frame.minY)
@@ -379,7 +406,7 @@ final class ShellUITests: XCTestCase {
             library.launchArguments = ["-appearance", appearance]
             library.launch()
             let search = library.textFields.firstMatch
-            let types = library.buttons["library-type-all"]
+            let types = segment("library-type-all", in: library)
             let summary = library.staticTexts["library-summary"]
             XCTAssertTrue(search.waitForExistence(timeout: 30))
             XCTAssertTrue(types.waitForExistence(timeout: 5))
@@ -405,6 +432,69 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryTypeSelectionAndScrollingLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment["BGMORI_ROUTE"] = "library"
+            app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            app.launchEnvironment["BGMORI_PREVIEW_LIBRARY_GRID"] = "1"
+            app.launchArguments = ["-appearance", appearance]
+            app.launch()
+
+            let all = segment("library-type-all", in: app)
+            let anime = segment("library-type-2", in: app)
+            let books = segment("library-type-1", in: app)
+            let summary = app.staticTexts["library-summary"]
+            XCTAssertTrue(all.waitForExistence(timeout: 30))
+            let list = app.buttons["列表视图"]
+            XCTAssertTrue(list.waitForExistence(timeout: 5))
+            #if os(macOS)
+            list.click()
+            books.click()
+            #else
+            list.tap()
+            books.tap()
+            #endif
+            assertSelectedSegment(books)
+            XCTAssertEqual(displayedText(summary), "0 部作品 · 0 部在看")
+            #if os(macOS)
+            anime.click()
+            #else
+            anime.tap()
+            #endif
+            assertSelectedSegment(anime)
+            XCTAssertEqual(displayedText(summary), "12 部作品 · 2 部在看")
+            #if os(iOS)
+            // The native selector supports holding and scrubbing between segments.
+            anime.press(forDuration: 0.5, thenDragTo: all)
+            XCTAssertTrue(all.isSelected)
+            XCTAssertLessThanOrEqual(all.frame.maxY, summary.frame.minY)
+            #endif
+            let scroll = app.scrollViews["library-content"]
+            XCTAssertTrue(scroll.exists)
+            let selectorFrame = all.frame
+            snapshot("library-list-\(appearance)", app: app)
+            #if os(macOS)
+            scroll.scroll(byDeltaX: 0, deltaY: -450)
+            #else
+            scroll.swipeUp()
+            #endif
+            XCTAssertTrue(all.isHittable)
+            XCTAssertEqual(all.frame.minY, selectorFrame.minY, accuracy: 1)
+            XCTAssertLessThanOrEqual(summary.frame.maxY, scroll.frame.minY)
+            snapshot("library-scrolled-\(appearance)", app: app)
+            #if os(iOS)
+            scroll.swipeDown()
+            scroll.swipeDown()
+            XCTAssertTrue(all.isHittable)
+            XCTAssertLessThanOrEqual(all.frame.maxY, summary.frame.minY)
+            snapshot("library-refreshed-\(appearance)", app: app)
+            #endif
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testGlassBrowsingControlsLightAndDark() {
         for appearance in ["light", "dark"] {
             let categories = launch("categories", appearance: appearance)
@@ -412,14 +502,14 @@ final class ShellUITests: XCTestCase {
             XCTAssertTrue(filters.waitForExistence(timeout: 30))
             // All five types must remain reachable inside the compact glass strip.
             for title in ["书籍", "音乐", "游戏", "三次元", "动画"] {
-                let type = categories.buttons[title].firstMatch
+                let type = segment(title, in: categories)
                 XCTAssertTrue(type.isHittable, "The glass strip must fit the accepted window: \(title)")
                 #if os(macOS)
                 type.click()
                 #else
                 type.tap()
                 #endif
-                XCTAssertTrue(type.isSelected)
+                assertSelectedSegment(type)
             }
             snapshot("glass-categories-\(appearance)", app: categories)
             #if os(macOS)

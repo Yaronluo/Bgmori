@@ -195,13 +195,14 @@ struct LibraryView: View {
                 .padding(.top, 8)
             }
             .clipped()
-        }
-        .scrollIndicators(.hidden)
-        .refreshable {
-            if let username = app.auth.username {
-                await app.library.loadAll(username: username, force: true)
+            .accessibilityIdentifier("library-content")
+            .refreshable {
+                if let username = app.auth.username {
+                    await app.library.loadAll(username: username, force: true)
+                }
             }
         }
+        .scrollIndicators(.hidden)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

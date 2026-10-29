@@ -725,21 +725,24 @@ struct TextTabs<Value: Hashable>: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            tabs
-            ScrollView(.horizontal, showsIndicators: false) { tabs.fixedSize(horizontal: true, vertical: false) }
-                .scrollClipDisabled()
-        }
-    }
-
-    @ViewBuilder
-    private var tabs: some View {
         if usesGlass {
-            tabContent
-                .padding(3)
-                .bgmFloatingGlass(cornerRadius: 23, shadowRadius: 6)
+            Picker("切换栏目", selection: $selection) {
+                ForEach(values, id: \.self) { value in
+                    Text(title(value)).tag(value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+            .fixedSize(horizontal: false, vertical: true)
         } else {
-            tabContent
+            ViewThatFits(in: .horizontal) {
+                tabContent
+                ScrollView(.horizontal, showsIndicators: false) {
+                    tabContent.fixedSize(horizontal: true, vertical: false)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
