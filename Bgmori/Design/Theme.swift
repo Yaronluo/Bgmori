@@ -138,7 +138,13 @@ struct GlassSurface<Content: View>: View {
                 .background(Color.bgmSurface, in: shape)
                 .overlay(shape.stroke(Color.primary.opacity(0.08), lineWidth: 1))
         } else {
+            #if os(macOS)
+            // Persistent Liquid Glass controls are hosted by the system toolbar.
+            // Transient content such as toasts uses a readable standard material.
+            content.background(.regularMaterial, in: shape)
+            #else
             content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+            #endif
         }
     }
 }
@@ -157,11 +163,18 @@ extension View {
     }
 
     /// Apply once to the floating control group; its children keep plain button styles.
+    @ViewBuilder
     func bgmFloatingGlass(cornerRadius: CGFloat = 26, shadowRadius: CGFloat = 14) -> some View {
+        #if os(macOS)
+        // ToolbarItem supplies the shared native glass, like the sidebar toggle.
+        // Do not add a second independently composited glass layer inside it.
+        self
+        #else
         GlassSurface(shape: AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)), interactive: true) {
             self
         }
         .shadow(color: .bgmArtworkScrim.opacity(shadowRadius < 14 ? 0.04 : 0.08), radius: shadowRadius, y: 3)
+        #endif
     }
 
     func bgmFloatingControlMargins(maxWidth: CGFloat = 1120) -> some View {

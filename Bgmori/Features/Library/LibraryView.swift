@@ -80,6 +80,20 @@ struct LibraryView: View {
                 content
             }
         }
+        #if os(macOS)
+        .toolbar {
+            if !app.isGuest || isFilterPreview || isGridPreview {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 16) {
+                        LibraryTypePicker(selection: $subjectType)
+                        statusMenu
+                    }
+                    .fixedSize()
+                }
+                .sharedBackgroundVisibility(.visible)
+            }
+        }
+        #endif
         .onAppear { if isGridPreview { isGrid = true } }
         .background(Color.bgmBackground)
         .bgmLargeNavigationTitle("收藏")
@@ -213,15 +227,13 @@ struct LibraryView: View {
     }
 
     private var filterControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             InlineSearchField(text: $searchText, prompt: "在收藏中搜索")
+                #if os(macOS)
+                .frame(maxWidth: 420)
+                #endif
                 .accessibilityIdentifier("library-search-field")
             #if os(macOS)
-            HStack(spacing: 24) {
-                LibraryTypePicker(selection: $subjectType)
-                statusMenu
-                Spacer(minLength: 0)
-            }
             header
             #else
             LibraryTypePicker(selection: $subjectType)
@@ -236,8 +248,6 @@ struct LibraryView: View {
         .padding(.top, 4)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgmBackground)
-        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var header: some View {

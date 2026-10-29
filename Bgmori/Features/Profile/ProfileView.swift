@@ -150,14 +150,17 @@ struct ProfileView: View {
 
     private func primaryAction(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage).font(.subheadline)
-                Text(title).font(.subheadline.weight(.medium))
-                Image(systemName: "chevron.right").font(.caption2)
-            }
-            .foregroundStyle(Color.brandPink)
-            .frame(minHeight: 36)
-            .contentShape(Rectangle())
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.brandPink)
+                .padding(.horizontal, 12)
+                #if os(macOS)
+                .frame(minHeight: 32)
+                #else
+                .frame(minHeight: 40)
+                #endif
+                .background(Color.brandPink.opacity(0.08), in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }

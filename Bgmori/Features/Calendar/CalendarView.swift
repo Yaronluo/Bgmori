@@ -49,20 +49,28 @@ struct CalendarView: View {
                         scrollProxy.scrollTo("calendar-top", anchor: .top)
                     }
                 }
+                #if os(iOS)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     weekdaySelector
+                        .padding(4)
+                        .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
                         .frame(maxWidth: 420)
                         .frame(width: contentWidth, alignment: .leading)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
-                        .background(Color.bgmGroupedBackground)
-                        .overlay(alignment: .bottom) { Divider() }
                 }
+                #endif
             }
         }
         .background(Color.bgmGroupedBackground)
         .bgmNavigationTitle("每日放送")
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .principal) {
+                weekdaySelector.frame(width: 360, height: 44)
+            }
+            .sharedBackgroundVisibility(.visible)
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {

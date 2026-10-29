@@ -77,6 +77,12 @@ struct SearchView: View {
         .background(Color.bgmCanvas)
         .bgmNavigationTitle("搜索")
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .principal) {
+                scopePicker.fixedSize()
+            }
+            .sharedBackgroundVisibility(.visible)
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 if scope == .subject {
                     Button("筛选", systemImage: "slider.horizontal.3") { showFilters = true }
@@ -173,11 +179,9 @@ struct SearchView: View {
 
     private var searchControls: some View {
         #if os(macOS)
-        HStack(spacing: 16) {
-            searchField.frame(maxWidth: 460)
-            scopePicker.fixedSize(horizontal: true, vertical: false)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        searchField
+            .frame(maxWidth: 460)
+            .frame(maxWidth: .infinity, alignment: .leading)
         #else
         VStack(alignment: .leading, spacing: 6) {
             searchField
@@ -204,11 +208,17 @@ struct SearchView: View {
         .font(.body)
         .padding(.horizontal, 14)
         .frame(minHeight: 44)
+        #if os(macOS)
+        .background(Color.bgmSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        #else
         .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
+        #endif
     }
 
     private var scopePicker: some View {
-        TextTabs(values: SearchScope.allCases, selection: $scope, title: { $0.title })
+        TextTabs(values: SearchScope.allCases, selection: $scope, title: { $0.title }, usesGlass: true)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("search-scopes")
     }
 
     private var resultGrid: some View {

@@ -608,7 +608,7 @@ struct FilterSheet<Content: View>: View {
                     .accessibilityIdentifier("filter-reset")
                 Spacer()
                 Button("完成") { dismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("filters-done")
             }
@@ -710,6 +710,7 @@ struct TextTabs<Value: Hashable>: View {
     @Binding var selection: Value
     let title: (Value) -> String
     var horizontalPadding: CGFloat = 14
+    var usesGlass = false
     var usesUnderline = false
     var itemSpacing: CGFloat = 2
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -727,10 +728,22 @@ struct TextTabs<Value: Hashable>: View {
         ViewThatFits(in: .horizontal) {
             tabs
             ScrollView(.horizontal, showsIndicators: false) { tabs.fixedSize(horizontal: true, vertical: false) }
+                .scrollClipDisabled()
         }
     }
 
+    @ViewBuilder
     private var tabs: some View {
+        if usesGlass {
+            tabContent
+                .padding(3)
+                .bgmFloatingGlass(cornerRadius: 23, shadowRadius: 6)
+        } else {
+            tabContent
+        }
+    }
+
+    private var tabContent: some View {
         HStack(spacing: itemSpacing) {
             ForEach(values, id: \.self) { value in
                 Button {
@@ -865,9 +878,13 @@ struct InlineSearchField: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .font(.body)
-        .padding(.horizontal, 14)
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        #if os(macOS)
+        .frame(minHeight: 34)
+        #else
         .frame(minHeight: 44)
-        .background(Color.bgmSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+        #endif
+        .background(Color.bgmSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

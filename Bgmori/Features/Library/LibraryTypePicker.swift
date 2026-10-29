@@ -13,6 +13,7 @@ struct LibraryTypePicker: View {
             tabs
         }
         .scrollIndicators(.hidden)
+        .scrollClipDisabled()
         #endif
     }
 
@@ -22,19 +23,17 @@ struct LibraryTypePicker: View {
                 Button { selection = type } label: {
                     Text(type.map(SubjectType.title(for:)) ?? "全部")
                         .font(.subheadline.weight(selection == type ? .semibold : .regular))
-                        .foregroundStyle(selection == type ? Color.brandPink : Color.secondary)
+                        .foregroundStyle(selection == type ? Color.primary : Color.secondary)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10)
                         #if os(macOS)
                         .frame(minHeight: 36)
                         #else
-                        .frame(minHeight: 44)
+                        .frame(minHeight: 40)
                         #endif
-                        .overlay(alignment: .bottom) {
+                        .background {
                             if selection == type {
-                                Capsule()
-                                    .fill(Color.brandPink)
-                                    .frame(width: 20, height: 2)
+                                Capsule().fill(Color.bgmSecondary)
                             }
                         }
                         .contentShape(Rectangle())
@@ -44,6 +43,8 @@ struct LibraryTypePicker: View {
                 .accessibilityIdentifier("library-type-\(type.map(String.init) ?? "all")")
             }
         }
+        .padding(3)
+        .bgmFloatingGlass(cornerRadius: 23, shadowRadius: 6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("library-types")
     }

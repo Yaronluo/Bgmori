@@ -42,7 +42,6 @@ struct SubjectDetailView: View {
     @State private var isRefreshing = false
     @State private var loadedSubjectID: Int?
     @State private var commentsSubjectID: Int?
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isWideLayout: Bool {
@@ -513,7 +512,7 @@ struct SubjectDetailView: View {
                     systemImage: app.library.collection(for: subject.id)?.collectionType.icon ?? "plus"
                 )
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .tint(.brandPink)
 
             if subject.type != SubjectType.book.rawValue {
@@ -1261,64 +1260,43 @@ struct SubjectDetailView: View {
     // MARK: - Bottom bar
 
     #if os(iOS)
-    @ViewBuilder
     private func bottomBar(_ subject: Subject) -> some View {
-        if reduceTransparency {
-            bottomBarContent(subject)
-                .padding(5)
-                .background(Color.bgmSurface, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-        } else {
-            bottomBarContent(subject)
-                .padding(5)
-                .glassEffect(.regular, in: Capsule())
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-        }
-    }
-
-    @ViewBuilder
-    private func bottomBarContent(_ subject: Subject) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                if app.isGuest {
-                    app.showLogin = true
-                } else {
-                    showCollectionEditor = true
-                }
-            } label: {
-                Label(
-                    app.library.collection(for: subject.id)?.collectionType.title ?? "收藏",
-                    systemImage: app.library.collection(for: subject.id)?.collectionType.icon ?? "plus"
-                )
-                .font(.system(size: 13, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .foregroundStyle(Color.bgmCanvas)
-                .background(Color.brandPink, in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            if subject.type != SubjectType.book.rawValue {
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
                 Button {
-                    guard app.auth.isLoggedIn else { app.showLogin = true; return }
-                    markNextEpisode(subject)
+                    if app.isGuest {
+                        app.showLogin = true
+                    } else {
+                        showCollectionEditor = true
+                    }
                 } label: {
-                    Label(app.auth.isLoggedIn ? nextEpisodeLabel(subject) : "记录进度", systemImage: "checkmark.circle")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .foregroundStyle(.primary)
+                    Label(
+                        app.library.collection(for: subject.id)?.collectionType.title ?? "收藏",
+                        systemImage: app.library.collection(for: subject.id)?.collectionType.icon ?? "plus"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glassProminent)
+                .tint(.brandPink)
+
+                if subject.type != SubjectType.book.rawValue {
+                    Button {
+                        guard app.auth.isLoggedIn else { app.showLogin = true; return }
+                        markNextEpisode(subject)
+                    } label: {
+                        Label(app.auth.isLoggedIn ? nextEpisodeLabel(subject) : "记录进度", systemImage: "checkmark.circle")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.glass)
+                }
             }
+            .buttonBorderShape(.capsule)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
     }
     #endif
 

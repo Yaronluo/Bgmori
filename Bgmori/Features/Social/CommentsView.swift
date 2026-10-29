@@ -26,10 +26,6 @@ struct CommentsView: View {
                         Task { await load(page: 1, force: true) }
                     }
                 } else {
-                    if episodeID == nil {
-                        filterBar
-                    }
-
                     if displayedComments.isEmpty {
                         noMatchesState
                     } else {
@@ -56,6 +52,22 @@ struct CommentsView: View {
             }
             .padding(.bottom, 24)
         }
+        #if os(iOS)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if episodeID == nil && !comments.isEmpty {
+                filterBar
+            }
+        }
+        #else
+        .toolbar {
+            if episodeID == nil && !comments.isEmpty {
+                ToolbarItem(placement: .principal) {
+                    filterBar.frame(width: 460, height: 44)
+                }
+                .sharedBackgroundVisibility(.visible)
+            }
+        }
+        #endif
         .refreshable { await load(page: 1, force: true) }
         .scrollIndicators(.hidden)
         .navigationTitle("吐槽")
@@ -145,8 +157,11 @@ struct CommentsView: View {
             .menuStyle(.button)
             #endif
             .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+            .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
             .padding(.horizontal, 20)
         }
+        .scrollClipDisabled()
         .padding(.top, 4)
         .padding(.bottom, 10)
     }
@@ -165,7 +180,7 @@ struct CommentsView: View {
         .foregroundStyle(isActive ? Color.bgmCanvas : Color.primary.opacity(0.82))
         .padding(.horizontal, 12)
         .frame(height: 32)
-        .background(isActive ? Color.brandPink : Color.primary.opacity(0.055), in: Capsule())
+        .background(isActive ? Color.brandPink : Color.clear, in: Capsule())
         .padding(.vertical, 5)
         .contentShape(Rectangle())
     }

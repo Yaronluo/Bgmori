@@ -377,11 +377,17 @@ final class ShellUITests: XCTestCase {
             let summary = library.staticTexts["library-summary"]
             XCTAssertTrue(search.waitForExistence(timeout: 30))
             XCTAssertTrue(types.waitForExistence(timeout: 5))
-            XCTAssertLessThanOrEqual(search.frame.maxY, types.frame.minY)
-            XCTAssertLessThanOrEqual(types.frame.maxY, summary.frame.minY)
+            #if os(macOS)
+            XCTAssertLessThanOrEqual(types.frame.maxY, search.frame.minY)
+            XCTAssertLessThanOrEqual(search.frame.width, 420, "The library search must not stretch across the window")
+            #else
+            XCTAssertLessThanOrEqual(search.frame.maxY + 8, types.frame.minY)
+            #endif
+            XCTAssertLessThanOrEqual(search.frame.maxY, summary.frame.minY)
             snapshot("library-header-\(appearance)", app: library)
             #if os(macOS)
             search.click()
+            search.typeKey("a", modifierFlags: .command)
             #else
             search.tap()
             #endif
@@ -389,6 +395,83 @@ final class ShellUITests: XCTestCase {
             XCTAssertEqual(search.value as? String, "test")
             snapshot("library-header-editing-\(appearance)", app: library)
             library.terminate()
+        }
+    }
+
+    @MainActor
+    func testGlassBrowsingControlsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let categories = launch("categories", appearance: appearance)
+            let filters = categories.buttons["category-filters"]
+            XCTAssertTrue(filters.waitForExistence(timeout: 30))
+            // All five types must remain reachable inside the compact glass strip.
+            for title in ["书籍", "音乐", "游戏", "三次元", "动画"] {
+                let type = categories.buttons[title].firstMatch
+                XCTAssertTrue(type.isHittable, "The glass strip must fit the accepted window: \(title)")
+                #if os(macOS)
+                type.click()
+                #else
+                type.tap()
+                #endif
+                XCTAssertTrue(type.isSelected)
+            }
+            snapshot("glass-categories-\(appearance)", app: categories)
+            #if os(macOS)
+            filters.click()
+            #else
+            filters.tap()
+            #endif
+            let done = categories.buttons["filters-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 5))
+            snapshot("glass-filter-sheet-\(appearance)", app: categories)
+            #if os(macOS)
+            done.click()
+            #else
+            done.tap()
+            #endif
+            XCTAssertTrue(filters.isHittable)
+            categories.terminate()
+
+            let calendar = launch("calendar", appearance: appearance)
+            let monday = calendar.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "星期一，")).firstMatch
+            XCTAssertTrue(monday.waitForExistence(timeout: 30))
+            #if os(macOS)
+            monday.click()
+            #else
+            monday.tap()
+            #endif
+            XCTAssertTrue(monday.isSelected)
+            snapshot("glass-calendar-\(appearance)", app: calendar)
+            calendar.terminate()
+
+            let profile = launch("profile", appearance: appearance)
+            let login = profile.buttons["profile-login"]
+            XCTAssertTrue(login.waitForExistence(timeout: 30))
+            XCTAssertLessThanOrEqual(login.frame.height, 44, "Account navigation should stay compact")
+            snapshot("glass-profile-\(appearance)", app: profile)
+            #if os(macOS)
+            profile.activate()
+            XCTAssertTrue(login.isHittable)
+            login.click()
+            #else
+            login.tap()
+            #endif
+            XCTAssertTrue(profile.textFields["login-email"].waitForExistence(timeout: 10))
+            profile.terminate()
+
+            let subject = launch("subject:8", appearance: appearance)
+            let progress = subject.buttons["记录进度"].firstMatch
+            XCTAssertTrue(progress.waitForExistence(timeout: 60))
+            snapshot("glass-subject-\(appearance)", app: subject)
+            #if os(macOS)
+            subject.activate()
+            XCTAssertTrue(progress.isHittable)
+            progress.click()
+            #else
+            progress.tap()
+            #endif
+            XCTAssertTrue(subject.textFields["login-email"].waitForExistence(timeout: 10))
+            subject.terminate()
         }
     }
 

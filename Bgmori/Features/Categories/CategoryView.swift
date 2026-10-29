@@ -25,6 +25,7 @@ struct CategoryView: View {
         } action: { _, nearBottom in
             isNearBottom = nearBottom
         }
+        #if os(iOS)
         .safeAreaInset(edge: .top, spacing: 0) {
             filterControls
                 .padding(.horizontal, 20)
@@ -34,9 +35,8 @@ struct CategoryView: View {
                 #endif
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity)
-                .background(Color.bgmCanvas)
-                .overlay(alignment: .bottom) { Divider() }
         }
+        #endif
         .background(Color.bgmCanvas)
         .scrollIndicators(.hidden)
         .bgmNavigationTitle("分类")
@@ -46,6 +46,18 @@ struct CategoryView: View {
             Task { await store.loadMore(request.query) }
         }
         .refreshable { await store.load(query, force: true) }
+        #if os(macOS)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                typePicker.fixedSize()
+            }
+            .sharedBackgroundVisibility(.visible)
+            ToolbarItem(placement: .primaryAction) {
+                filterMenus
+            }
+            .sharedBackgroundVisibility(.visible)
+        }
+        #endif
         .sheet(isPresented: $showFilters) {
             CategoryFilterSheet(store: store, includeNSFW: app.settings.showNSFW)
         }
@@ -73,10 +85,11 @@ struct CategoryView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.subheadline)
                     .foregroundStyle(hasActiveFilters ? Color.brandPink : Color.secondary)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 34, height: 34)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .accessibilityLabel("分类筛选")
             .accessibilityValue(hasActiveFilters ? "已设置筛选条件" : "全部年份，\(store.sort.title)")
             .accessibilityIdentifier("category-filters")
@@ -88,7 +101,9 @@ struct CategoryView: View {
         TextTabs(values: SubjectType.browsingTypes, selection: Binding(
             get: { store.type },
             set: { store.selectType($0) }
-        ), title: { $0.title }, horizontalPadding: 10, usesUnderline: true)
+        ), title: { $0.title }, horizontalPadding: 9, usesGlass: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("category-types")
     }
 
     private var hasActiveFilters: Bool {
@@ -123,6 +138,11 @@ struct CategoryView: View {
             .accessibilityLabel("排序：\(store.sort.title)")
             .accessibilityIdentifier("category-sort")
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 3)
+        .bgmFloatingGlass(cornerRadius: 22, shadowRadius: 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("category-filter-menus")
         .buttonStyle(.plain)
         .tint(.primary)
         #if os(macOS)
