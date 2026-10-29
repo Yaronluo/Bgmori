@@ -44,7 +44,7 @@
 - [x] 启动页：图标轻微呼吸，冷启动准备首屏数据与少量图片后切入；有缓存立即展示、后台静默刷新，首页按作品 ID 保留卡片与封面，文字独立更新；更换封面时保留旧图直到新图就绪，滚动期间暂缓更新；无缓存时保留加载与失败重试，支持减少动态效果；[启动页](docs/screenshots/startup/README.md) · [稳定刷新两端浅深色截图](docs/screenshots/stable-home-refresh/README.md)
 - [x] 纯白底黑白漫画少女图标，附[源图与生成说明](docs/branding/README.md)
 - [x] iOS 原生大标题与轻量搜索栏、分组列表、随系统字号缩放的内容层级；搜索与收藏的顶部控件独立布局，滚动内容在控件下方裁切
-- [x] 发现页：最近热播每 6 秒自动轮播，支持双向循环滑动与圆点切换，封面边缘渐变融入页面；手机端完整展示封面，保留日期、简介与观看信息；书架评分统一放在封面下方，正在看保留进度；[两端浅深色截图](docs/screenshots/home-blend/README.md)
+- [x] 发现页：最近热播每 6 秒自动轮播，支持双向循环滑动与圆点切换，清晰圆角封面配日期、简介与观看信息；书架评分统一放在封面下方，正在看默认隐藏逐话进度，可在设置中开启，支持长按／右键标记整部看过；角色和人物卡片优先加载大图并适配屏幕像素密度；[两端浅深色截图](docs/screenshots/home-cover-polish/README.md)
 - [x] 搜索落地页：紧凑图标文字分类入口、行式灵感列表、最近浏览与热门书架；[两端浅深色截图](docs/screenshots/compact-browsing/README.md)
 - [x] 年份选择使用紧凑滚动列表，弹窗缩窄、年份行距收紧，封面标题固定预留两行并在超长时省略；[两端浅深色截图](docs/screenshots/compact-browsing/README.md)
 - [x] 收藏筛选对齐与层级、分类和搜索筛选面板、人物图完整缩放、最近浏览类型文字移至封面下方；[两端浅深色截图](docs/screenshots/filter-portrait-polish/README.md)
