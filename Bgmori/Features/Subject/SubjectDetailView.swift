@@ -135,6 +135,9 @@ struct SubjectDetailView: View {
         .task(id: subjectID) {
             prepareForSubjectIfNeeded()
             await load()
+            #if DEBUG
+            openCollectionEditorForPreviewIfNeeded()
+            #endif
         }
         .task(id: subjectID) { await loadComments() }
         .sheet(isPresented: $showCollectionEditor) {
@@ -1325,6 +1328,17 @@ struct SubjectDetailView: View {
     }
 
     // MARK: - Load
+
+    #if DEBUG
+    /// 截图与 UI 回归用入口：`BGMORI_PREVIEW_COLLECTION_EDITOR=1` 时条目载入后直接打开
+    /// 收藏编辑页，不需要登录；测试不会触发保存，不会写入账号。
+    private func openCollectionEditorForPreviewIfNeeded() {
+        guard ProcessInfo.processInfo.environment["BGMORI_PREVIEW_COLLECTION_EDITOR"] == "1",
+              subject != nil,
+              !showCollectionEditor else { return }
+        showCollectionEditor = true
+    }
+    #endif
 
     private func prepareForSubjectIfNeeded() {
         guard loadedSubjectID != subjectID else { return }

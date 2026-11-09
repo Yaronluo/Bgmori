@@ -647,6 +647,22 @@ struct CollectionPatch: Encodable, Sendable {
     }
 }
 
+/// Bangumi 把条目收藏的短评限制在 380 字：官网收藏盒和官方 iOS 客户端
+/// （`wordLimit: 380`）都在输入侧守住这条线。公开 API 本身不校验长度，
+/// 所以客户端必须自己拦，否则会把网站端放不下的内容写进账号。
+enum CollectionCommentRules {
+    static let limit = 380
+
+    static func isOverLimit(_ text: String) -> Bool {
+        text.count > limit
+    }
+
+    /// 与网站一致：保存前去掉首尾空白，避免出现「有短评但看不见」的空评价。
+    static func normalized(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 // MARK: - Characters & people
 
 struct Person: Decodable, Identifiable, Hashable, Sendable {

@@ -19,6 +19,9 @@ struct CollectionEditorView: View {
     @State private var isSaving = false
     @State private var errorText: String?
     @State private var showRemoval = false
+    @FocusState private var isCommentFocused: Bool
+
+    private static let commentSectionID = "collection-comment-section"
 
     init(subject: Subject, episodes: [Episode], collection: UserSubjectCollection?) {
         self.subject = subject
@@ -35,64 +38,80 @@ struct CollectionEditorView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    subjectHeader
-                    statusSection
-                    ratingSection
-                    progressSection
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 26) {
+                        subjectHeader
+                        statusSection
+                        ratingSection
+                        progressSection
 
-                    Divider()
+                        Divider()
 
-                    tagsSection
-                    commentSection
-                    privacyRow
+                        tagsSection
+                        commentSection
+                            .id(Self.commentSectionID)
+                        privacyRow
 
-                    if collection != nil {
-                        removeButton
+                        if collection != nil {
+                            removeButton
+                        }
+
+                        if let errorText {
+                            Label(errorText, systemImage: "exclamationmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("collection-save-error")
+                        }
                     }
-
-                    if let errorText {
-                        Label(errorText, systemImage: "exclamationmark.circle")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("collection-save-error")
-                    }
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 6)
-                .padding(.bottom, 30)
-                .frame(maxWidth: 620)
-                .frame(maxWidth: .infinity)
-                .disabled(isSaving)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Color.bgmCanvas)
-            .navigationTitle("编辑收藏")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
-                        .accessibilityIdentifier("collection-cancel")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        if isSaving { ProgressView() } else { Text("保存").bold() }
-                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 6)
+                    .padding(.bottom, 30)
+                    .frame(maxWidth: 620)
+                    .frame(maxWidth: .infinity)
                     .disabled(isSaving)
-                    .accessibilityIdentifier("collection-save")
                 }
-            }
-            .onAppear {
-                if subject.type != SubjectType.book.rawValue, !mainEpisodes.isEmpty {
-                    watched = min(max(watched, app.library.watchedCount(for: subject.id)), mainEpisodes.count)
+                .scrollDismissesKeyboard(.interactively)
+                .background(Color.bgmCanvas)
+                .navigationTitle("编辑收藏")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { dismiss() }
+                            .disabled(isSaving)
+                            .accessibilityIdentifier("collection-cancel")
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            Task { await save() }
+                        } label: {
+                            if isSaving { ProgressView() } else { Text("保存").bold() }
+                        }
+                        .disabled(isSaving || commentOverLimit)
+                        .accessibilityIdentifier("collection-save")
+                    }
                 }
+                .onAppear {
+                    if subject.type != SubjectType.book.rawValue, !mainEpisodes.isEmpty {
+                        watched = min(max(watched, app.library.watchedCount(for: subject.id)), mainEpisodes.count)
+                    }
+                }
+                #if os(iOS)
+                .onChange(of: isCommentFocused) { _, focused in
+                    guard focused else { return }
+                    // 键盘弹出会压缩安全区，纯 ScrollView 不会自己把焦点字段滚进可见区域，
+                    // 等键盘动画结束后把短评整段移到中间，避免光标藏在键盘下面。
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(260))
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            scrollProxy.scrollTo(Self.commentSectionID, anchor: .center)
+                        }
+                    }
+                }
+                #endif
             }
         }
         .tint(.brandPink)
@@ -107,7 +126,8 @@ struct CollectionEditorView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         #else
-        .frame(width: 650, height: 730)
+        // 730 会让「编辑收藏」sheet 比默认 1280×820 窗口还高约 27pt，底部按钮被窗口边缘裁掉。
+        .frame(width: 650, height: 680)
         #endif
     }
 
@@ -367,35 +387,53 @@ struct CollectionEditorView: View {
     }
 
     private var commentSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 sectionTitle("短评")
                 Spacer(minLength: 8)
-                if !comment.isEmpty {
-                    Text("\(comment.count) 字")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                }
+                Text("\(comment.count) / \(CollectionCommentRules.limit)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(commentOverLimit ? AnyShapeStyle(Color.red) : AnyShapeStyle(.tertiary))
+                    .accessibilityIdentifier("collection-comment-count")
             }
 
-            TextEditor(text: $comment)
+            // 用系统多行 TextField 而不是 TextEditor：占位提示由控件自己绘制，和光标共用
+            // 同一文字容器，不会出现「聚焦后占位提示和光标错开几 pt」；高度按 3–8 行随
+            // 内容增长，也不再在滚动页里嵌一层滚动视图。
+            TextField("写下你的感受…", text: $comment, axis: .vertical)
                 .font(.subheadline)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .frame(height: 112)
+                .textFieldStyle(.plain)
+                .focused($isCommentFocused)
+                .lineLimit(3...8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
                 .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(alignment: .topLeading) {
-                    if comment.isEmpty {
-                        Text("写下你的感受…")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                            .padding(13)
-                            .allowsHitTesting(false)
-                    }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            commentOverLimit ? Color.red.opacity(0.5) : Color.primary.opacity(0.06),
+                            lineWidth: 0.8
+                        )
                 }
                 .accessibilityLabel("短评")
                 .accessibilityIdentifier("collection-comment")
+
+            if commentOverLimit {
+                Label(
+                    "已超出 \(comment.count - CollectionCommentRules.limit) 字，短评最多 \(CollectionCommentRules.limit) 字",
+                    systemImage: "exclamationmark.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("collection-comment-overflow")
+            }
         }
+    }
+
+    private var commentOverLimit: Bool {
+        CollectionCommentRules.isOverLimit(comment)
     }
 
     private var privacyRow: some View {
@@ -462,10 +500,15 @@ struct CollectionEditorView: View {
         errorText = nil
         defer { isSaving = false }
 
+        guard !commentOverLimit else {
+            errorText = "短评最多 \(CollectionCommentRules.limit) 字，请删减后再保存"
+            return
+        }
+
         var patch = CollectionPatch()
         patch.type = status.rawValue
         patch.rate = rate
-        patch.comment = comment
+        patch.comment = CollectionCommentRules.normalized(comment)
         patch.tags = parsedTags
         patch.isPrivate = isPrivate
         if subject.type == SubjectType.book.rawValue {

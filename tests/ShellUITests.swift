@@ -1112,4 +1112,121 @@ final class ShellUITests: XCTestCase {
         snapshot("subject-comments-preview", app: app)
     }
 
+    @MainActor
+    private func revealCollectionComment(_ field: XCUIElement, app: XCUIApplication) {
+        for _ in 0..<10 {
+            if field.exists, field.isHittable { return }
+            let container = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app
+            #if os(macOS)
+            container.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -260)
+            #else
+            let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            #endif
+        }
+        snapshot("unreachable-collection-comment", app: app)
+        XCTFail("The collection comment field did not become visible")
+    }
+
+    /// On the Mac the editor sheet is slightly taller than the default window, so the
+    /// comment box sits half outside the scroll viewport. Scroll it fully into view
+    /// before taking screenshots.
+    @MainActor
+    private func scrollCommentSectionIntoView(_ field: XCUIElement, app: XCUIApplication) {
+        #if os(macOS)
+        let sheet = app.sheets.firstMatch
+        guard sheet.exists else { return }
+        for _ in 0..<6 {
+            let viewport = sheet.scrollViews.firstMatch.frame
+            if field.exists, field.frame.maxY <= viewport.maxY - 12 { return }
+            sheet.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -140)
+        }
+        #endif
+    }
+
+    @MainActor
+    private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval = 4) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.isHittable { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return element.isHittable
+    }
+
+    @MainActor
+    private func waitForLabel(_ element: XCUIElement, _ expected: String, timeout: TimeInterval = 15) -> Bool {
+        // macOS 把静态文本的内容放在 value 里，iOS 放在 label 里。
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if displayedText(element) == expected { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return displayedText(element) == expected
+    }
+
+    /// 短评输入区：占位提示与光标必须共用同一文字容器，且超过 380 字时秒变红字并禁用保存。
+    @MainActor
+    func testCollectionCommentLimitLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment["BGMORI_ROUTE"] = "subject:8"
+            app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            app.launchEnvironment["BGMORI_PREVIEW_COLLECTION_EDITOR"] = "1"
+            app.launchArguments = ["-appearance", appearance]
+            app.launch()
+
+            let input = app.descendants(matching: .any)["collection-comment"].firstMatch
+            XCTAssertTrue(input.waitForExistence(timeout: 45), "The collection editor must open for subject:8")
+            let field = app.textFields["collection-comment"].exists
+                ? app.textFields["collection-comment"]
+                : app.textViews["collection-comment"]
+
+            scrollCommentSectionIntoView(field, app: app)
+            snapshot("collection-comment-empty-\(appearance)", app: app)
+
+            revealCollectionComment(field, app: app)
+            #if os(macOS)
+            field.click()
+            #else
+            field.tap()
+            #endif
+            XCTAssertTrue(waitUntilHittable(field), "The focused comment field must stay visible above the keyboard")
+            scrollCommentSectionIntoView(field, app: app)
+            snapshot("collection-comment-focused-\(appearance)", app: app)
+
+            let save = app.buttons["collection-save"]
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            XCTAssertTrue(save.isEnabled, "An empty comment must stay saveable")
+
+            // Paste on the Mac: synthesizing 385 keystrokes makes the system ask for
+            // input-method permission, which lands on top of the screenshots.
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(String(repeating: "a", count: 385), forType: .string)
+            field.typeKey("v", modifierFlags: .command)
+            #else
+            field.typeText(String(repeating: "a", count: 385))
+            #endif
+            let counter = app.descendants(matching: .any)["collection-comment-count"].firstMatch
+            XCTAssertTrue(waitForLabel(counter, "385 / 380"), "The counter must show the 380 character limit")
+            XCTAssertFalse(save.isEnabled, "Comments past 380 characters must not save")
+            XCTAssertTrue(app.descendants(matching: .any)["collection-comment-overflow"].firstMatch.exists)
+            scrollCommentSectionIntoView(field, app: app)
+            snapshot("collection-comment-overflow-\(appearance)", app: app)
+
+            #if os(macOS)
+            for _ in 0..<5 { field.typeKey(.delete, modifierFlags: []) }
+            #else
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
+            #endif
+            XCTAssertTrue(waitForLabel(counter, "380 / 380"))
+            XCTAssertTrue(save.isEnabled, "Exactly 380 characters must save")
+            snapshot("collection-comment-limit-\(appearance)", app: app)
+
+            app.terminate()
+        }
+    }
+
 }

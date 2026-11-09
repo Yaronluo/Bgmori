@@ -22,5 +22,11 @@ struct CollectionPresentationTests {
         precondition(item.applying(CollectionPatch(comment: "")).reviewText == nil, "Clearing a comment must remove its display block")
         precondition(item.applying(CollectionPatch(rate: 0)).rate == 0, "Unrated collections must stay unrated")
         print("PASS: absent/empty/whitespace comments, multiline reviews, clearing reviews and personal ratings")
+
+        let atLimit = String(repeating: "字", count: CollectionCommentRules.limit)
+        precondition(!CollectionCommentRules.isOverLimit(atLimit), "A comment at the 380 character limit must still save")
+        precondition(CollectionCommentRules.isOverLimit(atLimit + "字"), "A comment past the limit must be rejected")
+        precondition(CollectionCommentRules.normalized(" \n短评\n ") == "短评", "Comments must be saved without surrounding whitespace")
+        print("PASS: 380 character comment limit and whitespace trimming")
     }
 }
