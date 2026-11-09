@@ -25,6 +25,9 @@ struct BgmoriApp: App {
             rootView
         }
         .defaultSize(width: 430, height: 932)
+        .backgroundTask(.appRefresh("com.yaron.bgmori.refresh-reminders")) {
+            await app.refreshRemindersInBackground()
+        }
         #endif
     }
 

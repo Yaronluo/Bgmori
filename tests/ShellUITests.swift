@@ -66,6 +66,100 @@ final class ShellUITests: XCTestCase {
     }
 
     @MainActor
+    private func reminderElement(_ identifier: String, app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    @MainActor
+    private func revealReminderElement(_ element: XCUIElement, app: XCUIApplication) {
+        for _ in 0..<12 {
+            let container = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app
+            let frame = container.frame
+            if element.exists, element.isHittable, element.frame.minY > frame.minY + 80,
+               element.frame.maxY < frame.maxY - 30 { return }
+            #if os(macOS)
+            container.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -220)
+            #else
+            let start = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            let end = container.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            #endif
+        }
+        XCTFail("Reminder control is not visible: \(element.identifier)")
+    }
+
+    @MainActor
+    func testReminderSettingsLightAndDark() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchEnvironment["BGMORI_ROUTE"] = "reminders"
+            app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+            app.launchEnvironment["BGMORI_PREVIEW_REMINDERS"] = "1"
+            app.launchArguments = ["-appearance", appearance]
+            app.launch()
+            let enabled = reminderElement("reminder-enabled", app: app)
+            XCTAssertTrue(enabled.waitForExistence(timeout: 30))
+            snapshot("reminder-settings-\(appearance)", app: app)
+            let individual = reminderElement("reminder-individual", app: app)
+            revealReminderElement(individual, app: app)
+            #if os(macOS)
+            individual.click()
+            #else
+            individual.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.5)).tap()
+            #endif
+            let quiet = reminderElement("reminder-quiet", app: app)
+            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: quiet)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed, "Disabling individual reminders hides their quiet-hour controls")
+            let next = reminderElement("reminder-next", app: app)
+            revealReminderElement(next, app: app)
+            XCTAssertTrue(next.exists)
+            snapshot("reminder-next-\(appearance)", app: app)
+            let all = app.buttons["reminder-schedule-list"]
+            // SwiftUI exposes the link as a button on both platforms.
+            revealReminderElement(all, app: app)
+            #if os(macOS)
+            all.click()
+            #else
+            all.tap()
+            #endif
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", "提醒示例", "提醒示例")).firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", "预计播出", "预计播出")).firstMatch.exists)
+            snapshot("reminder-schedule-\(appearance)", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testReminderSystemDelivery() throws {
+        #if os(macOS)
+        throw XCTSkip("Native delivery is checked in the iPhone simulator; Mac UI and notification bridge are checked separately.")
+        #else
+        let app = XCUIApplication()
+        app.launchEnvironment["BGMORI_ROUTE"] = "reminders"
+        app.launchEnvironment["BGMORI_GUEST_MODE"] = "1"
+        app.launchEnvironment["BGMORI_ISOLATE_REMINDER_SETTINGS"] = "1"
+        app.launch()
+        let enabled = reminderElement("reminder-enabled", app: app)
+        XCTAssertTrue(enabled.waitForExistence(timeout: 30))
+        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = system.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "好", "OK"])).firstMatch
+        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        let test = app.buttons["reminder-test"]
+        revealReminderElement(test, app: app)
+        test.tap()
+        let delivered = reminderElement("reminder-test-delivered", app: app)
+        XCTAssertTrue(delivered.waitForExistence(timeout: 15), "The real UserNotifications foreground delegate must confirm delivery, not just queue insertion")
+        snapshot("reminder-system-delivered", app: app)
+        // A fresh isolated launch restores disabled settings and removes the test notification.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(reminderElement("reminder-enabled", app: app).waitForExistence(timeout: 30))
+        app.terminate()
+        #endif
+    }
+
+    @MainActor
     func testSidebarWindowRestoreLightAndDark() {
         for appearance in ["light", "dark"] {
             let app = launch("home", appearance: appearance)

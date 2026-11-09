@@ -951,10 +951,10 @@ struct BgmlistSchedule: Decodable, Sendable {
     static let ttl: TimeInterval = 21_600
     static let maxStale: TimeInterval = 172_800
 
-    func airings(asOf date: Date = .now) -> [Int: BgmlistAiring] {
+    func airings(asOf date: Date = .now, includeEnded: Bool = false) -> [Int: BgmlistAiring] {
         var result: [Int: BgmlistAiring] = [:]
         for item in items {
-            if let end = item.end, let ended = Self.parseDate(end), ended <= date { continue }
+            if !includeEnded, let end = item.end, let ended = Self.parseDate(end), ended <= date { continue }
             guard let broadcast = item.broadcast else { continue }
             let parts = broadcast.split(separator: "/", omittingEmptySubsequences: false)
             // Never infer a repeating clock from a premiere date or an unknown cadence.
@@ -963,7 +963,7 @@ struct BgmlistSchedule: Decodable, Sendable {
             for site in item.sites where site.site == "bangumi" {
                 guard let id = Int(site.id), id > 0 else { continue }
                 if let previous = result[id], previous.anchor > anchor { continue }
-                result[id] = BgmlistAiring(anchor: anchor)
+                result[id] = BgmlistAiring(anchor: anchor, end: item.end.flatMap(Self.parseDate))
             }
         }
         return result
@@ -980,6 +980,7 @@ struct BgmlistSchedule: Decodable, Sendable {
 
 struct BgmlistAiring: Equatable, Sendable {
     let anchor: Date
+    var end: Date? = nil
 
     private var components: DateComponents {
         var calendar = Calendar(identifier: .gregorian)

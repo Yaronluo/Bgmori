@@ -7,6 +7,8 @@ struct CalendarView: View {
 
     @State private var selectedWeekday: Int = ((Calendar.current.component(.weekday, from: Date()) + 5) % 7) + 1
     @State private var onlyWatching = false
+    @State private var referenceDate = Date()
+    @State private var reminderSubjectIDs: Set<Int>?
     @Namespace private var daySelection
 
     private let contentMaxWidth: CGFloat = 760
@@ -64,6 +66,13 @@ struct CalendarView: View {
         }
         .background(Color.bgmGroupedBackground)
         .bgmNavigationTitle("每日放送")
+        .onChange(of: app.router.calendarReminderID, initial: true) { _, _ in
+            guard let date = app.router.calendarReminderDate else { return }
+            referenceDate = date
+            selectedWeekday = ((Calendar.current.component(.weekday, from: date) + 5) % 7) + 1
+            onlyWatching = app.router.calendarReminderOnlyWatching
+            reminderSubjectIDs = app.router.calendarReminderSubjectIDs
+        }
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .principal) {
@@ -75,6 +84,8 @@ struct CalendarView: View {
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                         onlyWatching.toggle()
+                        reminderSubjectIDs = nil
+                        app.router.clearCalendarReminder()
                     }
                 } label: {
                     Image(systemName: onlyWatching ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
@@ -121,7 +132,7 @@ struct CalendarView: View {
                 HStack(spacing: 8) {
                     Text(weekdayName)
                         .font(.system(.title2, weight: .bold))
-                    if selectedWeekday == app.todayWeekday {
+                    if selectedDateIsToday {
                         Text("今天")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(Color.brandPink)
@@ -133,6 +144,10 @@ struct CalendarView: View {
                 Text(daySummary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if reminderSubjectIDs != nil {
+                    Text("本条提醒的放送安排")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if filteredItems.contains(where: { app.calendarAirings[$0.id] != nil }) {
                     Text("北京时间")
                     .font(.caption)
@@ -140,10 +155,13 @@ struct CalendarView: View {
                 }
             }
             Spacer(minLength: 8)
-            if selectedWeekday != app.todayWeekday {
+            if !selectedDateIsToday {
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
                         selectedWeekday = app.todayWeekday
+                        referenceDate = .now
+                        reminderSubjectIDs = nil
+                        app.router.clearCalendarReminder()
                     }
                 } label: {
                     Text("回到今天")
@@ -192,11 +210,13 @@ struct CalendarView: View {
                     day: day,
                     date: dates[day.weekday.id],
                     isSelected: selectedWeekday == day.weekday.id,
-                    isToday: day.weekday.id == app.todayWeekday,
+                    isToday: dates[day.weekday.id].map { Calendar.current.isDateInToday($0) } ?? false,
                     namespace: daySelection
                 ) {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
                         selectedWeekday = day.weekday.id
+                        reminderSubjectIDs = nil
+                        app.router.clearCalendarReminder()
                     }
                 }
             }
@@ -205,7 +225,7 @@ struct CalendarView: View {
 
     private var weekDates: [Int: Date] {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
+        let today = calendar.startOfDay(for: referenceDate)
         let weekday = calendar.component(.weekday, from: today)
         let daysSinceMonday = (weekday + 5) % 7
         guard let monday = calendar.date(byAdding: .day, value: -daysSinceMonday, to: today) else {
@@ -295,8 +315,16 @@ struct CalendarView: View {
     }
 
     private var filteredItems: [LegacySubject] {
+        if let ids = reminderSubjectIDs {
+            let entries = Dictionary(days.flatMap(\.items).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return ids.sorted().compactMap { entries[$0] }.filter { !onlyWatching || app.library.isWatching($0.id) }
+        }
         guard let day = days.first(where: { $0.weekday.id == selectedWeekday }) else { return [] }
         return onlyWatching ? day.items.filter { app.library.isWatching($0.id) } : day.items
+    }
+
+    private var selectedDateIsToday: Bool {
+        weekDates[selectedWeekday].map { Calendar.current.isDateInToday($0) } ?? false
     }
 }
 

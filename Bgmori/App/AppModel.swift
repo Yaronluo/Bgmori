@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 @Observable
@@ -12,6 +13,12 @@ final class AppModel {
     let social: SocialService
     let categories: CategoryStore
     let recentSubjects: RecentSubjectsStore
+    let notifications: NotificationManager
+    var reminderAccountReady = false
+    var pendingReminderResponse: AiringReminderResponse?
+    let reminderPreviewNow = Date()
+    var calendarUpdatedAt: Date?
+    var calendarTimesUpdatedAt: Date?
 
     var calendar: [CalendarDay] = []
     private(set) var calendarContentVersion = 0
@@ -19,6 +26,7 @@ final class AppModel {
     var hasLoadedCalendar = false
     var calendarError: String?
     private(set) var calendarAirings: [Int: BgmlistAiring] = [:]
+    var reminderAirings: [Int: BgmlistAiring] = [:]
     private(set) var calendarTimesError: String?
     private var calendarTimesTask: Task<Void, Never>?
     private var didLoadCalendarTimes = false
@@ -51,7 +59,21 @@ final class AppModel {
         }
         #endif
         MirrorRouting.shared.startNetworkMonitoring()
-        let settings = AppSettings()
+        let settings: AppSettings
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["BGMORI_PREVIEW_REMINDERS"] == "1"
+            || ProcessInfo.processInfo.environment["BGMORI_ISOLATE_REMINDER_SETTINGS"] == "1" {
+            let defaults = UserDefaults(suiteName: "BgmoriReminderUIPreview")!
+            defaults.removePersistentDomain(forName: "BgmoriReminderUIPreview")
+            settings = AppSettings(defaults: defaults)
+            if ProcessInfo.processInfo.environment["BGMORI_PREVIEW_REMINDERS"] == "1" {
+                settings.reminders.enabled = true
+                settings.reminders.individual = true
+            }
+        } else { settings = AppSettings() }
+        #else
+        settings = AppSettings()
+        #endif
         let api = APIClient()
         let auth = AuthManager(api: api)
         self.settings = settings
@@ -62,6 +84,8 @@ final class AppModel {
         self.social = SocialService(api: api)
         self.categories = CategoryStore(api: api)
         self.recentSubjects = RecentSubjectsStore()
+        self.notifications = NotificationManager.shared
+        notifications.onResponse = { [weak self] response in await self?.receiveReminder(response) }
     }
 
     var isGuest: Bool { !auth.isLoggedIn }
@@ -141,8 +165,18 @@ final class AppModel {
         if auth.isLoggedIn {
             await library.loadIfNeeded()
         }
+        if let response = pendingReminderResponse, response.action == UNNotificationDefaultActionIdentifier, auth.username != nil {
+            pendingReminderResponse = nil
+            await receiveReminder(response, allowBeforeBootstrap: true)
+        }
         await initialContent
+        if settings.dailyReminder { await loadCalendarTimes() }
+        reminderAccountReady = true
         await updateDailyReminder()
+        if let response = pendingReminderResponse {
+            pendingReminderResponse = nil
+            await receiveReminder(response)
+        }
     }
 
     func prepareStartupContent(force: Bool = false) async {
@@ -280,7 +314,7 @@ final class AppModel {
         case "search":
             router.openSearch(query: value)
         case "login": showLogin = true
-        case "settings": showSettings = true
+        case "settings", "reminders": showSettings = true
         case "profile": router.selectedSection = .profile
         case "friends":
             router.selectedSection = .profile
@@ -328,11 +362,18 @@ final class AppModel {
 
         if !force, let hit = await api.cachedBgmlistSchedule() {
             calendarAirings = hit.value.airings()
+            reminderAirings = hit.value.airings(includeEnded: true)
+            calendarTimesUpdatedAt = Date().addingTimeInterval(-hit.age)
             if hit.isFresh { return }
             guard await api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 300) else { return }
         }
         do {
-            calendarAirings = try await api.bgmlistSchedule(force: force).airings()
+            let schedule = try await api.bgmlistSchedule(force: force)
+            calendarAirings = schedule.airings()
+            reminderAirings = schedule.airings(includeEnded: true)
+            if let hit = await api.cachedBgmlistSchedule() {
+                calendarTimesUpdatedAt = Date().addingTimeInterval(-hit.age)
+            }
         } catch {
             guard !Task.isCancelled else { return }
             calendarTimesError = "播放时刻更新失败，已保留现有内容"
@@ -358,6 +399,7 @@ final class AppModel {
 
         if !force, calendar.isEmpty, let hit = await api.cachedCalendar() {
             calendar = hit.value.sorted { $0.weekday.id < $1.weekday.id }
+            calendarUpdatedAt = Date().addingTimeInterval(-hit.age)
             hasLoadedCalendar = true
             if hit.isFresh { return }
             guard await api.beginBackgroundRefresh(hit.cacheKey, minimumInterval: 300) else { return }
@@ -365,6 +407,7 @@ final class AppModel {
 
         do {
             calendar = try await api.calendar(force: force).sorted { $0.weekday.id < $1.weekday.id }
+            if let hit = await api.cachedCalendar() { calendarUpdatedAt = Date().addingTimeInterval(-hit.age) }
             calendarContentVersion &+= 1
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? "放送表加载失败"
@@ -511,6 +554,7 @@ final class AppModel {
     func signOut() {
         auth.signOut()
         library.reset()
+        Task { await updateDailyReminder() }
         showToast("已退出登录")
     }
 
@@ -544,24 +588,6 @@ final class AppModel {
         #if os(macOS)
         router.macPath.removeAll()
         #endif
-    }
-
-    func updateDailyReminder() async {
-        let watchingIDs = Set(library.watching.map(\.subjectId))
-        let count = todayAiring.filter { watchingIDs.contains($0.id) }.count
-        await NotificationManager.shared.scheduleDailyReminder(enabled: settings.dailyReminder, count: count)
-    }
-
-    func enableDailyReminder() async -> Bool {
-        let granted = await NotificationManager.shared.requestAuthorization()
-        if granted {
-            settings.dailyReminder = true
-            await updateDailyReminder()
-        } else {
-            settings.dailyReminder = false
-            showToast("通知权限未开启，可在系统设置中允许", isError: true)
-        }
-        return granted
     }
 
     func clearCaches() async {

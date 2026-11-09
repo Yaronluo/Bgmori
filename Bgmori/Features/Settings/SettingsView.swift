@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var cacheSize = "计算中…"
     @State private var isClearing = false
     @State private var showConnections = false
+    @State private var showReminders = false
 
     var body: some View {
         @Bindable var settings = app.settings
@@ -81,29 +82,15 @@ struct SettingsView: View {
                 }
 
                 settingsSection("通知") {
-                    settingRow(
-                        icon: "bell.badge.fill",
-                        tint: .brandPink,
-                        title: "每日放送提醒",
-                        subtitle: "每天 20:00 提醒在看作品"
-                    ) {
-                        Toggle("每日放送提醒", isOn: Binding(
-                            get: { settings.dailyReminder },
-                            set: { newValue in
-                                Task {
-                                    if newValue {
-                                        _ = await app.enableDailyReminder()
-                                    } else {
-                                        settings.dailyReminder = false
-                                        await app.updateDailyReminder()
-                                    }
-                                }
-                            }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .tint(.brandPink)
+                    Button { showReminders = true } label: {
+                        settingRow(icon: "bell.badge.fill", tint: .brandPink, title: "追番提醒",
+                                   subtitle: settings.dailyReminder ? "每日汇总、单番提醒与通知预览" : "未开启 · 仅提醒在看作品") {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("reminder-settings")
                 }
 
                 settingsSection("存储") {
@@ -144,7 +131,11 @@ struct SettingsView: View {
             ConnectionSettingsView()
                 .environment(app)
         }
+        .navigationDestination(isPresented: $showReminders) { ReminderSettingsView().environment(app) }
         .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["BGMORI_ROUTE"] == "reminders" { showReminders = true }
+            #endif
             cacheSize = await app.cacheSizeText()
         }
         .toolbar {

@@ -57,10 +57,14 @@ struct RootView: View {
         .task {
             await app.bootstrap()
         }
+        .task(id: app.reminderInput) {
+            await app.updateDailyReminder()
+        }
         .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            if app.settings.dailyReminder {
-                Task { await app.updateDailyReminder() }
+            if newPhase == .active {
+                Task { await app.refreshReminderData() }
+            } else if newPhase == .background {
+                app.scheduleReminderBackgroundRefresh()
             }
         }
     }

@@ -35,6 +35,8 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.entertainment
         ITSAppUsesNonExemptEncryption: false
+        BGTaskSchedulerPermittedIdentifiers: [com.yaron.bgmori.refresh-reminders]
+        UIBackgroundModes: [fetch]
         UIPrerenderedIcon: true
         UILaunchScreen:
           UIColorName: LaunchBackground

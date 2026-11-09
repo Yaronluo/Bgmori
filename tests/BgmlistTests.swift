@@ -63,6 +63,8 @@ struct BgmlistTests {
             .replacingOccurrences(of: "\"end\":\"\"", with: "\"end\":\"2020-01-01T00:00:00Z\"")
         let endedSchedule = try decoder.decode(BgmlistSchedule.self, from: Data(ended.utf8))
         precondition(endedSchedule.airings().isEmpty)
+        precondition(endedSchedule.airings(includeEnded: true)[393010]?.end != nil,
+                     "Reminder planning retains known ends to suppress stale calendar-only fallbacks")
         print("PASS: Bangumi ID matching, Beijing clock, UTC/offset midnight rollover, unknown/ended schedules")
 
         let config = URLSessionConfiguration.ephemeral

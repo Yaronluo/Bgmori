@@ -80,6 +80,10 @@ final class AppRouter {
     var profilePath: [Route] = []
     var macPath: [Route] = []
     var searchQuery: String = ""
+    var calendarReminderDate: Date?
+    var calendarReminderOnlyWatching = false
+    var calendarReminderID = UUID()
+    var calendarReminderSubjectIDs: Set<Int>?
 
     func openSearch(query: String? = nil) {
         if let query { searchQuery = query }
@@ -92,8 +96,15 @@ final class AppRouter {
         #endif
     }
 
-    func openCalendar() {
+    func openCalendar(date: Date? = nil, onlyWatching: Bool = false) {
         selectedSection = .calendar
+        if let date {
+            calendarReminderDate = date
+            calendarReminderOnlyWatching = onlyWatching
+            calendarReminderID = UUID()
+            calendarReminderSubjectIDs = nil
+            calendarPath.removeAll()
+        }
         #if os(macOS)
         macPath.removeAll()
         #endif
@@ -108,6 +119,19 @@ final class AppRouter {
         case .search: searchPath
         case .profile: profilePath
         }
+    }
+
+    func openReminder(_ payload: AiringReminderPayload) {
+        openCalendar(date: payload.calendarDate, onlyWatching: true)
+        calendarReminderSubjectIDs = Set(payload.subjectIDs)
+        if payload.kind == .individual, payload.subjectIDs.count == 1, let id = payload.subjectIDs.first {
+            push(.subject(id), in: .calendar)
+        }
+    }
+
+    func clearCalendarReminder() {
+        calendarReminderDate = nil
+        calendarReminderSubjectIDs = nil
     }
 
     func setPath(_ path: [Route], for section: AppSection) {

@@ -33,21 +33,31 @@ final class AppSettings {
     var hideSpoilers = true { didSet { save() } }
     var showNSFW = false { didSet { save() } }
     var showWatchingProgress = false { didSet { save() } }
-    var dailyReminder = false { didSet { save() } }
+    var reminders = AiringReminderOptions() { didSet { save() } }
+    var dailyReminder: Bool {
+        get { reminders.enabled }
+        set { reminders.enabled = newValue }
+    }
     var useSafariUserAgentForHTML = true { didSet { save() } }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     /// @Observable 会把存储属性改写成计算属性，init 里的赋值同样会触发 didSet。
     /// 加载完成前禁止回写，否则第一行赋值就会用默认值覆盖磁盘上已有的设置。
     @ObservationIgnored private var isLoaded = false
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         preferChineseName = defaults.object(forKey: "preferChineseName") as? Bool ?? true
         hideSpoilers = defaults.object(forKey: "hideSpoilers") as? Bool ?? true
         showNSFW = defaults.object(forKey: "showNSFW") as? Bool ?? false
         showWatchingProgress = defaults.object(forKey: "showWatchingProgress") as? Bool ?? false
-        dailyReminder = defaults.object(forKey: "dailyReminder") as? Bool ?? false
+        if let data = defaults.data(forKey: "airingReminders.v2"),
+           let saved = try? JSONDecoder().decode(AiringReminderOptions.self, from: data) {
+            reminders = saved
+        } else {
+            reminders.enabled = defaults.object(forKey: "dailyReminder") as? Bool ?? false
+        }
         useSafariUserAgentForHTML = defaults.object(forKey: "useSafariUserAgentForHTML") as? Bool ?? true
 
         // Account/password login no longer needs a locally configured OAuth application.
@@ -72,6 +82,7 @@ final class AppSettings {
         defaults.set(showNSFW, forKey: "showNSFW")
         defaults.set(showWatchingProgress, forKey: "showWatchingProgress")
         defaults.set(dailyReminder, forKey: "dailyReminder")
+        if let data = try? JSONEncoder().encode(reminders) { defaults.set(data, forKey: "airingReminders.v2") }
         defaults.set(useSafariUserAgentForHTML, forKey: "useSafariUserAgentForHTML")
     }
 }
