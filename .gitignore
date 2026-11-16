@@ -7,3 +7,10 @@ xcuserdata/
 *.dSYM.zip
 docs/branding/archive/
 Bgmori.xcodeproj/
+IDEA.md
+.env
+.env.*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
