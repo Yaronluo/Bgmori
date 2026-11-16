@@ -1,5 +1,34 @@
 import Foundation
 
+/// Notification bodies are short but generated in batches; rebuilding a
+/// DateFormatter for every row dominates the planning pass. Configured
+/// formatters are safe to format with concurrently.
+private final class TimeLabelFormatterCache: @unchecked Sendable {
+    static let shared = TimeLabelFormatterCache()
+    private let lock = NSLock()
+    private var storage: [String: DateFormatter] = [:]
+
+    func formatter(format: String, calendar: Calendar) -> DateFormatter {
+        let key = "\(format)|\(calendar.timeZone.identifier)|\(calendar.locale?.identifier ?? "")"
+        lock.lock()
+        if let cached = storage[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = format
+        lock.lock()
+        if storage.count >= 32 { storage.removeAll(keepingCapacity: true) }
+        storage[key] = formatter
+        lock.unlock()
+        return formatter
+    }
+}
+
 struct AiringReminderOptions: Codable, Equatable, Sendable {
     var enabled = false
     var dailySummary = true
@@ -160,17 +189,13 @@ enum AiringReminderPlanner {
     }
 
     static func timeLabel(_ date: Date, relativeTo reference: Date, calendar: Calendar = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "HH:mm"
-        if calendar.isDate(date, inSameDayAs: reference) { return formatter.string(from: date) }
+        let clock = TimeLabelFormatterCache.shared.formatter(format: "HH:mm", calendar: calendar)
+        if calendar.isDate(date, inSameDayAs: reference) { return clock.string(from: date) }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: reference), calendar.isDate(date, inSameDayAs: tomorrow) {
-            return "明日 " + formatter.string(from: date)
+            return "明日 " + clock.string(from: date)
         }
-        formatter.dateFormat = "M月d日 HH:mm"
-        return formatter.string(from: date)
+        let full = TimeLabelFormatterCache.shared.formatter(format: "M月d日 HH:mm", calendar: calendar)
+        return full.string(from: date)
     }
 
     private static func compact(_ rows: [String]) -> String {

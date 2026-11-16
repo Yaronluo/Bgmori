@@ -93,7 +93,9 @@ actor APIClient {
         configuration.timeoutIntervalForResource = 60
         configuration.waitsForConnectivity = false
         configuration.httpShouldSetCookies = false
-        configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 128 * 1024 * 1024)
+        // Reads always bypass URLSession's cache (`.reloadIgnoringLocalCacheData`)
+        // and DiskCache owns freshness, so a second copy here would only waste disk.
+        configuration.urlCache = nil
         self.session = session ?? URLSession(configuration: configuration, delegate: ConnectionSessionDelegate(), delegateQueue: nil)
         let loginConfiguration = URLSessionConfiguration.ephemeral
         loginConfiguration.httpShouldSetCookies = false

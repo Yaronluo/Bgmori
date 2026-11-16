@@ -10,24 +10,38 @@ struct SendableImage: @unchecked Sendable {
 actor ImageLoader {
     static let shared = ImageLoader()
 
+    private struct MemoryEntry {
+        let image: SendableImage
+        let cost: Int
+    }
+
     private let session: URLSession
     private let directory: URL
     private let routing: MirrorRouting
-    private var memory: [String: SendableImage] = [:]
+    private var memory: [String: MemoryEntry] = [:]
     private var memoryOrder: [String] = []
-    private let memoryLimit = 180
+    private var memoryBytes = 0
+    private let memoryLimitBytes: Int
+    private let diskLimitBytes: Int64
+    private var writesSinceTrim = 0
+    private var lastDiskTrim = Date.distantPast
     private var downloads: [URL: Task<Data?, Never>] = [:]
     private var generation = UUID()
     private let gate = ImageDownloadGate(limit: 4)
 
-    init(session: URLSession? = nil, directory: URL? = nil, routing: MirrorRouting = .shared) {
+    init(session: URLSession? = nil, directory: URL? = nil, routing: MirrorRouting = .shared,
+         memoryLimitBytes: Int = 96 * 1024 * 1024, diskLimitBytes: Int64 = 320 * 1024 * 1024) {
         self.routing = routing
+        self.memoryLimitBytes = memoryLimitBytes
+        self.diskLimitBytes = diskLimitBytes
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 12
         configuration.timeoutIntervalForResource = 18
         configuration.waitsForConnectivity = false
         configuration.httpMaximumConnectionsPerHost = 4
-        configuration.urlCache = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
+        // The loader keeps its own TTL-free disk cache; a second URLSession copy
+        // would only duplicate every download on disk without ever being read.
+        configuration.urlCache = nil
         configuration.httpShouldSetCookies = false
         self.session = session ?? URLSession(configuration: configuration, delegate: ConnectionSessionDelegate(), delegateQueue: nil)
 
@@ -42,43 +56,41 @@ actor ImageLoader {
         let requestURL = Self.requestURL(for: canonical, maxPixel: maxPixel)
         let key = "\(requestURL.absoluteString)#\(maxPixel)"
         if let cached = memory[key] {
-            return cached
+            touch(key)
+            return cached.image
         }
 
         let currentGeneration = generation
         // Reuse full-size images cached by earlier versions, including when offline.
-        var cgImage: CGImage?
-        if requestURL != url, let original = diskData(for: url) ?? diskData(for: canonical) {
-            cgImage = downsample(data: original, maxPixel: maxPixel)
+        var image: SendableImage?
+        if requestURL != url {
+            var original = await diskData(for: url)
+            if original == nil { original = await diskData(for: canonical) }
+            if let original { image = await decode(original, maxPixel: maxPixel) }
         }
-        if cgImage == nil, let data = await data(for: requestURL) {
-            cgImage = downsample(data: data, maxPixel: maxPixel)
+        if image == nil, let data = await data(for: requestURL) {
+            image = await decode(data, maxPixel: maxPixel)
         }
         guard generation == currentGeneration, !Task.isCancelled else { return nil }
-        if cgImage == nil, requestURL != url, let data = await data(for: url) {
-            cgImage = downsample(data: data, maxPixel: maxPixel)
+        if image == nil, requestURL != url, let data = await data(for: url) {
+            image = await decode(data, maxPixel: maxPixel)
         }
 
-        guard generation == currentGeneration, !Task.isCancelled, let cgImage else { return nil }
+        guard generation == currentGeneration, !Task.isCancelled, let image else { return nil }
         // Another caller may have decoded the shared download while we were suspended.
-        if let cached = memory[key] { return cached }
-        let wrapped = SendableImage(cgImage: cgImage)
-        memory[key] = wrapped
-        memoryOrder.append(key)
-        trimMemory()
-        return wrapped
+        if let cached = memory[key] { return cached.image }
+        store(image, for: key)
+        return image
     }
 
-    func clear() {
+    func clear() async {
         generation = UUID()
         for download in downloads.values { download.cancel() }
         downloads.removeAll()
         memory.removeAll()
         memoryOrder.removeAll()
-        session.configuration.urlCache?.removeAllCachedResponses()
-        if let contents = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-            for url in contents { try? FileManager.default.removeItem(at: url) }
-        }
+        memoryBytes = 0
+        await Self.removeAllFiles(in: directory)
     }
 
     /// Resize original posters and portraits. User avatars and external images keep their URLs.
@@ -95,13 +107,13 @@ actor ImageLoader {
         return components.url ?? url
     }
 
-    private func diskData(for url: URL) -> Data? {
+    nonisolated private func diskData(for url: URL) async -> Data? {
         guard let data = try? Data(contentsOf: fileURL(for: url)), !data.isEmpty else { return nil }
         return data
     }
 
     private func data(for url: URL) async -> Data? {
-        if let disk = diskData(for: url) { return disk }
+        if let disk = await diskData(for: url) { return disk }
         if let download = downloads[url] { return await download.value }
 
         let currentGeneration = generation
@@ -111,8 +123,11 @@ actor ImageLoader {
         downloads[url] = download
         let data = await download.value
         guard generation == currentGeneration else { return nil }
+        if let data {
+            await write(data, for: url)
+            await trimDiskIfNeeded()
+        }
         downloads[url] = nil
-        if let data { try? data.write(to: fileURL(for: url), options: .atomic) }
         return data
     }
 
@@ -183,19 +198,95 @@ actor ImageLoader {
         }
     }
 
+    /// Drops the least recently used decodes once the byte budget is exceeded.
+    /// A byte budget (not a fixed count) keeps large hero images from claiming
+    /// hundreds of megabytes on iPhone.
+    private func store(_ image: SendableImage, for key: String) {
+        if let existing = memory.removeValue(forKey: key) {
+            memoryBytes -= existing.cost
+            if let index = memoryOrder.firstIndex(of: key) { memoryOrder.remove(at: index) }
+        }
+        let cost = image.cgImage.bytesPerRow * image.cgImage.height
+        memory[key] = MemoryEntry(image: image, cost: cost)
+        memoryBytes += cost
+        memoryOrder.append(key)
+        trimMemory()
+    }
+
+    private func touch(_ key: String) {
+        guard let index = memoryOrder.firstIndex(of: key), index != memoryOrder.count - 1 else { return }
+        memoryOrder.remove(at: index)
+        memoryOrder.append(key)
+    }
+
     private func trimMemory() {
-        while memoryOrder.count > memoryLimit {
+        // Keep one entry even when a single decode exceeds the budget.
+        while memoryBytes > memoryLimitBytes, memoryOrder.count > 1 {
             let key = memoryOrder.removeFirst()
-            memory.removeValue(forKey: key)
+            if let entry = memory.removeValue(forKey: key) { memoryBytes -= entry.cost }
         }
     }
 
-    private func fileURL(for url: URL) -> URL {
+    nonisolated private func fileURL(for url: URL) -> URL {
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(digest + ".img")
     }
 
-    private func downsample(data: Data, maxPixel: Int) -> CGImage? {
+    nonisolated private func write(_ data: Data, for url: URL) async {
+        try? data.write(to: fileURL(for: url), options: .atomic)
+    }
+
+    private func trimDiskIfNeeded() async {
+        writesSinceTrim += 1
+        guard writesSinceTrim >= 32 || Date().timeIntervalSince(lastDiskTrim) >= 3_600 else { return }
+        writesSinceTrim = 0
+        lastDiskTrim = Date()
+        await trimDisk()
+    }
+
+    /// Old covers are disposable; the cap only keeps months of browsing from
+    /// leaving gigabytes behind.
+    func trimDisk() async {
+        let directory = self.directory
+        let limit = diskLimitBytes
+        await Self.trimDirectory(directory, maxBytes: limit)
+    }
+
+    nonisolated private static func trimDirectory(_ directory: URL, maxBytes: Int64) async {
+        let fileManager = FileManager.default
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var entries: [(url: URL, size: Int64, modified: Date)] = []
+        var total: Int64 = 0
+        for url in contents {
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            let size = Int64(values?.fileSize ?? 0)
+            total += size
+            entries.append((url, size, values?.contentModificationDate ?? .distantPast))
+        }
+        guard total > maxBytes else { return }
+
+        let target = maxBytes - maxBytes / 10
+        entries.sort { $0.modified < $1.modified }
+        for entry in entries where total > target {
+            try? fileManager.removeItem(at: entry.url)
+            total -= entry.size
+        }
+    }
+
+    nonisolated private static func removeAllFiles(in directory: URL) async {
+        let fileManager = FileManager.default
+        guard let contents = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for url in contents { try? fileManager.removeItem(at: url) }
+    }
+
+    /// Decoding runs off the actor so parallel downloads can decode in
+    /// parallel instead of queueing behind one executor.
+    nonisolated private func decode(_ data: Data, maxPixel: Int) async -> SendableImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -203,7 +294,8 @@ actor ImageLoader {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixel
         ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return SendableImage(cgImage: image)
     }
 }
 

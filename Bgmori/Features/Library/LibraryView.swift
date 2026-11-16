@@ -124,7 +124,8 @@ struct LibraryView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 0) {
+        let items = filtered
+        return VStack(spacing: 0) {
             filterControls
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -142,7 +143,7 @@ struct LibraryView: View {
                         }
                         .padding(.horizontal, 20)
                     }
-                    if filtered.isEmpty {
+                    if items.isEmpty {
                         if app.library.isLoading {
                             ProgressView("同步收藏…")
                                 .frame(maxWidth: .infinity)
@@ -156,7 +157,7 @@ struct LibraryView: View {
                         }
                     } else if isGrid {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 180), spacing: 20, alignment: .top)], alignment: .leading, spacing: 20) {
-                            ForEach(filtered) { item in
+                            ForEach(items) { item in
                                 NavigationLink(value: Route.subject(item.subjectId)) {
                                     collectionCard(item)
                                 }
@@ -173,7 +174,7 @@ struct LibraryView: View {
                         .padding(.horizontal, 20)
                     } else {
                         LazyVStack(spacing: 0) {
-                            ForEach(filtered) { item in
+                            ForEach(items) { item in
                                 HStack(alignment: .top, spacing: 8) {
                                     NavigationLink(value: Route.subject(item.subjectId)) {
                                         CollectionReviewRow(item: item)

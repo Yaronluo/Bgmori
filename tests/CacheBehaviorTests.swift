@@ -192,6 +192,31 @@ private func cacheFile(_ key: String, namespace: String) -> URL {
     return base.appendingPathComponent(namespace).appendingPathComponent(digest + ".cache")
 }
 
+/// The cache is disposable, so it must stay bounded without asking the user:
+/// oldest files go first once the namespace exceeds its byte cap.
+private func checkDiskCacheEviction() async throws {
+    let namespace = "BgmoriEvictionTests-\(UUID())"
+    let cache = DiskCache(namespace: namespace, maxBytes: 12 * 1024)
+    let payload = Data(repeating: 0x41, count: 4 * 1024)
+    for index in 0..<6 {
+        await cache.write("entry-\(index)", data: payload)
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    let size = await cache.size()
+    precondition(size <= 12 * 1024, "cache grew past its cap: \(size) bytes")
+    let newest = await cache.readEntry("entry-5", maxAge: 60, maxStaleAge: 60)
+    let oldest = await cache.readEntry("entry-0", maxAge: 60, maxStaleAge: 60)
+    precondition(newest != nil, "the newest entry must survive eviction")
+    precondition(oldest == nil, "the oldest entries must be evicted first")
+    _ = await cache.trimIfNeeded()
+    let afterTrim = await cache.size()
+    precondition(afterTrim <= 12 * 1024)
+    await cache.clear()
+    let cleared = await cache.size()
+    precondition(cleared == 0)
+    print("PASS: disk cache evicts the oldest entries when it exceeds its byte cap")
+}
+
 private func ageCache(_ key: String, namespace: String, seconds: TimeInterval) throws {
     let url = cacheFile(key, namespace: namespace)
     try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-seconds)],
@@ -279,6 +304,8 @@ struct CacheBehaviorTests {
         let secondValue = try await secondWaiter.value
         precondition(secondValue.id == 10 && stub.subjectsRequested == beforeCancel + 1)
         print("PASS: cancelling one waiter leaves the shared request alive for the other")
+
+        try await checkDiskCacheEviction()
 
         let html = try await api.rawHTML(URL(string: "https://bgm.tv/subject/8")!, cacheKey: "html-8")
         precondition(html.contains("comment_box"))

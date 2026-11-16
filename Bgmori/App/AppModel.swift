@@ -20,7 +20,9 @@ final class AppModel {
     var calendarUpdatedAt: Date?
     var calendarTimesUpdatedAt: Date?
 
-    var calendar: [CalendarDay] = []
+    var calendar: [CalendarDay] = [] {
+        didSet { calendarContentVersion &+= 1 }
+    }
     private(set) var calendarContentVersion = 0
     var isLoadingCalendar = false
     var hasLoadedCalendar = false
@@ -51,6 +53,9 @@ final class AppModel {
     private var isPreparingStartup = false
     private var didLoadCalendar = false
     private var didLoadHome = false
+
+    @ObservationIgnored private var cachedTodayAiring: (libraryRevision: Int, calendarVersion: Int, weekday: Int, value: [LegacySubject])?
+    @ObservationIgnored private var cachedContinueWatching: (libraryRevision: Int, value: [UserSubjectCollection])?
 
     init() {
         #if DEBUG
@@ -98,9 +103,14 @@ final class AppModel {
     }
 
     var todayAiring: [LegacySubject] {
-        let items = calendar.first(where: { $0.weekday.id == todayWeekday })?.items ?? []
+        let weekday = todayWeekday
+        if let cached = cachedTodayAiring, cached.libraryRevision == library.revision,
+           cached.calendarVersion == calendarContentVersion, cached.weekday == weekday {
+            return cached.value
+        }
+        let items = calendar.first(where: { $0.weekday.id == weekday })?.items ?? []
         // Put shows the user is already following first, then the better rated ones.
-        return items.sorted { lhs, rhs in
+        let value = items.sorted { lhs, rhs in
             let lhsWatching = library.isWatching(lhs.id)
             let rhsWatching = library.isWatching(rhs.id)
             if lhsWatching != rhsWatching { return lhsWatching }
@@ -109,13 +119,18 @@ final class AppModel {
             if lhsScore != rhsScore { return lhsScore > rhsScore }
             return lhs.displayTitle.localizedStandardCompare(rhs.displayTitle) == .orderedAscending
         }
+        cachedTodayAiring = (library.revision, calendarContentVersion, weekday, value)
+        return value
     }
 
     var continueWatching: [UserSubjectCollection] {
-        library.watching
-            .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-            .prefix(12)
-            .map { $0 }
+        if let cached = cachedContinueWatching, cached.libraryRevision == library.revision {
+            return cached.value
+        }
+        // `watching` is already ordered by updatedAt.
+        let value = Array(library.watching.prefix(12))
+        cachedContinueWatching = (library.revision, value)
+        return value
     }
 
     var seasonLabel: String {
@@ -153,6 +168,7 @@ final class AppModel {
         #endif
 
         Task { await api.prepareMirrors() }
+        Task { await ImageLoader.shared.trimDisk() }
         if router.selectedSection != .home || !router.homePath.isEmpty || showSettings || showLogin {
             hasFinishedStartup = true
         }
@@ -177,6 +193,16 @@ final class AppModel {
             pendingReminderResponse = nil
             await receiveReminder(response)
         }
+        purgeLegacyURLCacheIfNeeded()
+    }
+
+    /// Earlier builds gave URLSession a disk cache that no request ever read.
+    /// Clear it once so those megabytes are not left behind forever.
+    private func purgeLegacyURLCacheIfNeeded() {
+        let key = "didPurgeLegacyURLCache.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        URLCache.shared.removeAllCachedResponses()
     }
 
     func prepareStartupContent(force: Bool = false) async {
@@ -189,7 +215,7 @@ final class AppModel {
         async let minimumPresentation: Void = Task.sleep(for: .milliseconds(650))
         let key = "startup-home-v1-\(settings.showNSFW ? 1 : 0)"
         let cached = !force ? await api.cache.read(key, maxAge: 7 * 86_400) : nil
-        if let cached, let page = try? JSONDecoder().decode(HomeSnapshot.self, from: cached),
+        if let cached, let page = await Self.decodeSnapshot(cached),
            !page.trending.isEmpty || !page.ranking.isEmpty || !page.seasonal.isEmpty {
             trending = rankingPageFilter(page.trending)
             ranking = rankingPageFilter(page.ranking)
@@ -218,7 +244,7 @@ final class AppModel {
         if homeError == nil {
             let snapshot = HomeSnapshot(trending: trending, ranking: ranking, seasonal: seasonal,
                                         movies: movies, calendar: calendar)
-            if let data = try? JSONEncoder().encode(snapshot) { await api.cache.write(key, data: data) }
+            if let data = await Self.encodeSnapshot(snapshot) { await api.cache.write(key, data: data) }
         }
         startupMessage = "正在准备封面…"
         await warmStartupImages()
@@ -226,12 +252,22 @@ final class AppModel {
         hasFinishedStartup = true
     }
 
-    private struct HomeSnapshot: Codable {
+    private struct HomeSnapshot: Codable, Sendable {
         let trending: [Subject]
         let ranking: [Subject]
         let seasonal: [Subject]
         let movies: [Subject]
         let calendar: [CalendarDay]
+    }
+
+    /// Launch reads and writes a ~500 KB snapshot; keeping that on the main
+    /// actor costs a visible hitch on older hardware.
+    nonisolated private static func decodeSnapshot(_ data: Data) async -> HomeSnapshot? {
+        try? JSONDecoder().decode(HomeSnapshot.self, from: data)
+    }
+
+    nonisolated private static func encodeSnapshot(_ snapshot: HomeSnapshot) async -> Data? {
+        try? JSONEncoder().encode(snapshot)
     }
 
     private func warmStartupImages() async {
@@ -408,7 +444,6 @@ final class AppModel {
         do {
             calendar = try await api.calendar(force: force).sorted { $0.weekday.id < $1.weekday.id }
             if let hit = await api.cachedCalendar() { calendarUpdatedAt = Date().addingTimeInterval(-hit.age) }
-            calendarContentVersion &+= 1
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? "放送表加载失败"
             calendarError = message

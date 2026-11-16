@@ -148,6 +148,21 @@ struct ImageLoaderTests {
         precondition(cleared == nil && size == 0, "Clearing must not let in-flight requests repopulate caches")
         print("PASS: clearing cancels downloads and prevents late cache writes")
 
+        ImageRequests.shared.reset(payload: payload)
+        let trimDirectory = directory.appendingPathComponent("trim")
+        let trimLoader = ImageLoader(session: session, directory: trimDirectory,
+                                     routing: MirrorRouting(), diskLimitBytes: Int64(payload.count * 2))
+        for index in 0..<4 {
+            let url = URL(string: "https://lain.bgm.tv/pic/cover/l/trim/\(index).jpg")!
+            _ = await trimLoader.image(for: url, maxPixel: 400)
+        }
+        await trimLoader.trimDisk()
+        let trimmedSize = await trimLoader.cacheSize()
+        precondition(trimmedSize <= Int64(payload.count * 2),
+                     "image cache grew past its cap: \(trimmedSize) bytes")
+        precondition(trimmedSize > 0, "eviction must keep the newest images")
+        print("PASS: image disk cache evicts the oldest files when it exceeds its byte cap")
+
         await testPresentation(loader: loader, payload: payload)
         try testHomeSnapshots()
 

@@ -1,7 +1,7 @@
 # Bgmori — iPhone / Mac Bangumi 客户端执行方案
 
 > 当前验收范围以根目录 `AGENTS.md` 为准：仅标准版 iPhone 17（iOS 27.0 模拟器）与用户当前这台 Mac；下文保留的多机型测试矩阵是历史规划。
-> 实现说明（2026-10）：最终版本按“最新系统 + 私人使用”落地为 iOS 27 / macOS 27，采用零第三方依赖（原生 URLSession/JSON 缓存、正则 HTML 适配、自绘玻璃 Tab Bar）。本文件保留最初的技术论证与排期，实际实现详见根目录 README。
+> 实现说明（2026-10）：最终版本按“最新系统 + 私人使用”落地为 iOS 27 / macOS 27，采用零第三方依赖（原生 URLSession/JSON 缓存、正则 HTML 适配、系统原生 Tab Bar）。本文件保留最初的技术论证与排期，实际实现详见根目录 README；下文出现的 GRDB / Nuke / SwiftSoup 均为历史选型。
 
 > 版本：v1.0 · 2026-10-25  
 > 目标：做一款原生、克制、真正有 Liquid Glass 质感的 Bangumi 第三方客户端；先吃透官方 API，再用可降级的网页适配层补齐内容。  

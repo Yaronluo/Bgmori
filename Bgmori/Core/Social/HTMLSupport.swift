@@ -1,8 +1,32 @@
 import Foundation
 
+/// Compiling a pattern costs more than matching a small page, and social
+/// parsing asks for the same handful of patterns dozens of times per page.
+private final class RegexCache: @unchecked Sendable {
+    static let shared = RegexCache()
+    private let lock = NSLock()
+    private var storage: [String: NSRegularExpression] = [:]
+
+    func regex(_ pattern: String, options: NSRegularExpression.Options) -> NSRegularExpression? {
+        let key = "\(options.rawValue)|\(pattern)"
+        lock.lock()
+        if let cached = storage[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+        lock.lock()
+        if storage.count >= 256 { storage.removeAll(keepingCapacity: true) }
+        storage[key] = regex
+        lock.unlock()
+        return regex
+    }
+}
+
 enum HTMLSupport {
     static func matches(_ pattern: String, in text: String) -> [[String]] {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else {
+        guard let regex = RegexCache.shared.regex(pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else {
             return []
         }
         let ns = text as NSString
@@ -30,7 +54,7 @@ enum HTMLSupport {
 
     /// Keep opening tags so callers can read attributes regardless of their order.
     static func blocks(_ html: String, matching pattern: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return [] }
+        guard let regex = RegexCache.shared.regex(pattern, options: .caseInsensitive) else { return [] }
         let source = html as NSString
         let matches = regex.matches(in: html, range: NSRange(location: 0, length: source.length))
         return matches.enumerated().map { index, match in
@@ -52,12 +76,12 @@ enum HTMLSupport {
     }
 
     private static func elementContents(openingPattern: String, in html: String) -> String? {
-        guard let opening = try? NSRegularExpression(pattern: openingPattern, options: .caseInsensitive) else { return nil }
+        guard let opening = RegexCache.shared.regex(openingPattern, options: .caseInsensitive) else { return nil }
         let source = html as NSString
         guard let match = opening.firstMatch(in: html, range: NSRange(location: 0, length: source.length)) else { return nil }
         let tag = source.substring(with: match.range(at: 1))
         let start = NSMaxRange(match.range)
-        guard let tags = try? NSRegularExpression(pattern: "</?" + tag + "\\b[^>]*>", options: .caseInsensitive) else { return nil }
+        guard let tags = RegexCache.shared.regex("</?" + tag + "\\b[^>]*>", options: .caseInsensitive) else { return nil }
         var depth = 1
         for token in tags.matches(in: html, range: NSRange(location: start, length: source.length - start)) {
             let value = source.substring(with: token.range)
@@ -94,7 +118,7 @@ enum HTMLSupport {
             value = value.replacingOccurrences(of: key, with: replacement)
         }
 
-        guard let regex = try? NSRegularExpression(pattern: #"&#(x?)([0-9A-Fa-f]+);"#) else { return value }
+        guard let regex = RegexCache.shared.regex(#"&#(x?)([0-9A-Fa-f]+);"#, options: []) else { return value }
         let ns = NSMutableString(string: value)
         let matches = regex.matches(in: value, range: NSRange(location: 0, length: ns.length))
         for match in matches.reversed() {

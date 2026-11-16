@@ -139,12 +139,17 @@ extension AppModel {
         guard !isReminderPreview else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "com.yaron.bgmori.refresh-reminders")
         guard settings.dailyReminder, auth.isLoggedIn else { return }
-        let request = BGAppRefreshTaskRequest(identifier: "com.yaron.bgmori.refresh-reminders")
-        request.earliestBeginDate = Date().addingTimeInterval(6 * 3600)
-        // Background execution is opportunistic; the actual reminders are already
-        // scheduled with UserNotifications and never rely on this task firing.
-        do { try BGTaskScheduler.shared.submit(request) }
-        catch { /* Foreground refresh remains available; delivery is unaffected. */ }
+        // The async submission API must not run on the main thread; the old
+        // synchronous `submit(_:)` is deprecated in iOS 27.
+        let earliest = Date().addingTimeInterval(6 * 3600)
+        Task.detached(priority: .utility) {
+            let request = BGAppRefreshTaskRequest(identifier: "com.yaron.bgmori.refresh-reminders")
+            request.earliestBeginDate = earliest
+            // Background execution is opportunistic; the actual reminders are
+            // already scheduled with UserNotifications and never rely on this.
+            do { try await BGTaskScheduler.shared.submitTaskRequest(request) }
+            catch { /* Foreground refresh remains available; delivery is unaffected. */ }
+        }
         #endif
     }
 

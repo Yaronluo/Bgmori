@@ -13,11 +13,21 @@ final class LibraryStore {
     private let auth: any LibraryAccountProviding
     private let snapshots: LibrarySnapshotStore
 
-    private(set) var collections: [Int: UserSubjectCollection] = [:]
+    private(set) var collections: [Int: UserSubjectCollection] = [:] {
+        didSet { revision &+= 1 }
+    }
     private(set) var episodeTypes: [Int: [Int: Int]] = [:]
     private(set) var loadedUsername: String?
     private(set) var isLoading = false
     var lastError: String?
+
+    /// Bumped by every collection mutation so derived lists can be memoized
+    /// without missing an optimistic write or a rollback.
+    private(set) var revision = 0
+
+    @ObservationIgnored private var cachedSorted: (revision: Int, value: [UserSubjectCollection])?
+    @ObservationIgnored private var cachedWatching: (revision: Int, value: [UserSubjectCollection])?
+    @ObservationIgnored private var cachedCounts: (revision: Int, value: [CollectionType: Int])?
 
     private var loadedSource: String?
     private var hasCompleteSnapshot = false
@@ -41,17 +51,26 @@ final class LibraryStore {
     }
 
     var sortedCollections: [UserSubjectCollection] {
-        collections.values.sorted {
+        if let cached = cachedSorted, cached.revision == revision { return cached.value }
+        let value = collections.values.sorted {
             ($0.updatedAt ?? "") > ($1.updatedAt ?? "")
         }
+        cachedSorted = (revision, value)
+        return value
     }
 
     var watching: [UserSubjectCollection] {
-        sortedCollections.filter { $0.type == CollectionType.doing.rawValue }
+        if let cached = cachedWatching, cached.revision == revision { return cached.value }
+        let value = sortedCollections.filter { $0.type == CollectionType.doing.rawValue }
+        cachedWatching = (revision, value)
+        return value
     }
 
     var counts: [CollectionType: Int] {
-        Dictionary(grouping: collections.values, by: \.collectionType).mapValues(\.count)
+        if let cached = cachedCounts, cached.revision == revision { return cached.value }
+        let value = Dictionary(grouping: collections.values, by: \.collectionType).mapValues(\.count)
+        cachedCounts = (revision, value)
+        return value
     }
 
     func collection(for subjectID: Int) -> UserSubjectCollection? {

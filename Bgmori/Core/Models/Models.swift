@@ -969,27 +969,51 @@ struct BgmlistSchedule: Decodable, Sendable {
         return result
     }
 
-    private static func parseDate(_ value: String) -> Date? {
+    /// ISO8601DateFormatter is documented as thread-safe for parsing; two
+    /// preconfigured instances avoid rebuilding one per feed entry.
+    nonisolated(unsafe) private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
+        return formatter
+    }()
+
+    nonisolated(unsafe) private static let plainFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
+        return formatter
+    }()
+
+    private static func parseDate(_ value: String) -> Date? {
+        fractionalFormatter.date(from: value) ?? plainFormatter.date(from: value)
     }
 }
 
 struct BgmlistAiring: Equatable, Sendable {
     let anchor: Date
     var end: Date? = nil
+    /// Resolved once at construction; every label read used to rebuild a
+    /// Calendar and TimeZone.
+    private let weekdayValue: Int
+    private let hourValue: Int
+    private let minuteValue: Int
 
-    private var components: DateComponents {
+    private static let shanghai: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
-        return calendar.dateComponents([.weekday, .hour, .minute], from: anchor)
+        return calendar
+    }()
+
+    init(anchor: Date, end: Date? = nil) {
+        self.anchor = anchor
+        self.end = end
+        let components = Self.shanghai.dateComponents([.weekday, .hour, .minute], from: anchor)
+        weekdayValue = ((components.weekday! + 5) % 7) + 1
+        hourValue = components.hour!
+        minuteValue = components.minute!
     }
 
-    var weekday: Int { ((components.weekday! + 5) % 7) + 1 }
-    var clockTime: String { String(format: "%02d:%02d", components.hour!, components.minute!) }
+    var weekday: Int { weekdayValue }
+    var clockTime: String { String(format: "%02d:%02d", hourValue, minuteValue) }
 
     func label(for calendarWeekday: Int) -> String {
         let day = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][weekday - 1]
