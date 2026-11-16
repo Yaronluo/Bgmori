@@ -5,6 +5,7 @@ test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-categories.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 xcrun swiftc -swift-version 6 -parse-as-library \
   Bgmori/Core/Models/Models.swift \
+  Bgmori/Core/Models/Notice.swift \
   Bgmori/Core/Models/CategoryModels.swift \
   Bgmori/Core/Social/HTMLSupport.swift \
   Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/APIClient.swift \
@@ -13,6 +14,7 @@ xcrun swiftc -swift-version 6 -parse-as-library \
   Bgmori/Core/API/RateLimiter.swift \
   Bgmori/Core/Storage/DiskCache.swift \
   Bgmori/Core/Storage/CategoryStore.swift Bgmori/Core/Storage/TagResultsStore.swift \
+  Bgmori/Core/Storage/AiringReminderPlan.swift \
   Bgmori/App/AppRouter.swift \
   tests/CategoryTests.swift -o "$test_dir/categories"
 "$test_dir/categories" "$@"
