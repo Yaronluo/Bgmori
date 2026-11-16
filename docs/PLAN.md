@@ -419,7 +419,7 @@ actor APIClient {
 | `ResponseCache` | URLCache + SQLite TTL；按资源类型分 TTL |
 | `FlexibleDecoder` | snake_case、ISO8601（含小数秒）、`yyyy-MM-dd`、Unix 时间戳、未知枚举兜底 |
 | `APIError` | unauthorized / forbidden / notFound / rateLimited / server / decoding / offline |
-| `UserAgent` | `Bgmori/1.0 (iOS) (https://github.com/<you>/bgmori; <email>)` |
+| `UserAgent` | `Bgmori/1.0 (iOS) (https://github.com/Yaronluo/Bgmori)` |
 
 TTL 建议：
 

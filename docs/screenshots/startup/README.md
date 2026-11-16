@@ -12,9 +12,8 @@
 
 加载后的首页见同目录的 `iphone-home-light.png`、`iphone-home-dark.png`、`mac-home-light.png`、`mac-home-dark.png`。
 
-## 删除收藏调查（2026-10-27）
+## 删除收藏的实现依据（2026-10-27）
 
-- [Izuko SubjectService](https://github.com/GrahamZen/izuko-tv/blob/main/app/shared/app-data/src/commonMain/kotlin/data/network/SubjectService.kt#L367) 的 `deleteSubjectCollection` 直接抛出不支持错误，注释说明 UI 已隐藏该入口。
-- [Bangumi 私有 API 文档](https://bangumi.github.io/dev-docs/) 中，条目收藏有查询、更新和进度操作，没有条目收藏删除；角色、人物、目录收藏的删除是不同接口。
-- [czy0729/Bangumi](https://github.com/czy0729/Bangumi/blob/master/src/stores/user/action.ts#L213) 在应用内执行网页删除；[地址定义](https://github.com/czy0729/Bangumi/blob/master/src/constants/html/index.ts#L460) 使用 `/subject/{id}/remove?gh={formhash}`，[请求封装](https://github.com/czy0729/Bangumi/blob/master/src/utils/fetch/xhr.ts#L30) 带网页登录 Cookie。这证明应用内删除存在实现方式，但并非仅凭 OAuth 调用公开删除接口。
+- 官方 v0 API 文档中，条目收藏提供查询、更新和进度操作，没有删除条目收藏的接口；角色、人物与目录收藏的删除属于不同接口。
+- 官网网页提供条目移除入口（`/subject/{id}/erase_collect?gh=...`，旧版为 `/remove`），需要登录会话与 formhash。Bgmori 因此使用 Keychain 中保存的官网会话调用该入口，再用 v0 API 查询确认，不依赖未公开的删除接口。
 - 本次没有操作账号、测试删除，或改变 Bgmori 的匿名网页只读约定；现有浏览器移除与返回同步流程保留。
