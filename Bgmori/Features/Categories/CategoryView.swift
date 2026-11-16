@@ -29,10 +29,6 @@ struct CategoryView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             filterControls
                 .padding(.horizontal, 20)
-                #if os(macOS)
-                .frame(maxWidth: 1120)
-                .padding(.horizontal, 28)
-                #endif
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity)
         }
@@ -77,25 +73,45 @@ struct CategoryView: View {
             }
         }
         #else
-        HStack(spacing: 12) {
-            typePicker
-            Button {
-                showFilters = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.subheadline)
-                    .foregroundStyle(hasActiveFilters ? Color.brandPink : Color.secondary)
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("分类筛选")
-            .accessibilityValue(hasActiveFilters ? "已设置筛选条件" : "全部年份，\(store.sort.title)")
-            .accessibilityIdentifier("category-filters")
+        // One glass bar, like the weekday selector on 每日放送: the tabs live inside
+        // the capsule instead of floating as separate glass controls, so scrolling
+        // content passes under a single surface rather than between two of them.
+        HStack(spacing: 2) {
+            inlineTypePicker
+            Spacer(minLength: 0)
+            filterButton
         }
+        .padding(4)
+        .bgmFloatingGlass(cornerRadius: 24, shadowRadius: 6)
         #endif
     }
+
+    #if os(iOS)
+    private var inlineTypePicker: some View {
+        TextTabs(values: SubjectType.browsingTypes, selection: Binding(
+            get: { store.type },
+            set: { store.selectType($0) }
+        ), title: { $0.title }, horizontalPadding: 9, usesGlass: false)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("category-types")
+    }
+
+    private var filterButton: some View {
+        Button {
+            showFilters = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.subheadline)
+                .foregroundStyle(hasActiveFilters ? Color.brandPink : Color.secondary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("分类筛选")
+        .accessibilityValue(hasActiveFilters ? "已设置筛选条件" : "全部年份，\(store.sort.title)")
+        .accessibilityIdentifier("category-filters")
+    }
+    #endif
 
     private var typePicker: some View {
         TextTabs(values: SubjectType.browsingTypes, selection: Binding(
