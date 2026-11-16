@@ -190,7 +190,7 @@ AppModel / LibraryStore / 各 Feature Store   (@MainActor, @Observable)
     ├─ APIClient ── URLSession + RateLimiter + DiskCache
     ├─ SocialService ── 匿名 HTML 解析
     ├─ ImageLoader ── 内存/磁盘图片缓存
-    └─ KeychainStore ── 令牌与官网会话
+    └─ Keychain ── 令牌与官网会话
 ```
 
 规则：
