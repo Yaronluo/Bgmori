@@ -4,6 +4,9 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    #endif
 
     var body: some View {
         @Bindable var model = app
@@ -45,15 +48,20 @@ struct RootView: View {
             LoginView()
                 .environment(app)
         }
+        #if os(macOS)
+        .onChange(of: model.showSettings) { _, shouldShow in
+            guard shouldShow else { return }
+            openSettings()
+            model.showSettings = false
+        }
+        #else
         .sheet(isPresented: $model.showSettings) {
             NavigationStack {
                 SettingsView()
             }
             .environment(app)
-            #if os(macOS)
-            .frame(width: 680, height: 620)
-            #endif
         }
+        #endif
         .task {
             await app.bootstrap()
         }

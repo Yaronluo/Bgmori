@@ -138,14 +138,13 @@ struct SettingsView: View {
             #endif
             cacheSize = await app.cacheSizeText()
         }
+        #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") { dismiss() }
-                    #if os(macOS)
-                    .keyboardShortcut(.cancelAction)
-                    #endif
             }
         }
+        #endif
     }
 
     // MARK: - Account
