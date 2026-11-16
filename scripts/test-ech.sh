@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-ech-tests.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
-sources=(Bgmori/Core/Models/Models.swift Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/ECHTransport.swift
+sources=(Bgmori/Core/Models/Models.swift Bgmori/Core/Models/Notice.swift Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/ECHTransport.swift
  Bgmori/Core/API/APIClient.swift Bgmori/Core/API/APIError.swift Bgmori/Core/API/RateLimiter.swift
  Bgmori/Core/Storage/DiskCache.swift Bgmori/Core/Storage/ImageLoader.swift tests/ECHTests.swift)
 for platform in macosx iphonesimulator; do

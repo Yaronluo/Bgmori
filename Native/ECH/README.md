@@ -22,7 +22,7 @@ bash scripts/build-ech-library.sh iphoneos
 4. 直接拨号 Cloudflare IP，按官方真实域名验证证书并要求 `ECHAccepted`。仅 ECH 握手成功后才发送 HTTP 请求。TLS 失败不会降级为普通 SNI。
 5. 连接显式设置 `Proxy:nil`，套接字通过 `IP_BOUND_IF` 绑定当前可用的 `en*` / `pdp_ip*` 物理接口，从而绕过默认 TUN 路由。不会修改系统代理、VPN 或其他应用的网络。
 
-内置多个 Cloudflare IPv4 地址，每日后台尝试刷新 Izuko 的公开地址清单；清单只提供 IP，TLS 始终验证 Bangumi 官方真实域名。清单不可用时保留内置地址，首次请求不依赖 GitHub 可达性。目录镜像 API 未更换。
+内置一组由项目维护的 Cloudflare IPv4 入口；首次请求不依赖 GitHub 或任何外部地址清单，TLS 始终验证 Bangumi 官方真实域名。ECH 配置只通过 HTTPS DNS 获取，连接成功后学习到的可用入口会在进程内复用。目录镜像 API 未更换。
 
 目标只允许 `bgm.tv`、`api.bgm.tv`、`lain.bgm.tv`、`next.bgm.tv`、`doujin.bgm.tv` 的 HTTPS 443。禁止代理凭证；普通请求禁止 Cookie 并丢弃响应 Cookie。隔离的网页登录请求仅在白名单登录及令牌端点之间交换临时 Cookie，且禁止所有重定向；带 Authorization 的重定向不得跨域，写请求不得通过重定向重放。响应最大 32 MiB，连接和请求均受时限限制。日志只返回固定错误类别，不返回地址查询参数、请求体或凭证。
 

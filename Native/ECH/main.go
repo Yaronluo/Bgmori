@@ -28,6 +28,9 @@ import (
 )
 
 var allowedHosts = map[string]bool{"bgm.tv": true, "api.bgm.tv": true, "lain.bgm.tv": true, "next.bgm.tv": true, "doujin.bgm.tv": true}
+
+// Cloudflare IPv4 entry points maintained in this project. ECH configuration
+// is refreshed through HTTPS DNS only; no external address list is fetched.
 var bundledAddresses = []string{"172.67.134.140", "104.21.6.61", "172.67.73.67", "104.26.8.23"}
 var dohEndpoints = []string{
 	"https://dns.alidns.com/resolve?name=crypto.cloudflare.com&type=65",
@@ -50,7 +53,6 @@ type configState struct {
 	loading       chan struct{}
 	addresses     []string
 	learned       map[string]string
-	refreshedIPs  time.Time
 	interfaceName string
 }
 
@@ -221,43 +223,9 @@ func getConfig(ctx context.Context) ([]byte, error) {
 	}
 }
 
-func refreshAddresses() {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	body, err := readHTTPS(ctx, "https://raw.githubusercontent.com/GrahamZen/izuko-tv/main/bangumi-ech-addresses.json", 32<<10)
-	if err != nil {
-		return
-	}
-	var list struct {
-		Addresses []string `json:"addresses"`
-	}
-	if json.Unmarshal(body, &list) != nil {
-		return
-	}
-	var valid []string
-	for _, raw := range list.Addresses {
-		ip := net.ParseIP(raw)
-		if ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
-			valid = append(valid, ip.String())
-		}
-		if len(valid) == 12 {
-			break
-		}
-	}
-	if len(valid) > 0 {
-		state.Lock()
-		state.addresses = valid
-		state.Unlock()
-	}
-}
-
 func addresses(host string) []string {
 	state.Lock()
 	defer state.Unlock()
-	if time.Since(state.refreshedIPs) > 24*time.Hour {
-		state.refreshedIPs = time.Now()
-		go refreshAddresses()
-	}
 	result := append([]string(nil), state.addresses...)
 	if learned := state.learned[host]; learned != "" {
 		result = append([]string{learned}, result...)
