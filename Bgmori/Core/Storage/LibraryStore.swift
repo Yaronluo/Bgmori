@@ -211,14 +211,6 @@ final class LibraryStore {
         }
     }
 
-    func quickSet(subject: Subject, type: CollectionType) async {
-        do {
-            try await save(subject: subject, patch: CollectionPatch(type: type.rawValue))
-        } catch {
-            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
     func setType(subjectID: Int, type: CollectionType) async {
         guard let existing = collections[subjectID] else { return }
         let generation = self.generation

@@ -184,21 +184,6 @@ final class AppRouter {
         #endif
     }
 
-    func resetCurrent() {
-        #if os(macOS)
-        macPath.removeAll()
-        #else
-        switch selectedSection {
-        case .home: homePath.removeAll()
-        case .categories: categoriesPath.removeAll()
-        case .calendar: calendarPath.removeAll()
-        case .library: libraryPath.removeAll()
-        case .search: searchPath.removeAll()
-        case .profile: profilePath.removeAll()
-        }
-        #endif
-    }
-
     func handle(url: URL) {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         if components.scheme == "bgmori" {

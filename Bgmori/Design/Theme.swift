@@ -150,18 +150,6 @@ struct GlassSurface<Content: View>: View {
 }
 
 extension View {
-    func bgmShortcutLabel() -> some View {
-        self
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 14)
-            #if os(macOS)
-            .frame(minHeight: 36)
-            #else
-            .frame(minHeight: 44)
-            #endif
-            .contentShape(Capsule())
-    }
-
     /// Apply once to the floating control group; its children keep plain button styles.
     @ViewBuilder
     func bgmFloatingGlass(cornerRadius: CGFloat = 26, shadowRadius: CGFloat = 14) -> some View {
@@ -183,24 +171,6 @@ extension View {
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
-    }
-}
-
-struct GlassPill: View {
-    let title: String
-    let icon: String
-    var tint: Color = .brandPink
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-        }
-        .buttonStyle(.glass)
-        .tint(tint)
     }
 }
 
@@ -293,24 +263,6 @@ struct RatingStars: View {
     }
 }
 
-struct ScoreBadge: View {
-    let score: Double?
-    var total: Int? = nil
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(score.map { String(format: "%.1f", $0) } ?? "—")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .monospacedDigit()
-            Text(total.map { "\($0) 人" } ?? "评分")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .frame(width: 54, height: 54)
-        .background(Color.bgmSecondary.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
 // Desktop pages keep a readable measure as the window grows.
 extension View {
     @ViewBuilder
@@ -325,25 +277,3 @@ extension View {
         #endif
     }
 }
-
-#if os(macOS)
-struct DesktopPanel<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title)
-                .font(.headline)
-            content
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.06))
-        }
-    }
-}
-#endif

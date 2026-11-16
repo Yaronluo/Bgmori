@@ -137,22 +137,4 @@ enum HTMLSupport {
         if raw.hasPrefix("/") { return URL(string: base + raw) }
         return URL(string: raw)
     }
-
-    static func firstParagraph(_ html: String) -> String {
-        text(html)
-    }
-}
-
-enum BBCode {
-    static func plain(_ input: String, hideSpoilers: Bool = true) -> String {
-        var value = input
-        value = value.replacingOccurrences(of: #"\[img\].*?\[/img\]"#, with: "", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[url=[^\]]*\](.*?)\[/url\]"#, with: "$1", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[url\](.*?)\[/url\]"#, with: "$1", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[mask\](.*?)\[/mask\]"#, with: hideSpoilers ? "▮▮▮" : "$1", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[(b|i|u|s|quote|code|center|left|right|size=[^\]]*|color=[^\]]*)\]"#, with: "", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[/(b|i|u|s|quote|code|center|left|right|size|color)\]"#, with: "", options: [.regularExpression, .caseInsensitive])
-        value = value.replacingOccurrences(of: #"\[[^\]]{1,20}\]"#, with: "", options: .regularExpression)
-        return HTMLSupport.decodeEntities(value).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 }

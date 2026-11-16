@@ -156,7 +156,7 @@ actor BangumiWebSession: SubjectCollectionRemoving {
         let file = directory.appendingPathComponent("RemovalDiagnostics.log")
         let line = "\(Date().formatted(.iso8601)) \(message)\n"
         if let handle = try? FileHandle(forWritingTo: file) {
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: Data(line.utf8))
             try? handle.close()
         } else {

@@ -611,10 +611,6 @@ final class AppModel {
         showToast("已退出登录")
     }
 
-    func requireLogin() {
-        showLogin = true
-    }
-
     func openCategories() {
         router.selectedSection = .categories
         #if os(macOS)

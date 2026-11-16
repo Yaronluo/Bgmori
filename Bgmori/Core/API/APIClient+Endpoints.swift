@@ -545,11 +545,6 @@ extension APIClient {
                           maxStale: CacheLifetime.personal, as: Paged<UserPersonCollection>.self)
     }
 
-    func cachedUserCollection(_ username: String, subjectID: Int) async -> CacheHit<UserSubjectCollection>? {
-        await cachedValue(cacheKey: "collection-\(username)-\(subjectID)", ttl: 60,
-                          maxStale: CacheLifetime.personal, as: UserSubjectCollection.self)
-    }
-
     func cachedEpisodeCollections(subjectID: Int, username: String) async -> CacheHit<Paged<EpisodeCollection>>? {
         await cachedValue(cacheKey: "epcol-\(username)-\(subjectID)", ttl: 300,
                           maxStale: CacheLifetime.personal, as: Paged<EpisodeCollection>.self)

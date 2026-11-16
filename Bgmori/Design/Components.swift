@@ -197,26 +197,6 @@ struct SubjectCard: View {
     }
 }
 
-struct SubjectSummaryCard: View {
-    let subject: SubjectSummary
-    var progress: Double? = nil
-    var badge: String? = nil
-    var width: CGFloat? = 132
-
-    var body: some View {
-        CoverCard(
-            title: subject.displayTitle,
-            subtitle: "\(SubjectType.title(for: subject.type)) · \(subject.ratingText)",
-            coverURL: subject.coverURL,
-            badge: badge,
-            progress: progress,
-            tint: .subjectTint(subject.type),
-            width: width,
-            imageIdentity: "subject-\(subject.id)"
-        )
-    }
-}
-
 struct AiringCard: View {
     let subject: LegacySubject
     var isWatching = false
@@ -236,43 +216,6 @@ struct AiringCard: View {
     }
 }
 
-struct SubjectRow: View {
-    let title: String
-    var subtitle: String? = nil
-    let coverURL: URL?
-    var trailing: String? = nil
-    var tint: Color = .brandPink
-
-    var body: some View {
-        HStack(spacing: 12) {
-            CachedAsyncImage(url: coverURL, maxPixel: 220, placeholderTint: tint)
-                .frame(width: 56, height: 78)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.body.weight(.semibold))
-                    .lineLimit(2, reservesSpace: true)
-                    .truncationMode(.tail)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 6)
-            if let trailing {
-                Text(trailing)
-                    .font(.bgmNumber)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-}
-
 struct CollectionBadge: View {
     let type: CollectionType
 
@@ -283,42 +226,6 @@ struct CollectionBadge: View {
             .padding(.vertical, 4)
             .foregroundStyle(Color.collectionTint(type.rawValue))
             .background(Color.collectionTint(type.rawValue).opacity(0.12), in: Capsule())
-    }
-}
-
-struct TagChip: View {
-    let name: String
-    var count: Int? = nil
-    var isSelected = false
-    var action: (() -> Void)? = nil
-
-    var body: some View {
-        if let action {
-            Button(action: action) { chipContent }
-                .buttonStyle(.plain)
-        } else {
-            chipContent
-        }
-    }
-
-    private var chipContent: some View {
-        HStack(spacing: 4) {
-            Text(name)
-                .font(.caption)
-            if let count {
-                Text("\(count)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        #if os(macOS)
-        .padding(.vertical, 5)
-        #else
-        .padding(.vertical, 9)
-        #endif
-        .foregroundStyle(isSelected ? Color.bgmCanvas : Color.primary)
-        .background(isSelected ? Color.brandPink : Color.bgmSecondary, in: Capsule())
     }
 }
 
@@ -481,17 +388,6 @@ struct LoginPromptView: View {
     }
 }
 
-struct LoadingCard: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color.bgmSecondary.opacity(0.6))
-            .frame(height: 180)
-            .overlay {
-                ProgressView()
-            }
-    }
-}
-
 struct ToastMessage: Identifiable, Equatable {
     let id = UUID()
     let text: String
@@ -542,15 +438,6 @@ struct AvatarView: View {
 }
 
 extension View {
-    @ViewBuilder
-    func bgmSearchable(text: Binding<String>, prompt: String) -> some View {
-        #if os(iOS)
-        searchable(text: text, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-        #else
-        searchable(text: text, prompt: prompt)
-        #endif
-    }
-
     func bgmCardBackground(cornerRadius: CGFloat = 18) -> some View {
         background(Color.bgmSurface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
