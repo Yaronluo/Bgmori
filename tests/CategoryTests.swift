@@ -15,10 +15,12 @@ private final class TestServer: @unchecked Sendable {
     private var offsets: [Int] = []
     private var blockBrowser = false
     private var browserRequests = 0
+    private var mirrorRequests = 0
 
     var count: Int { lock.withLock { requests } }
     var requestedOffsets: [Int] { lock.withLock { offsets } }
     var browserCount: Int { lock.withLock { browserRequests } }
+    var mirrorCount: Int { lock.withLock { mirrorRequests } }
 
     func setFailure(_ value: Bool) { lock.withLock { fail = value } }
     func failOnePage() { lock.withLock { failNextPage = true } }
@@ -28,6 +30,12 @@ private final class TestServer: @unchecked Sendable {
     func response(for request: URLRequest) -> StubResponse {
         lock.withLock {
             requests += 1
+            if request.url?.host == "mirror.bgm.test" {
+                // Community mirrors implement only part of the website: year and tag
+                // browse sub-pages answer 404 while subject pages still work.
+                mirrorRequests += 1
+                return StubResponse(data: Data(), status: 404, delay: 0.01)
+            }
             if request.url?.host == "bgm.tv", request.url?.query?.contains("page=") == true {
                 browserRequests += 1
                 if blockBrowser {
@@ -156,7 +164,7 @@ private final class CategoryProtocol: URLProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = false
 
-    override class func canInit(with request: URLRequest) -> Bool { ["api.bgm.tv", "bgm.tv"].contains(request.url?.host ?? "") }
+    override class func canInit(with request: URLRequest) -> Bool { ["api.bgm.tv", "bgm.tv", "mirror.bgm.test"].contains(request.url?.host ?? "") }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
@@ -384,6 +392,36 @@ struct CategoryTests {
         await store.load(blocked, force: true)
         precondition(store.fallbackSort == nil && store.sortNotice == nil && store.subjects.contains { $0.id == 701 })
         print("PASS: verification fallback preserves combined filters, search cursors, retries, cached sort and original-order recovery")
+
+        // A mirror that lacks website sub-pages must not turn a verification challenge
+        // into "content deleted": the official error stays in charge and the designed
+        // heat→collects fallback still runs.
+        let mirrorRouting = MirrorRouting()
+        mirrorRouting.update(MirrorCatalog(mirrors: [
+            .init(id: "test-mirror", weight: 1, recommended: false,
+                  services: [.init(id: "main", hosts: ["mirror.bgm.test"])])
+        ]), etag: nil)
+        let mirrorCache = DiskCache(namespace: "BgmoriCategoryMirror-\(run)")
+        let mirrorAPI = APIClient(session: URLSession(configuration: configuration), cache: mirrorCache,
+                                  routing: mirrorRouting, discoverMirrors: false)
+        CategoryProtocol.server.setBrowserBlocked(true)
+        do {
+            _ = try await mirrorAPI.categorySubjects(
+                query: CategoryQuery(type: .anime, sort: .title, tag: "\(run)-mirror-direct"), force: true)
+            preconditionFailure("A blocked official page must surface its own error")
+        } catch {
+            precondition((error as? APIError)?.localizedDescription == APIError.verificationRequired.localizedDescription,
+                         "A mirror 404 must not replace the official error: \(error)")
+        }
+        precondition(CategoryProtocol.server.mirrorCount > 0, "The mirror must be tried before giving up")
+        let mirrorStore = CategoryStore(api: mirrorAPI)
+        let mirrorQuery = CategoryQuery(type: .anime, sort: .heat, year: 2020, tag: "\(run)-mirror-fallback")
+        await mirrorStore.load(mirrorQuery, force: true)
+        precondition(mirrorStore.errorText == nil && mirrorStore.fallbackSort == .collects)
+        precondition(mirrorStore.subjects.map(\.id) == [201] && mirrorStore.sortNotice != nil)
+        CategoryProtocol.server.setBrowserBlocked(false)
+        await mirrorCache.clear()
+        print("PASS: a mirror's missing browse page keeps the official verification error and the collect fallback")
         await cache.clear()
     }
 

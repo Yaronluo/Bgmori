@@ -508,6 +508,8 @@ actor APIClient {
             if force { routing.resetBackoff(for: url) }
             Task { await prepareMirrors() }
             var lastError: Error = APIError.network("页面加载失败")
+            var officialError: Error?
+            let officialHost = routing.canonicalURL(for: url).host
             let started = Date()
             let revision = routing.revision
             var attempted: Set<URL> = []
@@ -515,7 +517,7 @@ actor APIClient {
                 if pass == 1 { try await waitForMirrorDiscovery(until: started.addingTimeInterval(18)) }
                 for candidate in routing.candidates(for: url, forRequest: true) where attempted.insert(candidate).inserted {
                     let remaining = 18 - Date().timeIntervalSince(started)
-                    guard remaining > 0 else { throw lastError }
+                    guard remaining > 0 else { throw officialError ?? lastError }
                     let attempt = Date()
                     do {
                         try Task.checkCancellation()
@@ -556,7 +558,19 @@ actor APIClient {
                         return html
                     } catch {
                         if Self.isCancellation(error) { throw APIError.cancelled }
-                        if case APIError.notFound = error { throw error }
+                        let isOfficial = candidate.host == officialHost || MirrorRouting.echOrigin(for: candidate) != nil
+                        if case APIError.notFound = error {
+                            // Community mirrors only implement part of the website: year and
+                            // tag browse sub-pages answer 404 there. That 404 must not shadow
+                            // the official host or abort the remaining candidates, otherwise a
+                            // working filter looks like a deleted subject.
+                            if isOfficial { throw error }
+                            routing.record(candidate, milliseconds: Int(Date().timeIntervalSince(attempt) * 1000),
+                                           result: "没有该页面", succeeded: false,
+                                           revision: revision, penalize: false)
+                            lastError = error
+                            continue
+                        }
                         if case APIError.rateLimited = error { throw error }
                         let penalize: Bool = {
                             if let failure = error as? APIError {
@@ -571,12 +585,13 @@ actor APIClient {
                                            return ConnectionTransport.failureDescription(error)
                                        } ?? ConnectionTransport.failureDescription(error), succeeded: false,
                                        revision: revision, penalize: penalize)
+                        if isOfficial, officialError == nil { officialError = error }
                         lastError = error
                         if routing.offline { throw error }
                     }
                 }
             }
-            throw lastError
+            throw officialError ?? lastError
         } catch {
             if Task.isCancelled || Self.isCancellation(error) { throw APIError.cancelled }
             if !force, let data = await cache.readStale(cacheKey, maxAge: max(maxStale, ttl)),
