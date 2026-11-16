@@ -1,0 +1,32 @@
+# Bgmori
+
+> 原生 SwiftUI 的 Bangumi 第三方客户端，同时支持 iPhone 与 Mac。非官方项目，与 Bangumi 官方无关联。
+
+## 关键事实
+
+- 版本：1.0.0；iOS 27 / macOS 27；Swift 6；Xcode 27.1+。
+- UI、缓存、HTML 解析为原生实现；没有第三方 Swift 库。
+- ECH 国内直连使用内嵌 Go 标准库静态连接层；构建需要 Go 1.27+。
+- 社交页面为匿名 HTML 只读；支持浏览、收藏、评分、进度和取消收藏，不支持发帖。
+- iPhone 发布包是未签名 IPA，必须自签；Mac 包为 ad-hoc 签名、未公证。
+- 源码 MIT；Bangumi 数据、封面、商标与用户内容不在 MIT 许可范围内。
+
+## 文档
+
+- [README](README.md)
+- [AGENTS.md](AGENTS.md) — AI 代理规范源
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [LICENSE](LICENSE)
+- [ECH 实现与验证](docs/screenshots/ech-direct/README.md)
+- [截图索引](docs/screenshots/readme/README.md)
+
+## 常用命令
+
+```bash
+xcodegen generate --spec project.yml --project .
+bash scripts/build-install-ios.sh --route subject:8
+bash scripts/build-install-macos.sh
+bash scripts/test-ech.sh --live
+(cd Native/ECH && go test -race ./...)
+```

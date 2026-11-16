@@ -243,7 +243,8 @@ Bgmori/
 
 ## 文档
 
-- [AGENTS.md](AGENTS.md)：给 AI 编码代理的构建命令、目录约定、Liquid Glass 规则与已知坑
+- [AGENTS.md](AGENTS.md)：给 AI 编码代理的完整规范：启动、任务配方、验证矩阵与安全边界
+- [CONTRIBUTING.md](CONTRIBUTING.md)：构建、测试、提交与截图要求
 - [截图索引](docs/screenshots/readme/README.md)：本文截图的拍摄说明与更多细节
 - [ECH 实现与国内网络验证](docs/screenshots/ech-direct/README.md)
 - [安全策略](SECURITY.md)

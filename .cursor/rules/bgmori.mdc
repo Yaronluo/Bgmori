@@ -1,0 +1,30 @@
+---
+description: Bgmori SwiftUI project rules
+globs:
+  - "Bgmori/**/*.swift"
+  - "Native/ECH/**/*.go"
+  - "scripts/**/*.sh"
+  - "project.yml"
+alwaysApply: true
+---
+
+# Bgmori
+
+完整规范见根目录 `AGENTS.md`；开始改代码前先读它。
+
+## 关键约束
+
+- 原生 SwiftUI，iPhone + Mac，iOS 27 / macOS 27，Swift 6；不要下探部署目标。
+- 不引入第三方 Swift 库；ECH 只使用内嵌 Go 标准库静态层。
+- 数据流：View → AppModel/Store → APIClient → 缓存；View 不发请求。
+- 颜色用 `Color.bgm*`；Liquid Glass 系统控件优先，自定义玻璃同屏最多两组。
+- 新页面必须有加载、空、错误状态；错误可重试/回退。
+- 凭证只存 Keychain；社交匿名只读；不把 Cookie 发往镜像。
+- 不复制其他 Bangumi 客户端实现或地址清单。
+- 除非用户明确要求，不要 commit、push 或开 PR。
+
+## 验证
+
+- iPhone 17 / iOS 27.0 模拟器构建 + Mac arm64 构建。
+- UI 改动检查浅/深色；ECH 改动跑 `bash scripts/test-ech.sh --live`。
+- 详细命令、目录地图和已知坑见 `AGENTS.md`。
