@@ -57,6 +57,17 @@ Bangumi 是一个认真记录动画、书籍、音乐与游戏的地方。Bgmori
 
 <p align="center"><sub>Mac：原生三栏布局、系统工具栏与 Liquid Glass 材质</sub></p>
 
+## 下载
+
+当前版本 **v1.0.0**（构建号 `1`）。
+
+| 平台 | 文件 | 安装说明 |
+| --- | --- | --- |
+| macOS 27+（Apple Silicon） | [Bgmori-macOS-v1.0.0.zip](https://github.com/Yaronluo/Bgmori/releases/download/v1.0.0/Bgmori-macOS-v1.0.0.zip) | 解压后拖入「应用程序」。应用为临时签名、未公证，首次打开需右键 → 打开，或到「系统设置 → 隐私与安全性」允许。 |
+| iOS 27+ | [Bgmori-iOS-v1.0.0-unsigned.ipa](https://github.com/Yaronluo/Bgmori/releases/download/v1.0.0/Bgmori-iOS-v1.0.0-unsigned.ipa) | **未签名 IPA，必须自签后安装。** 可用 AltStore、Sideloadly、Xcode 或自己的开发者证书重签；需要自备 Apple ID / 证书，免费账号通常 7 天后需重新签名。 |
+
+更多版本与校验值见 [Releases](https://github.com/Yaronluo/Bgmori/releases)。
+
 ## 功能
 
 ### 浏览与发现
