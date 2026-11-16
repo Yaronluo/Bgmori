@@ -92,7 +92,7 @@ if [[ $launch -eq 1 ]]; then
   else
     xcrun simctl launch "$device" "$bundle_id" > /dev/null
   fi
-  [[ -z "$screenshot" ]] || { sleep 3; xcrun simctl io "$device" screenshot "$screenshot" > /dev/null; }
+  [[ -z "$screenshot" ]] || { mkdir -p "$(dirname "$screenshot")"; sleep 3; xcrun simctl io "$device" screenshot "$screenshot" > /dev/null; }
 fi
 
 commit=$(git -C "$repo_dir" rev-parse --short HEAD)
