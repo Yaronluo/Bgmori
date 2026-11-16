@@ -12,6 +12,7 @@ final class AppModel {
     let library: LibraryStore
     let router: AppRouter
     let social: SocialService
+    let notices: NoticeStore
     let categories: CategoryStore
     let recentSubjects: RecentSubjectsStore
     let notifications: NotificationManager
@@ -90,6 +91,7 @@ final class AppModel {
         self.library = LibraryStore(api: api, auth: auth, remover: webSession)
         self.router = AppRouter()
         self.social = SocialService(api: api)
+        self.notices = NoticeStore(api: api, auth: auth)
         self.categories = CategoryStore(api: api)
         self.recentSubjects = RecentSubjectsStore()
         self.notifications = NotificationManager.shared
@@ -183,6 +185,7 @@ final class AppModel {
         await auth.restore()
         if auth.isLoggedIn {
             await library.loadIfNeeded()
+            Task { await self.notices.refreshUnread(force: true) }
         }
         if let response = pendingReminderResponse, response.action == UNNotificationDefaultActionIdentifier, auth.username != nil {
             pendingReminderResponse = nil
@@ -364,6 +367,9 @@ final class AppModel {
         case "ratings":
             router.selectedSection = .profile
             router.profilePath = [.ratings]
+        case "notify":
+            router.selectedSection = .profile
+            router.profilePath = [.notify]
         default: break
         }
         #if os(macOS)
@@ -575,7 +581,14 @@ final class AppModel {
         await loadCalendar(force: true)
         await loadHome(force: true)
         await updateDailyReminder()
+        await notices.refreshUnread(force: true)
         if calendarError == nil && homeError == nil { showToast("已刷新") }
+    }
+
+    /// Foreground refresh for the 提醒 badge. Throttled inside the store.
+    func refreshNoticesBadge() async {
+        guard auth.isLoggedIn else { return }
+        await notices.refreshUnread()
     }
 
     func signIn(email: String, password: String, captcha: String) async {
@@ -585,6 +598,7 @@ final class AppModel {
             Task {
                 await library.loadAll(username: username, force: true)
                 await updateDailyReminder()
+                await notices.refreshUnread(force: true)
             }
         }
     }
@@ -592,6 +606,7 @@ final class AppModel {
     func signOut() {
         auth.signOut()
         library.reset()
+        notices.reset()
         Task { await updateDailyReminder() }
         showToast("已退出登录")
     }

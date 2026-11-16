@@ -57,7 +57,7 @@ bash scripts/build-install-ios.sh --route subject:8 --screenshot /tmp/bgmori.png
 
 脚本把 DerivedData 固定为当前 checkout 的 `build/DerivedData-ios`，构建后校验模拟器里安装的二进制哈希与构建号都和本次构建一致，再启动。**不要**用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/… | head -1` 找安装包（原因见「已知坑」）。
 
-`BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`categories`、`categories:类型ID`（1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元）、`calendar`、`library`、`search:关键词`、`subject:ID`、`tag:名称`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`。发布构建中不存在。
+`BGMORI_ROUTE` 是 Debug 专用路由，支持 `home`、`categories`、`categories:类型ID`（1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元）、`calendar`、`library`、`search:关键词`、`subject:ID`、`tag:名称`、`episode:ID`、`comments:ID`、`blog:ID`、`group:name`、`topic:ID`、`timeline:用户名`、`index:ID`、`settings`、`login`、`notify`。`notify` 页面另有 `BGMORI_PREVIEW_NOTICES=1` 可注入截图用的固定条目（Debug 专用，不代表真实账号数据）。发布构建中不存在。
 
 ## 目录
 

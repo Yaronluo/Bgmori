@@ -71,6 +71,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await app.refreshReminderData() }
+                Task { await app.refreshNoticesBadge() }
             } else if newPhase == .background {
                 app.scheduleReminderBackgroundRefresh()
             }
@@ -267,7 +268,8 @@ struct SectionRootView: View {
         }
         #if os(iOS)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                noticeButton
                 Button("搜索", systemImage: "magnifyingglass") {
                     app.router.openSearch()
                 }
@@ -276,7 +278,23 @@ struct SectionRootView: View {
                 .accessibilityIdentifier("global-search")
             }
         }
+        #else
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { noticeButton }
+        }
         #endif
+    }
+
+    private var noticeButton: some View {
+        Button {
+            app.router.push(.notify)
+        } label: {
+            Image(systemName: app.notices.unreadCount > 0 ? "bell.badge" : "bell")
+        }
+        .labelStyle(.iconOnly)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(app.notices.unreadCount > 0 ? "提醒，\(app.notices.unreadCount) 条未读" : "提醒")
+        .accessibilityIdentifier("global-notices")
     }
 }
 
@@ -304,6 +322,7 @@ struct RouteView: View {
         case .index(let id): IndexDetailView(indexID: id)
         case .revisions(let id): RevisionsView(subjectID: id)
         case .tag(let name): TagResultsView(tag: name)
+        case .notify: NotifyView()
         }
     }
 }

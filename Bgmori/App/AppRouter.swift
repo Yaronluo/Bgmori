@@ -66,6 +66,7 @@ enum Route: Hashable {
     case index(Int)
     case revisions(Int)
     case tag(String)
+    case notify
 }
 
 @MainActor
@@ -218,6 +219,8 @@ final class AppRouter {
                 if let id = Int(path) { push(.topic(id)) }
             case "index":
                 if let id = Int(path) { push(.index(id)) }
+            case "notify":
+                push(.notify)
             case "search":
                 openSearch(query: components.queryItems?.first(where: { $0.name == "q" })?.value ?? "")
             default:

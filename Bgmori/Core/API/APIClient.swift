@@ -349,6 +349,33 @@ actor APIClient {
         }, force: true)
     }
 
+    // MARK: - Notices (next.bgm.tv P1)
+
+    /// The website's 提醒 feed lives on the new site's private API and uses the
+    /// same OAuth token as api.bgm.tv. It must never borrow the stored website
+    /// cookie, which stays limited to subject-collection removal.
+    private static let nextBase = URL(string: "https://next.bgm.tv")!
+
+    func notices(unreadOnly: Bool = false, limit: Int = 40) async throws -> NoticePage {
+        var query = [URLQueryItem(name: "limit", value: String(min(max(limit, 1), 40)))]
+        if unreadOnly { query.append(URLQueryItem(name: "unread", value: "true")) }
+        let data = try await requestData(path: "/p1/notify", method: "GET", query: query,
+                                         body: nil, auth: true, base: Self.nextBase)
+        return try decode(NoticePage.self, from: data)
+    }
+
+    /// `ids == nil` clears every unread notice, matching the website's 全部已读.
+    func markNoticesRead(ids: [Int]? = nil) async throws {
+        let body: Data
+        if let ids, !ids.isEmpty {
+            body = try encoder.encode(["id": ids])
+        } else {
+            body = Data("{}".utf8)
+        }
+        _ = try await requestData(path: "/p1/clear-notify", method: "POST", query: [],
+                                  body: body, auth: true, base: Self.nextBase)
+    }
+
     // MARK: - Public GET
 
     func get<T: Decodable & Sendable>(
