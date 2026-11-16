@@ -773,9 +773,9 @@ actor APIClient {
 
     static var userAgent: String {
         #if os(macOS)
-        "Bgmori/1.0 (macOS) (https://github.com/yaron/bgmori)"
+        "Bgmori/1.0 (macOS) (https://github.com/Yaronluo/Bgmori)"
         #else
-        "Bgmori/1.0 (iOS) (https://github.com/yaron/bgmori)"
+        "Bgmori/1.0 (iOS) (https://github.com/Yaronluo/Bgmori)"
         #endif
     }
 
