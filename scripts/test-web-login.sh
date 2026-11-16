@@ -5,7 +5,8 @@ test_dir=$(mktemp -d "${TMPDIR:-/tmp}/bgmori-web-login.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 sources=(Bgmori/Core/Models/Models.swift Bgmori/Core/API/MirrorRouting.swift Bgmori/Core/API/ECHTransport.swift
  Bgmori/Core/API/APIClient.swift Bgmori/Core/API/APIError.swift Bgmori/Core/API/RateLimiter.swift
- Bgmori/Core/Storage/DiskCache.swift Bgmori/Core/Auth/BangumiWebLogin.swift tests/WebLoginTests.swift)
+ Bgmori/Core/Storage/DiskCache.swift Bgmori/Core/Auth/WebsiteCookieJar.swift
+ Bgmori/Core/Auth/BangumiWebLogin.swift tests/WebLoginTests.swift)
 for platform in macosx iphonesimulator; do
  if [[ "$platform" == macosx ]]; then target=arm64-apple-macos27.0; else target=arm64-apple-ios27.0-simulator; fi
  flags=(-parse-as-library)

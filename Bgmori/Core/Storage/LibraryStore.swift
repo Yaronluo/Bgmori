@@ -12,6 +12,7 @@ final class LibraryStore {
     private let api: APIClient
     private let auth: any LibraryAccountProviding
     private let snapshots: LibrarySnapshotStore
+    private let remover: (any SubjectCollectionRemoving)?
 
     private(set) var collections: [Int: UserSubjectCollection] = [:] {
         didSet { revision &+= 1 }
@@ -44,10 +45,12 @@ final class LibraryStore {
     private let progressHydrationLimit = 12
 
     init(api: APIClient, auth: any LibraryAccountProviding,
-         snapshots: LibrarySnapshotStore = LibrarySnapshotStore()) {
+         snapshots: LibrarySnapshotStore = LibrarySnapshotStore(),
+         remover: (any SubjectCollectionRemoving)? = nil) {
         self.api = api
         self.auth = auth
         self.snapshots = snapshots
+        self.remover = remover
     }
 
     var sortedCollections: [UserSubjectCollection] {
@@ -234,6 +237,74 @@ final class LibraryStore {
         }
     }
 
+    /// Removes a collection through the website session (API v0 has no delete
+    /// endpoint), then verifies the result against the API. The local library is
+    /// updated optimistically so the list reacts immediately; any definite
+    /// failure restores the previous entry.
+    @discardableResult
+    func removeCollection(subjectID: Int) async throws -> Bool {
+        guard auth.isLoggedIn, let username = auth.username else {
+            throw APIError.unauthorized
+        }
+        guard let existing = collections[subjectID] else { return true }
+        guard let remover else { throw BangumiWebSessionError.signInRequired }
+
+        let generation = self.generation
+        let account = username
+        let previousProgress = episodeTypes[subjectID]
+
+        collections[subjectID] = nil
+        episodeTypes[subjectID] = nil
+
+        do {
+            try await remover.removeCollection(subjectID: subjectID)
+        } catch {
+            guard generation == self.generation, auth.username == account else { throw error }
+            if Self.isCancellation(error) {
+                // The request may already have reached the website. Keep the
+                // optimistic result and let the full reconciliation decide.
+                await reconcileAfterRemoval(username: username)
+                return true
+            }
+            collections[subjectID] = existing
+            episodeTypes[subjectID] = previousProgress
+            throw error
+        }
+
+        guard generation == self.generation, auth.username == account else { return true }
+
+        do {
+            _ = try await api.userCollection(username, subjectID: subjectID, force: true, storeInCache: false)
+            // The server still has it; the website action did not take effect.
+            collections[subjectID] = existing
+            episodeTypes[subjectID] = previousProgress
+            throw BangumiWebSessionError.notRemoved
+        } catch APIError.notFound {
+            // Confirmed removed.
+        } catch let error as BangumiWebSessionError {
+            throw error
+        } catch {
+            // The website accepted the removal but the API could not confirm it.
+            // Keep the optimistic result; the forced reconciliation below decides.
+        }
+
+        await api.cache.remove("collection-\(username)-\(subjectID)")
+        await api.cache.remove("collection---\(subjectID)")
+        await api.cache.remove("epcol-\(username)-\(subjectID)")
+        await persistSnapshot()
+        await reconcileAfterRemoval(username: username)
+        return true
+    }
+
+    /// Re-reads the library with `force`, replacing every page cache. Without
+    /// this a fresh collection list cache could briefly resurrect the removed
+    /// subject on the next launch.
+    private func reconcileAfterRemoval(username: String) async {
+        guard auth.username == username else { return }
+        if loadTask != nil { cancelCurrentLoad(clearMemory: false) }
+        startReconciliation(username: username, source: await api.cacheScope(), force: true)
+    }
+
     func setEpisode(subject: Subject, episode: Episode, type: Int) async {
         guard auth.isLoggedIn, let username = auth.username else {
             lastError = "请先登录"
@@ -348,6 +419,14 @@ final class LibraryStore {
         guard let username = loadedUsername ?? auth.username else { return }
         await snapshots.clear(username: username)
     }
+
+    #if DEBUG
+    /// Screenshot/UI-test fixture only; never called from release paths and
+    /// never writes to the server.
+    func previewInsertCollection(_ collection: UserSubjectCollection) {
+        collections[collection.subjectId] = collection
+    }
+    #endif
 
     func reset() {
         cancelCurrentLoad(clearMemory: true)

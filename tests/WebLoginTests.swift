@@ -31,6 +31,18 @@ private final class LoginServer: @unchecked Sendable {
                              headers: ["Set-Cookie": "sid=\(cookie); Domain=.bgm.tv; Path=/; Secure, hostonly=value; Path=/; Secure, expired=value; Max-Age=0; Path=/"], hang: hang)
             }
             precondition(request.value(forHTTPHeaderField: "User-Agent") == userAgent, "Website login must preserve User-Agent")
+            if url.path == "/subject/8" {
+                precondition(cookies.contains("chii_auth=test"))
+                return Reply(status: 200, body: Data(
+                    #"<a href="/subject/8/erase_collect?gh=abc123">取消收藏</a>"#.utf8
+                ))
+            }
+            if url.path == "/subject/8/erase_collect" {
+                precondition(cookies.contains("chii_auth=test"))
+                precondition(url.query == "gh=abc123")
+                precondition(request.value(forHTTPHeaderField: "Referer") == "https://bgm.tv/subject/8")
+                return Reply(status: 302, headers: ["Location": "https://bgm.tv/subject/8"])
+            }
             if url.path == "/signup/captcha" {
                 precondition(cookies.contains("sid=" + cookie))
                 precondition(!cookies.contains("expired="))
@@ -137,6 +149,49 @@ private final class LoginProtocol: URLProtocol, @unchecked Sendable {
         precondition(BangumiWebLogin.formhash(in: "<input value='reordered' NAME='formhash'>") == "reordered")
         precondition(BangumiWebLogin.formhash(in: "<input name='other' value='bad'>") == nil)
         precondition(BangumiWebLogin.rejectionMessage("<p class='text'>验证码错误</p>").contains("验证码"))
+
+        let liveRemoval = #"<a class="l" href="/subject/8/erase_collect?gh=abc123">取消收藏</a>"#
+        let liveRemovalURLs = SubjectRemovalHTML.removalURLs(in: liveRemoval, subjectID: 8)
+        precondition(liveRemovalURLs.first?.absoluteString == "https://bgm.tv/subject/8/remove?gh=abc123")
+        precondition(liveRemovalURLs.contains {
+            $0.absoluteString == "https://bgm.tv/subject/8/erase_collect?gh=abc123"
+        })
+        let encodedRemoval = #"<a href="https://bangumi.tv/subject/8/remove?gh=abc123&amp;ajax=1">取消收藏</a>"#
+        precondition(SubjectRemovalHTML.removalURL(in: encodedRemoval, subjectID: 8)?.absoluteString
+                     == "https://bgm.tv/subject/8/remove?gh=abc123&ajax=1")
+        let bothRemovals = #"<a href="/subject/8/erase_collect?gh=old">x</a><a href="/subject/8/remove?gh=new">y</a>"#
+        precondition(SubjectRemovalHTML.removalURLs(in: bothRemovals, subjectID: 8).first?.absoluteString
+                     == "https://bgm.tv/subject/8/remove?gh=new")
+        let hashFallback = #"<a href="/logout/def456">退出</a>"#
+        precondition(SubjectRemovalHTML.removalURL(in: hashFallback, subjectID: 8)?.absoluteString
+                     == "https://bgm.tv/subject/8/remove?gh=def456")
+        let javascriptRemoval = #"<a href="javascript:void(0)" onclick="eraseSubjectCollect(8,'js789')">取消收藏</a>"#
+        precondition(SubjectRemovalHTML.removalURL(in: javascriptRemoval, subjectID: 8)?.absoluteString
+                     == "https://bgm.tv/subject/8/remove?gh=js789")
+        precondition(SubjectRemovalHTML.removalURL(in: "<html>登录</html>", subjectID: 8) == nil)
+        precondition(!SubjectRemovalHTML.isSignedIn("<html>登录</html>"))
+        precondition(SubjectRemovalHTML.isSignInPage(#"<form id="loginForm"></form>"#))
+        print("PASS: normal-subject remove is preferred, erase_collect remains a fallback, formhash fallback and signed-out detection")
+
+        let cookieResponse = HTTPURLResponse(url: URL(string: "https://bgm.tv/login")!, statusCode: 200,
+                                             httpVersion: nil, headerFields: nil)!
+        var jar = WebsiteCookieJar()
+        jar.absorb(WebLoginHTTPResult(
+            data: Data(),
+            response: cookieResponse,
+            setCookies: [
+                "chii_auth=auth-value; Domain=.bgm.tv; Path=/; Secure",
+                "sid=host-value; Path=/; Secure"
+            ]
+        ), from: URL(string: "https://bgm.tv/login")!)
+        let subjectCookie = jar.cookieHeader(for: URL(string: "https://bgm.tv/subject/8")!) ?? ""
+        precondition(subjectCookie.contains("chii_auth=auth-value") && subjectCookie.contains("sid=host-value"))
+        precondition(jar.cookieHeader(for: URL(string: "https://next.bgm.tv/demo/access-token")!)?.contains("sid=host-value") == false)
+        precondition(jar.snapshot.cookies.allSatisfy { $0.domain == "bgm.tv" })
+        let encodedSnapshot = try JSONEncoder().encode(jar.snapshot)
+        let decodedSnapshot = try JSONDecoder().decode(WebsiteSessionSnapshot.self, from: encodedSnapshot)
+        precondition(decodedSnapshot.cookies == jar.snapshot.cookies)
+        print("PASS: website cookies keep domain/path/host-only scope, persist only main-site values and round-trip through JSON")
         let routing = MirrorRouting()
         try routing.configure(ConnectionSettings(mode: .custom, customRoot: "custom.example.com"), persistChanges: false)
         let configuration = URLSessionConfiguration.ephemeral
@@ -164,11 +219,34 @@ private final class LoginProtocol: URLProtocol, @unchecked Sendable {
         let credential = try await service.submit(id: id, email: "", password: "", captcha: "")
         precondition(credential.user.id == 1 && credential.expiresAt.timeIntervalSinceNow > 364 * 86_400)
         precondition(LoginServer.shared.attempts == 1 && LoginServer.shared.issued == 1, "Retrying account verification must never replay login/token creation")
+        let snapshot = await service.snapshot(id: id)
+        precondition(snapshot?.cookies.contains(where: { $0.name == "chii_auth" && !$0.value.isEmpty }) == true,
+                     "A completed login must expose the main-site session for in-app collection removal")
+        precondition(snapshot?.cookies.contains(where: { $0.name == "sid" }) == true)
         await service.cancel(id: id)
+        let afterCancel = await service.snapshot(id: id)
+        precondition(afterCancel == nil, "Cancelling login must discard the website session")
         do { _ = try await service.submit(id: id, email: "", password: "", captcha: ""); preconditionFailure() }
         catch APIError.message { }
         await service.revoke(token: credential.token, name: credential.name)
         precondition(LoginServer.shared.removed == [22], "Logout must only revoke this login's token")
+        let sessionRoute = await api.webLoginRoutes()[0]
+        let subjectPage = try await api.webSessionRequest(
+            URL(string: "https://bgm.tv/subject/8")!, route: sessionRoute, cookie: "chii_auth=test"
+        )
+        precondition(subjectPage.response.statusCode == 200)
+        let removalPage = try await api.webSessionRequest(
+            URL(string: "https://bgm.tv/subject/8/erase_collect?gh=abc123")!,
+            route: sessionRoute, cookie: "chii_auth=test",
+            referer: URL(string: "https://bgm.tv/subject/8")!
+        )
+        precondition(removalPage.response.statusCode == 302)
+        do {
+            _ = try await api.webSessionRequest(URL(string: "https://bgm.tv/user/sai")!,
+                                                route: sessionRoute, cookie: "chii_auth=test")
+            preconditionFailure("The stored website session must not authorize other pages")
+        } catch APIError.invalidURL { }
+        print("PASS: website session requests are limited to the subject page and its remove action")
         print("PASS: form encoding, cookie domains/expiry/host-only scope, pinned official routes, verified account and own-token revocation")
 
         LoginServer.shared.reject = true

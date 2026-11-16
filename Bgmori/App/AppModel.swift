@@ -8,6 +8,7 @@ final class AppModel {
     let settings: AppSettings
     let api: APIClient
     let auth: AuthManager
+    let webSession: BangumiWebSession
     let library: LibraryStore
     let router: AppRouter
     let social: SocialService
@@ -80,11 +81,13 @@ final class AppModel {
         settings = AppSettings()
         #endif
         let api = APIClient()
-        let auth = AuthManager(api: api)
+        let webSession = BangumiWebSession(api: api)
+        let auth = AuthManager(api: api, webSession: webSession)
         self.settings = settings
         self.api = api
+        self.webSession = webSession
         self.auth = auth
-        self.library = LibraryStore(api: api, auth: auth)
+        self.library = LibraryStore(api: api, auth: auth, remover: webSession)
         self.router = AppRouter()
         self.social = SocialService(api: api)
         self.categories = CategoryStore(api: api)

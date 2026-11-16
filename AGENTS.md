@@ -88,7 +88,7 @@ docs/                方案与截图
 - **绝对不要**把 OAuth Client Secret、Access Token、Refresh Token、Cookie 写进仓库、日志、截图或注释。
 - 登录仅保留邮箱、密码、图片验证码；不再提供 OAuth 配置或手动 Token 入口。密码不保存，生成的个人令牌放在 Keychain。
 - `Info.plist` 中的 `BGMApiClientSecret` 保持空字符串；发布前如要内置，必须改用 Worker 代理。
-- 社交页面继续匿名 HTML 只读，禁止给社交请求加 Cookie、发帖或点赞。用户于 2026-10-27 明确授权账号密码登录：仅隔离的登录会话可临时使用 Cookie 获取验证码、登录及管理本应用生成的个人令牌，不得扩展到社交写操作。
+- 社交页面继续匿名 HTML 只读，禁止给社交请求加 Cookie、发帖或点赞。用户于 2026-10-27 明确授权账号密码登录：登录会话可临时使用 Cookie 获取验证码、登录及管理本应用生成的个人令牌。用户于 2026-11-16 明确授权：登录成功后把官网会话 Cookie 加密保存在钥匙串，仅用于应用内取消条目收藏的 `/subject/{id}/erase_collect`（或旧版 `/remove`）网页请求；退出登录立即删除，绝不发送给社区镜像，不得扩展到社交写操作。
 - 日志里不要打印完整 URL 查询参数中的 code/token。
 
 ## 验证要求
@@ -111,6 +111,7 @@ docs/                方案与截图
 - legacy `/calendar` 返回的图片是 `http://`，必须升级 https。
 - 搜索 `nsfw` 不传等于包含 R18；审核/展示逻辑要显式过滤。
 - 收藏的 `ep_status` 只对书籍有效；动画进度走章节接口。
+- 官方 API v0 没有删除条目收藏的接口。应用内取消收藏使用官网网页会话 Cookie 调用 `/subject/{id}/erase_collect?gh=...`；Cookie 只存 Keychain，只允许发往 `bgm.tv`（或 ECH 线路），绝不发给镜像。删除请求后必须用 `GET /v0/users/-/collections/{id}` 确认，不能只凭网页请求状态判断成功。
 - `updated_at` 不可靠，同步策略是全量对账，不要改成增量游标。
 - HTML 选择器会随 Bangumi 改版失效；解析失败必须回退 Safari，不能崩。
 - **别用 `find ~/Library/Developer/Xcode/DerivedData/Bgmori-*/… | head -1` 找安装包。** DerivedData 目录名由工程绝对路径决定，每个 checkout / worktree 各一份，而所有副本的 Bundle ID 都是 `com.yaron.bgmori`；`head -1` 常常命中主工作树（更早）的产物，结果就是「编了新代码、装进模拟器测的却是旧 App」，且启动后看不出来（版本号恒为 `1.0.0 (1)`）。统一走 `scripts/build-install-ios.sh`：DerivedData 固定在当前 checkout 的 `build/DerivedData-ios`，装完比对二进制哈希，启动的构建号会显示在设置页版本里。

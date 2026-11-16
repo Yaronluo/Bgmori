@@ -235,8 +235,41 @@ actor APIClient {
         guard url.scheme == "https", url.port == nil, url.user == nil,
               ["bgm.tv", "next.bgm.tv", "api.bgm.tv"].contains(url.host),
               Self.webLoginEndpoint(url, method: method) else { throw APIError.invalidURL }
+        return try await webRequest(
+            url, method: method, route: route, cookie: cookie, bearer: bearer, body: body,
+            contentType: contentType, accept: "*/*",
+            origin: "https://" + (url.host ?? "bgm.tv"),
+            referer: url.host == "next.bgm.tv" ? "https://next.bgm.tv/demo/access-token" : "https://bgm.tv/login",
+            acceptLanguage: nil,
+            routeChangedMessage: "连接设置已改变，请重新获取验证码"
+        )
+    }
+
+    /// Credentialed HTML reads for the logged-in website session. Only the
+    /// subject page and its collection-removal action are allowed, so the
+    /// stored session cookie cannot be used for any other website operation.
+    func webSessionRequest(_ url: URL, method: String = "GET", route: WebLoginRoute,
+                           cookie: String?, referer: URL? = nil) async throws -> WebLoginHTTPResult {
+        guard url.scheme == "https", url.port == nil, url.user == nil, url.host == "bgm.tv",
+              Self.webSessionEndpoint(url, method: method) else { throw APIError.invalidURL }
+        return try await webRequest(
+            url, method: method, route: route, cookie: cookie, bearer: nil, body: nil,
+            contentType: nil, accept: "text/html,application/xhtml+xml",
+            origin: nil,
+            referer: referer?.absoluteString ?? "https://bgm.tv/",
+            acceptLanguage: "zh-CN,zh;q=0.9,ja;q=0.8,en;q=0.7",
+            routeChangedMessage: "连接设置已改变，请重试"
+        )
+    }
+
+    private func webRequest(_ url: URL, method: String, route: WebLoginRoute,
+                            cookie: String?, bearer: String?, body: Data?,
+                            contentType: String?, accept: String,
+                            origin: String?, referer: String?,
+                            acceptLanguage: String?,
+                            routeChangedMessage: String) async throws -> WebLoginHTTPResult {
         try Task.checkCancellation()
-        guard route.revision == routing.revision else { throw APIError.message("连接设置已改变，请重新获取验证码") }
+        guard route.revision == routing.revision else { throw APIError.message(routeChangedMessage) }
         try await limiter.wait(maxDelay: 5)
         try Task.checkCancellation()
         let target: URL
@@ -250,9 +283,10 @@ actor APIClient {
         request.assumesHTTP3Capable = false
         request.httpShouldHandleCookies = false
         request.setValue(Self.safariUserAgent + " Bgmori/1.0", forHTTPHeaderField: "User-Agent")
-        request.setValue("*/*", forHTTPHeaderField: "Accept")
-        request.setValue("https://" + (url.host ?? "bgm.tv"), forHTTPHeaderField: "Origin")
-        request.setValue(url.host == "next.bgm.tv" ? "https://next.bgm.tv/demo/access-token" : "https://bgm.tv/login", forHTTPHeaderField: "Referer")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        if let acceptLanguage { request.setValue(acceptLanguage, forHTTPHeaderField: "Accept-Language") }
+        if let origin { request.setValue(origin, forHTTPHeaderField: "Origin") }
+        if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
         if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
@@ -272,10 +306,22 @@ actor APIClient {
         result = WebLoginHTTPResult(data: data, response: http, setCookies: http.value(forHTTPHeaderField: "Set-Cookie").map { [$0] } ?? [])
         #endif
         try Task.checkCancellation()
-        guard route.revision == routing.revision else { throw APIError.message("连接设置已改变，请重新获取验证码") }
+        guard route.revision == routing.revision else { throw APIError.message(routeChangedMessage) }
         if result.response.statusCode == 429 { throw APIError.rateLimited }
         if MirrorRouting.isVerificationPage(result.data) { throw APIError.verificationRequired }
         return result
+    }
+
+    private static func webSessionEndpoint(_ url: URL, method: String) -> Bool {
+        guard method == "GET",
+              url.path.range(of: #"^/subject/\d+(?:/(?:erase_collect|remove))?$"#,
+                             options: .regularExpression) != nil else { return false }
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return query.allSatisfy { item in
+            if item.name == "ajax" { return item.value == "1" }
+            guard item.name == "gh", let value = item.value else { return false }
+            return value.range(of: #"^[A-Za-z0-9]+$"#, options: .regularExpression) != nil
+        }
     }
 
     private static func webLoginEndpoint(_ url: URL, method: String) -> Bool {

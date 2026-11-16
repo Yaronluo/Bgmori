@@ -1332,10 +1332,26 @@ struct SubjectDetailView: View {
     #if DEBUG
     /// 截图与 UI 回归用入口：`BGMORI_PREVIEW_COLLECTION_EDITOR=1` 时条目载入后直接打开
     /// 收藏编辑页，不需要登录；测试不会触发保存，不会写入账号。
+    /// `BGMORI_PREVIEW_COLLECTION_REMOVAL=1` 额外注入一条本地收藏，用于检查取消追番按钮。
     private func openCollectionEditorForPreviewIfNeeded() {
-        guard ProcessInfo.processInfo.environment["BGMORI_PREVIEW_COLLECTION_EDITOR"] == "1",
-              subject != nil,
-              !showCollectionEditor else { return }
+        let editor = ProcessInfo.processInfo.environment["BGMORI_PREVIEW_COLLECTION_EDITOR"] == "1"
+        let removal = ProcessInfo.processInfo.environment["BGMORI_PREVIEW_COLLECTION_REMOVAL"] == "1"
+        guard editor || removal, let subject, !showCollectionEditor else { return }
+        if removal, app.library.collection(for: subject.id) == nil {
+            app.library.previewInsertCollection(UserSubjectCollection(
+                subjectId: subject.id,
+                subjectType: subject.type,
+                rate: 8,
+                type: CollectionType.doing.rawValue,
+                comment: nil,
+                tags: [],
+                epStatus: 0,
+                volStatus: 0,
+                updatedAt: nil,
+                isPrivate: false,
+                subject: SubjectSummary(subject: subject)
+            ))
+        }
         showCollectionEditor = true
     }
     #endif

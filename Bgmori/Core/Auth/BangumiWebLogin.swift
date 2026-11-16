@@ -21,14 +21,16 @@ struct WebsiteCredential: Sendable {
 }
 
 /// An isolated website session, exclusively for account login and token creation.
-/// Passwords never enter storage; cookies remain in memory until completion or cancellation.
+/// Passwords never enter storage; cookies remain in memory until the login
+/// completes. Only the successful session snapshot is handed to
+/// `BangumiWebSession` for the one website operation API v0 cannot perform.
 actor BangumiWebLogin {
     private final class Session {
         let id: UUID
         let route: WebLoginRoute
         let name: String
         var formhash = ""
-        var cookies: [StoredCookie] = []
+        var jar = WebsiteCookieJar()
         var signedIn = false
         var pendingToken: String?
         var tokenCreatedAt: Date?
@@ -44,45 +46,12 @@ actor BangumiWebLogin {
         }
 
         func absorb(_ result: WebLoginHTTPResult, from url: URL) {
-            for header in result.setCookies {
-                // Foundation may combine repeated headers; Expires contains commas too.
-                let lines = header.replacingOccurrences(of: #",(?=\s*[!#$%&'*+\-.^_`|~0-9A-Za-z]+=)"#,
-                                                       with: "\n", options: .regularExpression).components(separatedBy: "\n")
-                for line in lines {
-                    let hostOnly = line.range(of: #";\s*domain\s*="#, options: [.regularExpression, .caseInsensitive]) == nil
-                    for cookie in HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": line], for: url) {
-                        let domain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
-                        guard ["bgm.tv", "next.bgm.tv", "api.bgm.tv"].contains(domain),
-                              url.host == domain || url.host?.hasSuffix("." + domain) == true else { continue }
-                        cookies.removeAll {
-                            $0.cookie.name == cookie.name && $0.cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased() == domain && $0.cookie.path == cookie.path
-                        }
-                        let maxAge = line.range(of: #";\s*max-age\s*=\s*(?:0|-\d+)\s*(?:;|$)"#, options: [.regularExpression, .caseInsensitive])
-                        if cookie.value != "deleted", maxAge == nil, cookie.expiresDate.map({ $0 > Date() }) ?? true {
-                            cookies.append(StoredCookie(cookie: cookie, hostOnly: hostOnly, origin: url.host ?? ""))
-                        }
-                    }
-                }
-            }
+            jar.absorb(result, from: url)
         }
 
         func cookieHeader(for url: URL) -> String? {
-            let matching = cookies.filter { stored in
-                let cookie = stored.cookie
-                let domain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
-                let hostMatches = stored.hostOnly ? url.host == stored.origin : url.host == domain || url.host?.hasSuffix("." + domain) == true
-                let path = cookie.path.isEmpty ? "/" : cookie.path
-                return hostMatches && (url.path == path || url.path.hasPrefix(path.hasSuffix("/") ? path : path + "/"))
-                    && (cookie.expiresDate.map { $0 > Date() } ?? true) && (!cookie.isSecure || url.scheme == "https")
-            }.map(\.cookie)
-            return matching.isEmpty ? nil : HTTPCookie.requestHeaderFields(with: matching)["Cookie"]
+            jar.cookieHeader(for: url)
         }
-    }
-
-    private struct StoredCookie {
-        let cookie: HTTPCookie
-        let hostOnly: Bool
-        let origin: String
     }
     private let api: APIClient
     private var session: Session?
@@ -144,7 +113,7 @@ actor BangumiWebLogin {
             try ensureCurrent(current)
             current.absorb(response, from: url)
             guard (200...399).contains(response.response.statusCode),
-                  current.cookies.contains(where: { $0.cookie.name == "chii_auth" && !$0.cookie.value.isEmpty }) else {
+                  current.jar.cookies.contains(where: { $0.name == "chii_auth" && !$0.value.isEmpty }) else {
                 throw BangumiLoginError.rejected(Self.rejectionMessage(String(decoding: response.data, as: UTF8.self)))
             }
             current.signedIn = true
@@ -176,6 +145,13 @@ actor BangumiWebLogin {
     }
 
     func hasWebsiteLogin(id: UUID) -> Bool { session?.id == id && session?.signedIn == true }
+
+    /// The cookie snapshot is only handed to the Keychain-backed removal
+    /// session after the whole login (including token verification) succeeds.
+    func snapshot(id: UUID) -> WebsiteSessionSnapshot? {
+        guard let session, session.id == id, session.signedIn, !session.jar.cookies.isEmpty else { return nil }
+        return session.jar.snapshot
+    }
 
     func cancel(id: UUID) {
         if session?.id == id || startingID == id {

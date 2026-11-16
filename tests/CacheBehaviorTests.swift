@@ -23,6 +23,7 @@ private final class CacheStub: @unchecked Sendable {
     private var libraryValues: [String: [Int]] = [:]
     private var savedCollection: [String: Any]?
     private var mutationMethods: [String] = []
+    private var removedCollectionIDs: Set<Int> = []
 
     func reset() {
         lock.withLock {
@@ -38,6 +39,7 @@ private final class CacheStub: @unchecked Sendable {
             libraryValues = [:]
             savedCollection = nil
             mutationMethods = []
+            removedCollectionIDs = []
         }
     }
 
@@ -58,6 +60,15 @@ private final class CacheStub: @unchecked Sendable {
 
     func clearLibraryFailure() {
         lock.withLock { failLibraryOffsets.removeAll() }
+    }
+
+    func markCollectionRemoved(_ id: Int) {
+        lock.withLock {
+            _ = removedCollectionIDs.insert(id)
+            for (user, ids) in libraryValues {
+                libraryValues[user] = ids.filter { $0 != id }
+            }
+        }
     }
 
     func setSubjectFailure(_ value: Bool) {
@@ -133,8 +144,11 @@ private final class CacheStub: @unchecked Sendable {
                 return StubReply(status: 200, data: try! JSONSerialization.data(withJSONObject: value),
                                  delay: libraryDelays[user] ?? 0)
             }
-            if path.hasPrefix("/v0/users/-/collections/"), request.httpMethod == "GET" {
+            if path.hasPrefix("/v0/users/"), path.contains("/collections/"), request.httpMethod == "GET" {
                 let id = Int(path.split(separator: "/").last.map(String.init) ?? "") ?? 0
+                if removedCollectionIDs.contains(id) {
+                    return StubReply(status: 404, data: Data("{}".utf8), delay: 0)
+                }
                 let value: [String: Any] = savedCollection ?? [
                     "subject_id": id, "subject_type": 2, "type": 3, "rate": 8
                 ]
@@ -388,6 +402,27 @@ struct CacheBehaviorTests {
         precondition(afterSave.collection(for: 8)?.rate == 9)
         print("PASS: successful collection mutations update the snapshot")
 
+        let remover = TestRemover()
+        let removalStore = LibraryStore(api: api, auth: account, snapshots: snapshots, remover: remover)
+        _ = await removalStore.loadAll(username: "fixture", force: true)
+        stub.markCollectionRemoved(13)
+        try await removalStore.removeCollection(subjectID: 13)
+        precondition(removalStore.collection(for: 13) == nil && remover.removed == [13],
+                     "A confirmed removal must disappear from the local library")
+        remover.error = BangumiWebSessionError.sessionExpired
+        do {
+            try await removalStore.removeCollection(subjectID: 11)
+            preconditionFailure("A failed website session must roll back the optimistic removal")
+        } catch BangumiWebSessionError.sessionExpired {}
+        precondition(removalStore.collection(for: 11) != nil)
+        remover.error = nil
+        do {
+            try await removalStore.removeCollection(subjectID: 12)
+            preconditionFailure("An API that still lists the collection must roll back")
+        } catch BangumiWebSessionError.notRemoved {}
+        precondition(removalStore.collection(for: 12) != nil)
+        print("PASS: collection removal is optimistic, API-verified and safely rolled back on definite failure")
+
         stub.configureLibrary(user: "a", ids: Array(201...210), delay: 0.4)
         stub.configureLibrary(user: "b", ids: Array(301...305), delay: 0.05)
         let switched = LibraryStore(api: api, auth: account,
@@ -404,6 +439,26 @@ struct CacheBehaviorTests {
         print("PASS: account switch invalidates late responses from the previous account")
 
         await cache.clear()
+    }
+}
+
+private final class TestRemover: SubjectCollectionRemoving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [Int] = []
+    private var failure: Error?
+
+    var removed: [Int] { lock.withLock { recorded } }
+    var error: Error? {
+        get { lock.withLock { failure } }
+        set { lock.withLock { failure = newValue } }
+    }
+
+    func removeCollection(subjectID: Int) async throws {
+        let error = lock.withLock { () -> Error? in
+            recorded.append(subjectID)
+            return failure
+        }
+        if let error { throw error }
     }
 }
 

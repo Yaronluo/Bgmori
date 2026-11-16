@@ -5,6 +5,7 @@ import Foundation
 final class AuthManager {
     private let api: APIClient
     private let website: BangumiWebLogin
+    private let webSession: BangumiWebSession
     private var loginID = UUID()
     private var issuedTokenName: String?
 
@@ -18,8 +19,9 @@ final class AuthManager {
     var isRestoring = false
     var errorMessage: String?
 
-    init(api: APIClient) {
+    init(api: APIClient, webSession: BangumiWebSession) {
         self.api = api
+        self.webSession = webSession
         website = BangumiWebLogin(api: api)
         #if DEBUG
         if ProcessInfo.processInfo.environment["BGMORI_GUEST_MODE"] == "1" { return }
@@ -88,6 +90,13 @@ final class AuthManager {
             UserDefaults.standard.set(credential.name, forKey: "issuedTokenName")
             UserDefaults.standard.set(credential.expiresAt.timeIntervalSince1970, forKey: "tokenExpiresAt")
             await api.setToken(credential.token)
+            if let snapshot = await website.snapshot(id: id) {
+                await webSession.adopt(snapshot)
+            } else {
+                // Never pair a new account's token with an older account's
+                // website cookies.
+                await webSession.clear()
+            }
             await website.cancel(id: id)
             captchaData = nil
             isCompletingLogin = false
@@ -139,7 +148,9 @@ final class AuthManager {
         Keychain.delete("refreshToken")
         UserDefaults.standard.removeObject(forKey: "tokenExpiresAt")
         UserDefaults.standard.removeObject(forKey: "issuedTokenName")
+        WebsiteSessionStore.clear()
         Task {
+            await webSession.clear()
             await api.setToken(nil)
             await api.clearCache()
             if let previousToken, let previousName { await website.revoke(token: previousToken, name: previousName) }

@@ -98,6 +98,11 @@ struct CollectionEditorView: View {
                     if subject.type != SubjectType.book.rawValue, !mainEpisodes.isEmpty {
                         watched = min(max(watched, app.library.watchedCount(for: subject.id)), mainEpisodes.count)
                     }
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["BGMORI_PREVIEW_COLLECTION_REMOVAL"] == "1" {
+                        showRemoval = true
+                    }
+                    #endif
                 }
                 #if os(iOS)
                 .onChange(of: isCommentFocused) { _, focused in
@@ -120,7 +125,8 @@ struct CollectionEditorView: View {
             subjectID: subject.id,
             title: subject.displayTitle,
             isPresented: $showRemoval,
-            onRemoved: { dismiss() }
+            onRemoved: { dismiss() },
+            onNeedsLogin: { dismiss() }
         ))
         #if os(iOS)
         .presentationDetents([.large])
@@ -466,7 +472,7 @@ struct CollectionEditorView: View {
         Button(role: .destructive) {
             showRemoval = true
         } label: {
-            Label("移除收藏…", systemImage: "trash")
+            Label(removalActionTitle, systemImage: "trash")
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
@@ -475,6 +481,12 @@ struct CollectionEditorView: View {
         .buttonStyle(.plain)
         .foregroundStyle(.red)
         .accessibilityIdentifier("collection-remove")
+    }
+
+    private var removalActionTitle: String {
+        subject.type == SubjectType.anime.rawValue && collection?.collectionType == .doing
+            ? "取消追番…"
+            : "移除收藏…"
     }
 
     private func sectionTitle(_ title: String) -> some View {

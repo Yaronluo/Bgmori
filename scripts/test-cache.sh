@@ -8,6 +8,7 @@ sources=(Bgmori/Core/Models/Models.swift Bgmori/Core/Models/CategoryModels.swift
   Bgmori/Core/API/APIClient+Endpoints.swift Bgmori/Core/API/APIError.swift
   Bgmori/Core/API/RateLimiter.swift Bgmori/Core/Storage/DiskCache.swift
   Bgmori/Core/Storage/LibrarySnapshotStore.swift Bgmori/Core/Storage/LibraryStore.swift
+  Bgmori/Core/Storage/CollectionRemovalSupport.swift
   tests/CacheBehaviorTests.swift)
 xcrun swiftc -swift-version 6 -parse-as-library "${sources[@]}" -o "$test_dir/cache-mac"
 "$test_dir/cache-mac" "$@"

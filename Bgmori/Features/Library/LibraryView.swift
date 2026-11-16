@@ -335,7 +335,13 @@ struct LibraryView: View {
             .disabled(item.type == type.rawValue)
         }
         Divider()
-        Button("移除收藏…", systemImage: "trash", role: .destructive) {
+        Button(
+            item.subjectType == SubjectType.anime.rawValue && item.collectionType == .doing
+                ? "取消追番…"
+                : "移除收藏…",
+            systemImage: "trash",
+            role: .destructive
+        ) {
             removalTarget = item
             showRemoval = true
         }
